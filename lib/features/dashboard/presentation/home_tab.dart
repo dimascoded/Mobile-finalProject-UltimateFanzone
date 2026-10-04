@@ -5,6 +5,7 @@ import '../../away_day/presentation/away_day_screen.dart';
 import '../../gamification/presentation/game_screen.dart';
 import '../../gamification/presentation/passport_screen.dart';
 import '../../lens/presentation/lens_screen.dart';
+import '../../penalty_shootout/presentation/penalty_screen.dart';
 import '../../prediction/presentation/prediction_screen.dart';
 import '../../sos_emergency/presentation/sos_screen.dart';
 import '../../football/presentation/favorite_team_card.dart';
@@ -25,6 +26,7 @@ class HomeTab extends StatelessWidget {
       ('Away Day', Icons.currency_exchange, const AwayDayScreen()),
       ('Paspor Digital', Icons.approval, const PassportScreen()),
       ('Mini Game', Icons.sports_esports, const GameScreen()),
+      ('Penalty Shootout', Icons.gps_fixed, const PenaltyScreen()),
       ('SOS Darurat', Icons.sos, const SosScreen()),
     ];
     return ListView(
