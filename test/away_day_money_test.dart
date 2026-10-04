@@ -39,7 +39,7 @@ void main() {
   });
 
   test('gbpToIdr dan idrToGbp adalah invers', () {
-    final gbp = 42.5;
+    const gbp = 42.5;
     final back = idrToGbp(gbpToIdr(gbp, rates)!, rates);
     expect(back, closeTo(gbp, 0.0001));
   });
