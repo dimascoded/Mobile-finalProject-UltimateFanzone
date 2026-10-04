@@ -33,7 +33,7 @@ class AuthRepository {
       token = 'mock-${hashed.substring(0, 24)}';
     } else {
       final res = await _dio.post(
-        '${AppConfig.backendUrl}/login',
+        '${AppConfig.backendUrl}/auth/login',
         data: {'email': email.trim(), 'password': hashed},
       );
       if (res.statusCode != 200) throw Exception('Login gagal (${res.statusCode})');
@@ -63,6 +63,9 @@ class AuthRepository {
       await _localAuth.isDeviceSupported() && await _localAuth.canCheckBiometrics;
 
   Future<String?> userEmail() => _storage.read(key: 'user_email');
+
+  /// Token JWT untuk endpoint yang butuh Authorization header.
+  Future<String?> currentToken() => _storage.read(key: _tokenKey);
 
   /// Biometrik hanya valid jika sudah pernah login (token tersimpan).
   Future<bool> authenticateBiometric() async {

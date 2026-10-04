@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../gamification/providers/gamification_providers.dart';
+import '../../sync/providers/sync_provider.dart';
 import '../providers/dashboard_provider.dart';
 
 class ProfileTab extends ConsumerWidget {
@@ -30,6 +31,22 @@ class ProfileTab extends ConsumerWidget {
     if (source != null) await ref.read(profilePhotoProvider.notifier).pick(source);
   }
 
+  /// Ringkasan status sinkronisasi untuk kartu di Profil.
+static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
+    final teks = lastSync == null
+        ? 'Belum pernah sinkron'
+        : 'Terakhir: ${_two(lastSync.hour)}:${_two(lastSync.minute)}';
+    if (sync.busy) return 'Mengirim data ke server...';
+    if (sync.error != null) return 'Gagal: ${sync.error}';
+    final r = sync.result;
+    if (r == null) return teks;
+    final mode = r.mock ? ' (mode mock, tanpa BACKEND_URL)' : '';
+    return '$teks • naik: ${r.pushedExpenses} pengeluaran, '
+        '${r.pushedChain} blok, ${r.pushedPredictions} prediksi$mode';
+  }
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final email = ref.watch(userEmailProvider);
@@ -38,6 +55,8 @@ class ProfileTab extends ConsumerWidget {
     final stamps = ref.watch(stampsProvider);
     final chain = ref.watch(chainProvider);
     final valid = ref.watch(chainValidProvider);
+    final sync = ref.watch(syncProvider);
+    final lastSync = ref.watch(lastSyncedAtProvider);
     final achievements = chain.where((b) => b.type == 'achievement').length;
 
     return ListView(padding: const EdgeInsets.all(16), children: [
@@ -83,6 +102,20 @@ class ProfileTab extends ConsumerWidget {
           title: const Text('Paspor Digital'),
           subtitle: Text('${stamps.length} stamp • $achievements achievement • '
               '${chain.length} blok'),
+        ),
+      ),
+      Card(
+        child: ListTile(
+          leading: sync.busy
+              ? const SizedBox(
+                  width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.sync),
+          title: const Text('Sinkronisasi Data'),
+          subtitle: Text(_syncSubtitle(sync, lastSync)),
+          trailing: TextButton(
+            onPressed: sync.busy ? null : () => ref.read(syncProvider.notifier).run(),
+            child: const Text('Sinkron'),
+          ),
         ),
       ),
       const SizedBox(height: 8),
