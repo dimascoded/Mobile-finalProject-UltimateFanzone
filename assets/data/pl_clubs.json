@@ -1,0 +1,286 @@
+[
+ {
+  "key": "arsenal",
+  "name": "Arsenal",
+  "shortName": "Arsenal",
+  "tla": "ARS",
+  "city": "London",
+  "stadium": "Emirates Stadium",
+  "lat": 51.5549,
+  "lng": -0.1084,
+  "color": "EF0107",
+  "aliases": [
+   "arsenal"
+  ]
+ },
+ {
+  "key": "aston_villa",
+  "name": "Aston Villa",
+  "shortName": "Aston Villa",
+  "tla": "AVL",
+  "city": "Birmingham",
+  "stadium": "Villa Park",
+  "lat": 52.5092,
+  "lng": -1.8847,
+  "color": "670E36",
+  "aliases": [
+   "aston villa"
+  ]
+ },
+ {
+  "key": "bournemouth",
+  "name": "AFC Bournemouth",
+  "shortName": "Bournemouth",
+  "tla": "BOU",
+  "city": "Bournemouth",
+  "stadium": "Vitality Stadium",
+  "lat": 50.7352,
+  "lng": -1.8384,
+  "color": "DA291C",
+  "aliases": [
+   "bournemouth"
+  ]
+ },
+ {
+  "key": "brentford",
+  "name": "Brentford",
+  "shortName": "Brentford",
+  "tla": "BRE",
+  "city": "London",
+  "stadium": "Gtech Community Stadium",
+  "lat": 51.4907,
+  "lng": -0.2886,
+  "color": "E30613",
+  "aliases": [
+   "brentford"
+  ]
+ },
+ {
+  "key": "brighton",
+  "name": "Brighton & Hove Albion",
+  "shortName": "Brighton",
+  "tla": "BHA",
+  "city": "Brighton",
+  "stadium": "American Express Stadium",
+  "lat": 50.8616,
+  "lng": -0.0837,
+  "color": "0057B8",
+  "aliases": [
+   "brighton"
+  ]
+ },
+ {
+  "key": "chelsea",
+  "name": "Chelsea",
+  "shortName": "Chelsea",
+  "tla": "CHE",
+  "city": "London",
+  "stadium": "Stamford Bridge",
+  "lat": 51.4817,
+  "lng": -0.191,
+  "color": "034694",
+  "aliases": [
+   "chelsea"
+  ]
+ },
+ {
+  "key": "coventry",
+  "name": "Coventry City",
+  "shortName": "Coventry",
+  "tla": "COV",
+  "city": "Coventry",
+  "stadium": "Coventry Building Society Arena",
+  "lat": 52.4481,
+  "lng": -1.4957,
+  "color": "59CBE8",
+  "aliases": [
+   "coventry"
+  ]
+ },
+ {
+  "key": "crystal_palace",
+  "name": "Crystal Palace",
+  "shortName": "Crystal Palace",
+  "tla": "CRY",
+  "city": "London",
+  "stadium": "Selhurst Park",
+  "lat": 51.3983,
+  "lng": -0.0856,
+  "color": "1B458F",
+  "aliases": [
+   "crystal palace"
+  ]
+ },
+ {
+  "key": "everton",
+  "name": "Everton",
+  "shortName": "Everton",
+  "tla": "EVE",
+  "city": "Liverpool",
+  "stadium": "Hill Dickinson Stadium",
+  "lat": 53.4262,
+  "lng": -3.004,
+  "color": "003399",
+  "aliases": [
+   "everton"
+  ]
+ },
+ {
+  "key": "fulham",
+  "name": "Fulham",
+  "shortName": "Fulham",
+  "tla": "FUL",
+  "city": "London",
+  "stadium": "Craven Cottage",
+  "lat": 51.4749,
+  "lng": -0.2217,
+  "color": "1F1F1F",
+  "aliases": [
+   "fulham"
+  ]
+ },
+ {
+  "key": "hull",
+  "name": "Hull City",
+  "shortName": "Hull City",
+  "tla": "HUL",
+  "city": "Hull",
+  "stadium": "MKM Stadium",
+  "lat": 53.746,
+  "lng": -0.3675,
+  "color": "F5A12D",
+  "aliases": [
+   "hull"
+  ]
+ },
+ {
+  "key": "ipswich",
+  "name": "Ipswich Town",
+  "shortName": "Ipswich",
+  "tla": "IPS",
+  "city": "Ipswich",
+  "stadium": "Portman Road",
+  "lat": 52.055,
+  "lng": 1.1449,
+  "color": "3A64A3",
+  "aliases": [
+   "ipswich"
+  ]
+ },
+ {
+  "key": "leeds",
+  "name": "Leeds United",
+  "shortName": "Leeds",
+  "tla": "LEE",
+  "city": "Leeds",
+  "stadium": "Elland Road",
+  "lat": 53.7778,
+  "lng": -1.5722,
+  "color": "FFCD00",
+  "aliases": [
+   "leeds"
+  ]
+ },
+ {
+  "key": "liverpool",
+  "name": "Liverpool",
+  "shortName": "Liverpool",
+  "tla": "LIV",
+  "city": "Liverpool",
+  "stadium": "Anfield",
+  "lat": 53.4308,
+  "lng": -2.9608,
+  "color": "C8102E",
+  "aliases": [
+   "liverpool"
+  ]
+ },
+ {
+  "key": "man_city",
+  "name": "Manchester City",
+  "shortName": "Man City",
+  "tla": "MCI",
+  "city": "Manchester",
+  "stadium": "Etihad Stadium",
+  "lat": 53.4831,
+  "lng": -2.2004,
+  "color": "6CABDD",
+  "aliases": [
+   "manchester city",
+   "man city"
+  ]
+ },
+ {
+  "key": "man_united",
+  "name": "Manchester United",
+  "shortName": "Man United",
+  "tla": "MUN",
+  "city": "Manchester",
+  "stadium": "Old Trafford",
+  "lat": 53.4631,
+  "lng": -2.2913,
+  "color": "DA291C",
+  "aliases": [
+   "manchester united",
+   "man united"
+  ]
+ },
+ {
+  "key": "newcastle",
+  "name": "Newcastle United",
+  "shortName": "Newcastle",
+  "tla": "NEW",
+  "city": "Newcastle",
+  "stadium": "St James' Park",
+  "lat": 54.9756,
+  "lng": -1.6217,
+  "color": "241F20",
+  "aliases": [
+   "newcastle"
+  ]
+ },
+ {
+  "key": "forest",
+  "name": "Nottingham Forest",
+  "shortName": "Nottingham Forest",
+  "tla": "NOT",
+  "city": "Nottingham",
+  "stadium": "City Ground",
+  "lat": 52.94,
+  "lng": -1.1328,
+  "color": "DD0000",
+  "aliases": [
+   "nottingham forest",
+   "nottingham"
+  ]
+ },
+ {
+  "key": "sunderland",
+  "name": "Sunderland",
+  "shortName": "Sunderland",
+  "tla": "SUN",
+  "city": "Sunderland",
+  "stadium": "Stadium of Light",
+  "lat": 54.9146,
+  "lng": -1.3884,
+  "color": "EB172B",
+  "aliases": [
+   "sunderland"
+  ]
+ },
+ {
+  "key": "tottenham",
+  "name": "Tottenham Hotspur",
+  "shortName": "Tottenham",
+  "tla": "TOT",
+  "city": "London",
+  "stadium": "Tottenham Hotspur Stadium",
+  "lat": 51.6043,
+  "lng": -0.0664,
+  "color": "132257",
+  "aliases": [
+   "tottenham",
+   "spurs"
+  ]
+ }
+]

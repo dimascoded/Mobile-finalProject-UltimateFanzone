@@ -1,0 +1,54 @@
+name: premiere_league_fan_assistant
+description: Smart Global Traveler App - Feature-Driven Clean Architecture dengan Riverpod
+publish_to: 'none'
+version: 1.1.0+2
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+
+  # Keamanan & Autentikasi
+  crypto: ^3.0.3
+  local_auth: ^2.1.8
+  flutter_secure_storage: ^9.0.0
+
+  # Jaringan & API
+  dio: ^5.4.0
+  google_generative_ai: ^0.2.0
+
+  # Hardware & Sensor
+  geolocator: ^11.0.0
+  sensors_plus: ^4.0.2        # accelerometerEventStream() / gyroscopeEventStream()
+  flutter_compass: ^0.8.0     # magnetometer -> arah mata angin (sensor ke-3)
+
+  # AI Image Processing (on-device)
+  image_picker: ^1.0.7
+  google_mlkit_text_recognition: ^0.15.0   # OCR; iOS minimal 15.5, Android minSdk 21
+
+  # Web3
+  web3dart: ^2.6.1
+
+  # Penyimpanan Lokal
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.2
+
+  # Utilitas
+  flutter_local_notifications: ^17.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/data/countries.json
+    - assets/data/pl_clubs.json
