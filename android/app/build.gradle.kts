@@ -47,3 +47,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Themed AppCompat dipakai styles.xml -> ThemeAppCompat.DayNight.NoActionBar.
+    // Wajib untuk FlutterFragmentActivity + local_auth (biometrik).
+    implementation("androidx.appcompat:appcompat:1.7.0")
+}

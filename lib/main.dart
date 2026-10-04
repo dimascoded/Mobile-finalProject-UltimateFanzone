@@ -6,6 +6,7 @@ import 'core/theme/theme_provider.dart';
 import 'features/auth/presentation/lock_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/providers/auth_provider.dart';
+import 'features/football/providers/kickoff_reminder_provider.dart';
 import 'features/sos_emergency/data/notification_service.dart';
 
 Future<void> main() async {
@@ -22,6 +23,8 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final themeMode = ref.watch(themeModeProvider);
+    // Pengingat kickoff dijadwalkan begitu cache pertandingan termuat.
+    ref.watch(kickoffReminderSyncProvider);
     return MaterialApp(
       title: 'Smart Football Fan',
       theme: AppTheme.light,

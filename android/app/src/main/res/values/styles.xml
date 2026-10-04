@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Wajib AppCompat: MainActivity memakai FlutterFragmentActivity (local_auth).
+         Tanpa tema ini lock screen crash dengan
+         IllegalStateException: You need to use a Theme.AppCompat theme. -->
+    <style name="AppTheme" parent="ThemeAppCompat.DayNight.NoActionBar"/>
+
     <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <!-- Show a splash screen on the activity. Automatically removed when

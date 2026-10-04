@@ -42,6 +42,7 @@ dependencies:
   # Utilitas
   flutter_local_notifications: ^17.1.0
   timezone: ^0.9.4                  # wajib untuk zonedSchedule (Pengingat kickoff)
+  flutter_timezone: ^5.1.1
 
 dev_dependencies:
   flutter_test:

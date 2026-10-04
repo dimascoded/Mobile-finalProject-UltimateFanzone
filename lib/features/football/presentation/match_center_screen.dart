@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../data/models.dart';
 import '../providers/football_providers.dart';
+import '../providers/kickoff_reminder_provider.dart';
 import 'data_source_banner.dart';
 import 'kickoff_times.dart';
 
@@ -18,6 +19,11 @@ class MatchCenterScreen extends ConsumerWidget {
           title: const Text('Match Center'),
           actions: [
             IconButton(
+              tooltip: 'Atur pengingat kickoff',
+              icon: const Icon(Icons.notifications_active_outlined),
+              onPressed: () => _setReminders(context, ref),
+            ),
+            IconButton(
               tooltip: 'Muat ulang',
               icon: const Icon(Icons.refresh),
               onPressed: () => ref.read(footballRefreshProvider)(),
@@ -30,6 +36,20 @@ class MatchCenterScreen extends ConsumerWidget {
           ]),
         ),
         body: const TabBarView(children: [_FixturesTab(), _StandingsTab(), _ScorersTab()]),
+      ),
+    );
+  }
+
+  Future<void> _setReminders(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final n = await scheduleRemindersForUpcoming(ref);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          n > 0
+              ? '$n pengingat kickoff dijadwalkan (30 menit sebelum main)'
+              : 'Tidak ada laga mendatang untuk dijadwalkan',
+        ),
       ),
     );
   }
