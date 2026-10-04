@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/widgets/empty_state.dart';
-import '../../../core/widgets/permission_gate.dart';
 import '../../football/providers/football_providers.dart';
 import '../providers/lens_provider.dart';
 

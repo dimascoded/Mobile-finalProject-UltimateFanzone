@@ -46,19 +46,33 @@ class AwayDayExpense {
 
 class AwayDayRepository {
   static const _key = 'away_day_expenses';
+  static const _budgetKey = 'away_day_budget_idr';
 
   List<AwayDayExpense> load() {
     final raw = HiveService.cache.get(_key);
     if (raw == null) return [];
-    return (jsonDecode(raw) as List)
-        .map((e) => AwayDayExpense.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    try {
+      return (jsonDecode(raw) as List)
+          .map((e) => AwayDayExpense.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<void> save(List<AwayDayExpense> list) => HiveService.cache.put(
         _key,
         jsonEncode(list.map((e) => e.toJson()).toList()),
       );
+
+  /// Anggaran harian dalam Rupiah. 0 berarti belum diatur.
+  double loadBudget() {
+    final raw = HiveService.cache.get(_budgetKey);
+    if (raw == null) return 0;
+    return double.tryParse(raw) ?? 0;
+  }
+
+  Future<void> saveBudget(double idr) => HiveService.cache.put(_budgetKey, '$idr');
 }
 
 final awayDayRepositoryProvider = Provider((ref) => AwayDayRepository());

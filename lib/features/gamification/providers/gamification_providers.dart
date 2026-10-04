@@ -3,10 +3,11 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../football/data/models.dart';
-import '../../football/providers/football_providers.dart';
 import '../data/blockchain.dart';
 import '../data/chain_repository.dart';
-import '../data/wallet_repository.dart';final walletAddressProvider = FutureProvider<String>(
+import '../data/wallet_repository.dart';
+
+final walletAddressProvider = FutureProvider<String>(
     (ref) => ref.watch(walletRepositoryProvider).getOrCreateAddress());
 
 // ---------- Rantai blok Paspor ----------

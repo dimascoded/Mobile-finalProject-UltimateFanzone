@@ -11,7 +11,7 @@ class FanSummary extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final club = ref.watch(favoriteClubProvider);
     if (club == null) return const SizedBox.shrink();
-    final total = ref.watch(awayDayTotalProvider);
+    final totals = ref.watch(awayDayTotalsProvider);
     final budget = ref.watch(awayDayBudgetProvider);
     final stamps = ref.watch(stampsProvider).where((b) => b.data['club'] == club.key).length;
     final next = ref.watch(nextMatchProvider).valueOrNull;
@@ -31,7 +31,11 @@ class FanSummary extends ConsumerWidget {
         ListTile(
           leading: const Icon(Icons.account_balance_wallet_outlined),
           title: const Text('Away Day'),
-          subtitle: Text('Rp ${total.toStringAsFixed(0)} ${budget > 0 ? 'dari Rp ${budget.toStringAsFixed(0)}' : ''}'),
+          subtitle: Text(
+            'Rp ${totals.idr.round()}'
+            ' (\u00A3${totals.gbp.toStringAsFixed(2)})'
+            '${budget > 0 ? ' dari Rp ${budget.round()}' : ''}',
+          ),
         ),
         ListTile(
           leading: const Icon(Icons.approval),

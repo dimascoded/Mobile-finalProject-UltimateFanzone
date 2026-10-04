@@ -1,47 +1,56 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../football/providers/football_providers.dart';
+
 import '../../football/data/models.dart';
+import '../../football/providers/football_providers.dart';
 import '../data/pundit_repository.dart';
 
+/// 5 hasil terakhir. Kalau belum ada tim favorit, pakai semua laga selesai.
 final lastResultsProvider = Provider<List<FootballMatch>>((ref) {
   final fav = ref.watch(favoriteClubProvider);
   return ref.watch(matchesProvider).maybeWhen(
-        data: (r) => r.data
-            .where((m) => fav != null && m.involves(fav) && m.isFinished)
-            .toList()
-          ..sort((a, b) => b.kickoffUtc.compareTo(a.kickoffUtc)),
-        orElse: () => const [],
+        data: (r) {
+          final done = r.data.where((m) => m.isFinished).toList();
+          final scoped = fav == null ? done : done.where((m) => m.involves(fav)).toList();
+          return (scoped..sort((a, b) => b.kickoffUtc.compareTo(a.kickoffUtc)));
+        },
+        orElse: () => const <FootballMatch>[],
       );
 });
 
+// State awal diisi lewat super.initialState, bukan lewat `state =` dari luar.
 class PunditNotifier extends StateNotifier<AsyncValue<PunditResult?>> {
-  PunditNotifier(this.ref) : super(const AsyncData(null));
-  final Ref ref;
+  PunditNotifier(this._ref, super.initialState);
+
+  final Ref _ref;
 
   Future<void> generate() async {
-    final club = ref.read(favoriteClubProvider);
-    final standings = ref.read(standingsProvider).valueOrNull?.data ?? [];
-    final last5 = ref.read(lastResultsProvider).take(5).toList();
+    final club = _ref.read(favoriteClubProvider);
     if (club == null) {
       state = AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
       return;
     }
+    final standings = _ref.read(standingsProvider).valueOrNull?.data ?? const [];
+    final last5 = _ref.read(lastResultsProvider).take(5).toList();
+    final repo = _ref.read(punditRepositoryProvider);
+
     state = const AsyncLoading();
-    final repo = ref.read(punditRepositoryProvider);
     try {
       final r = await repo.generate(club, standings, last5);
       if (mounted) state = AsyncData(r);
     } catch (e, st) {
+      // Offline / API key kosong / rate limited -> pakai hasil cache terakhir.
       final cache = repo.cached(club.key);
-      if (mounted) state = cache != null ? AsyncData(cache) : AsyncError(e, st);
+      if (!mounted) return;
+      state = cache != null ? AsyncData(cache) : AsyncError(e, st);
     }
   }
+
+  void clear() => state = const AsyncData(null);
 }
 
-final punditProvider = StateNotifierProvider<PunditNotifier, AsyncValue<PunditResult?>>((ref) {
+final punditProvider =
+    StateNotifierProvider<PunditNotifier, AsyncValue<PunditResult?>>((ref) {
   final club = ref.watch(favoriteClubProvider);
   final repo = ref.watch(punditRepositoryProvider);
-  final notifier = PunditNotifier(ref);
-  notifier.state = AsyncData(repo.cached(club?.key));
-  return notifier;
+  return PunditNotifier(ref, AsyncData(repo.cached(club?.key)));
 });

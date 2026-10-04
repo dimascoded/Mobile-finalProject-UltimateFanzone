@@ -29,7 +29,8 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
   final _picker = ImagePicker();
 
   Future<void> scan(ImageSource source) async {
-    final club = _ref.read(favoriteClubProvider); final currency = 'GBP';
+    final club = _ref.read(favoriteClubProvider);
+    const currency = 'GBP';
     if (club == null) {
       state = AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
       return;
