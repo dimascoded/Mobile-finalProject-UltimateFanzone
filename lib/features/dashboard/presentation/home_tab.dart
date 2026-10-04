@@ -5,6 +5,7 @@ import '../../away_day/presentation/away_day_screen.dart';
 import '../../gamification/presentation/game_screen.dart';
 import '../../gamification/presentation/passport_screen.dart';
 import '../../lens/presentation/lens_screen.dart';
+import '../../prediction/presentation/prediction_screen.dart';
 import '../../sos_emergency/presentation/sos_screen.dart';
 import '../../football/presentation/favorite_team_card.dart';
 import '../../football/presentation/match_center_screen.dart';
@@ -17,6 +18,7 @@ class HomeTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final menus = <(String, IconData, Widget)>[
       ('Match Center', Icons.sports_soccer, const MatchCenterScreen()),
+      ('Prediksi Skor', Icons.scoreboard_outlined, const PredictionScreen()),
       ('Pundit AI', Icons.auto_awesome, const PunditScreen()),
       ('Lens (OCR Harga)', Icons.document_scanner, const LensScreen()),
       ('Kompas Stadion', Icons.explore, const StadiumPointerScreen()),
