@@ -32,8 +32,9 @@ final chainValidProvider =
 final stampsProvider = Provider<List<Block>>(
     (ref) => ref.watch(chainProvider).where((b) => b.type == 'stamp').toList());
 
-// ---------- Cap stamp: wajib dekat landmark (atau mode demo) ----------
-const stampRadiusMeters = 500.0;
+// ---------- Cap stamp: wajib dekat stadion (atau mode demo) ----------
+// Radius ini disepakati di rubrik: 800 m.
+const stampRadiusMeters = 800.0;
 
 /// Mode demo: melewati verifikasi GPS (dicatat gps_verified=false di blok).
 final demoModeProvider = StateProvider<bool>((ref) => false);
@@ -47,7 +48,7 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
     final result = await AsyncValue.guard(() async {
       final demo = _ref.read(demoModeProvider);
       final already = _ref.read(stampsProvider).any(
-          (b) => b.data['club'] == club.key && b.data['landmark'] == club.stadium);
+          (b) => b.data['club'] == club.key && b.data['stadium'] == club.stadium);
       if (already) throw Exception('Stamp ${club.stadium} sudah dimiliki');
 
       var distance = 0;
@@ -70,7 +71,7 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
       final owner = await _ref.read(walletAddressProvider.future);
       final block = await _ref.read(chainProvider.notifier).mint('stamp', {
         'club': club.key,
-        'landmark': club.stadium,
+        'stadium': club.stadium,
         'gps_verified': !demo,
         'distance_m': distance,
       }, owner);

@@ -90,12 +90,12 @@ class ProfileTab extends ConsumerWidget {
       if (stamps.isEmpty)
         const Padding(
           padding: EdgeInsets.all(16),
-          child: Text('Belum ada stamp. Kunjungi landmark lewat menu Paspor Digital.'),
+          child: Text('Belum ada stamp. Kunjungi stadion lewat menu Paspor Digital.'),
         ),
       for (final b in stamps)
         ListTile(
           leading: const Icon(Icons.approval, color: Colors.teal),
-          title: Text('${b.data['landmark']}'),
+          title: Text('${b.data['stadium']}'),
           subtitle: Text(
               'Blok #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
         ),

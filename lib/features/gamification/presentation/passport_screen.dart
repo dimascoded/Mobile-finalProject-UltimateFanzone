@@ -35,7 +35,7 @@ class PassportScreen extends ConsumerWidget {
         for (final b in stamps)
           ListTile(
             leading: const Icon(Icons.approval, color: Colors.teal),
-            title: Text('${b.data['landmark']}'),
+            title: Text('${b.data['stadium']}'),
             subtitle: Text('Blok #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
           ),
       ]),
