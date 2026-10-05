@@ -16,11 +16,18 @@ class ChainNotifier extends StateNotifier<List<Block>> {
   ChainNotifier(this._repo) : super(_repo.load());
   final ChainRepository _repo;
 
-  Future<Block> mint(String type, Map<String, dynamic> data, String owner) async {
+  Future<Block> mint(
+      String type, Map<String, dynamic> data, String owner) async {
     final block = Blockchain.next(state, type, data, owner);
     state = [...state, block];
     await _repo.save(state);
     return block;
+  }
+
+  /// Ganti seluruh rantai dan simpan ke Hive (dipakai pemulihan sinkronisasi).
+  Future<void> replaceAll(List<Block> chain) async {
+    state = chain;
+    await _repo.save(state);
   }
 }
 
@@ -77,8 +84,8 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
     final result = await AsyncValue.guard(() async {
       // Semua dependensi dibaca SEBELUM await: ref tidak boleh dipakai
       // setelah provider di-dispose.
-      final already = _ref.read(stampsProvider).any(
-          (b) => b.data['club'] == club.key && b.data['stadium'] == club.stadium);
+      final already = _ref.read(stampsProvider).any((b) =>
+          b.data['club'] == club.key && b.data['stadium'] == club.stadium);
       if (already) throw Exception('Stamp ${club.stadium} sudah dimiliki');
 
       var distance = 0;
@@ -108,12 +115,15 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
         }
       }
       final owner = await _ref.read(walletAddressProvider.future);
-      final block = await _ref.read(chainProvider.notifier).mint('stamp', {
-        'club': club.key,
-        'stadium': club.stadium,
-        'gps_verified': !demo,
-        'distance_m': distance,
-      }, owner);
+      final block = await _ref.read(chainProvider.notifier).mint(
+          'stamp',
+          {
+            'club': club.key,
+            'stadium': club.stadium,
+            'gps_verified': !demo,
+            'distance_m': distance,
+          },
+          owner);
       return 'Stamp ${club.stadium} tercetak (blok #${block.index})';
     });
     if (!mounted) return; // layar sudah ditutup
@@ -143,7 +153,13 @@ class GameState {
   static const winScore = 10;
   bool get won => finished && score >= winScore;
 
-  GameState copyWith({int? score, int? secondsLeft, bool? running, bool? finished, double? dx, double? dy}) =>
+  GameState copyWith(
+          {int? score,
+          int? secondsLeft,
+          bool? running,
+          bool? finished,
+          double? dx,
+          double? dy}) =>
       GameState(
         score: score ?? this.score,
         secondsLeft: secondsLeft ?? this.secondsLeft,
@@ -195,7 +211,8 @@ class GameNotifier extends StateNotifier<GameState> {
       final walletFuture = _ref.read(walletAddressProvider.future);
       final chain = _ref.read(chainProvider.notifier);
       final owner = await walletFuture;
-      await chain.mint('achievement', {'game': 'Speed Tapper', 'score': score}, owner);
+      await chain.mint(
+          'achievement', {'game': 'Speed Tapper', 'score': score}, owner);
     }
   }
 

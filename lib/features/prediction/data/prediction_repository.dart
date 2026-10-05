@@ -17,19 +17,27 @@ import '../../../core/utils/crypto_utils.dart';
 ///
 /// Fungsi-fungsi ini murni (tanpa I/O) supaya bisa diuji tanpa emulator.
 class Prediction {
-  const Prediction({
+  Prediction({
     required this.matchId,
     required this.homeScore,
     required this.awayScore,
     required this.salt,
     required this.commit,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? _epoch;
 
   final int matchId;
   final int homeScore;
   final int awayScore;
   final String salt;
   final String commit;
+
+  /// Kapan prediksi dicatat. Dikirim ke server sebagai penanda urutan, bukan
+  /// sebagai rahasia (lihat `predictionCommitToJson`).
+  final DateTime createdAt;
+
+  static final DateTime _epoch =
+      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
   static const blockTypeCommit = 'prediction_commit';
   static const blockTypeResult = 'prediction_result';
@@ -40,15 +48,33 @@ class Prediction {
         'awayScore': awayScore,
         'salt': salt,
         'commit': commit,
+        'createdAt': createdAt.toUtc().toIso8601String(),
       };
 
-  factory Prediction.fromJson(Map<String, dynamic> j) => Prediction(
-        matchId: (j['matchId'] as num).toInt(),
-        homeScore: (j['homeScore'] as num).toInt(),
-        awayScore: (j['awayScore'] as num).toInt(),
-        salt: j['salt'] as String,
-        commit: j['commit'] as String,
-      );
+  /// Parse satu prediksi. Melempar [FormatException] bila data tidak lengkap,
+  /// supaya pemanggil bisa melewati item ini saja (bukan seluruh daftar).
+  factory Prediction.fromJson(Map<String, dynamic> j) {
+    final matchId = (j['matchId'] as num?)?.toInt();
+    if (matchId == null) {
+      throw const FormatException('matchId tidak ada');
+    }
+    final salt = j['salt'];
+    final commit = j['commit'];
+    if (salt is! String ||
+        commit is! String ||
+        salt.isEmpty ||
+        commit.isEmpty) {
+      throw const FormatException('salt atau commit tidak ada');
+    }
+    return Prediction(
+      matchId: matchId,
+      homeScore: (j['homeScore'] as num?)?.toInt() ?? 0,
+      awayScore: (j['awayScore'] as num?)?.toInt() ?? 0,
+      salt: salt,
+      commit: commit,
+      createdAt: DateTime.tryParse((j['createdAt'] ?? '').toString()),
+    );
+  }
 
   static String computeCommit({
     required int matchId,

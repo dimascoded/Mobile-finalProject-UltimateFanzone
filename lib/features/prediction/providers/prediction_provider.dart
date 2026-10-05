@@ -4,26 +4,40 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/hive_service.dart';
+import '../../football/data/football_repository.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../data/prediction_repository.dart';
+import '../data/reveal_verifier.dart';
 
 /// Prediksi aktif milik pengguna. Salt + skor disimpan LOKAL di Hive karena
 /// belum boleh bocor sebelum kickoff. Yang masuk blockchain hanya commit-nya.
 class PredictionStore {
   static const _key = 'score_predictions';
 
+  /// Parse per-item (R2): satu prediksi rusak dilewati, bukan membuat seluruh
+  /// daftar hilang karena `catch -> []`.
   List<Prediction> load() {
     final raw = HiveService.cache.get(_key);
     if (raw == null) return [];
+    Object? decoded;
     try {
-      return (jsonDecode(raw) as List)
-          .map((e) => Prediction.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      decoded = jsonDecode(raw);
     } catch (_) {
       return [];
     }
+    if (decoded is! List) return [];
+    final out = <Prediction>[];
+    for (final e in decoded) {
+      if (e is! Map) continue;
+      try {
+        out.add(Prediction.fromJson(Map<String, dynamic>.from(e)));
+      } catch (_) {
+        continue; // lewati item rusak, simpan yang lain
+      }
+    }
+    return out;
   }
 
   Future<void> save(List<Prediction> list) => HiveService.cache.put(
@@ -59,6 +73,13 @@ class PredictionsNotifier extends StateNotifier<List<Prediction>> {
     state = [p, ...state.where((e) => e.matchId != p.matchId)];
     await _store.save(state);
   }
+
+  /// Terapkan hasil merge sinkronisasi (S1): daftar gabungan dari server dan
+  /// perangkat ini langsung disimpan ke Hive.
+  Future<void> replaceAll(List<Prediction> list) async {
+    state = list;
+    await _store.save(state);
+  }
 }
 
 class CommitResult {
@@ -76,14 +97,20 @@ class PredictionAction {
   /// Catat prediksi sebelum kickoff. Menolak perubahan bila:
   /// - kickoff sudah lewat
   /// - sudah ada commit untuk laga itu (prediksi tidak bisa diubah)
-  CommitResult commit({
+  Future<CommitResult> commit({
     required FootballMatch match,
     required int homeScore,
     required int awayScore,
-  }) {
+  }) async {
     if (match.kickoffUtc.isBefore(DateTime.now().toUtc())) {
       throw Exception('Kickoff sudah lewat, prediksi ditutup');
     }
+    // R3: data contoh bukan jadwal sungguhan, prediksi tidak dilakukan.
+    final source = _ref.read(matchesProvider).valueOrNull?.source;
+    if (source == DataSource.sample) {
+      throw Exception('Data contoh: prediksi dinonaktifkan');
+    }
+
     final notifier = _ref.read(predictionsProvider.notifier);
     final existing = notifier.forMatch(match.id);
     if (existing != null) return CommitResult(existing, true);
@@ -101,21 +128,27 @@ class PredictionAction {
       awayScore: awayScore,
       salt: salt,
       commit: commit,
+      createdAt: DateTime.now().toUtc(),
     );
 
-    final owner = _ref.read(walletAddressProvider).valueOrNull ?? 'local';
-    _ref.read(chainProvider.notifier).mint(
-          Prediction.blockTypeCommit,
-          Prediction.commitData(
-            matchId: match.id,
-            home: match.homeName,
-            away: match.awayName,
-            commit: commit,
-            at: DateTime.now().toUtc(),
-          ),
-          owner,
-        );
-    notifier.put(p);
+    final walletFuture = _ref.read(walletAddressProvider.future);
+    final chain = _ref.read(chainProvider.notifier);
+    final owner = await walletFuture;
+
+    // R2: mint harus selesai ditulis sebelum prediksi disimpan, supaya tidak ada
+    // prediksi tanpa blok commit bila aplikasi tertutup di tengah jalan.
+    await chain.mint(
+      Prediction.blockTypeCommit,
+      Prediction.commitData(
+        matchId: match.id,
+        home: match.homeName,
+        away: match.awayName,
+        commit: commit,
+        at: p.createdAt,
+      ),
+      owner,
+    );
+    await notifier.put(p);
     return CommitResult(p, false);
   }
 }
@@ -143,7 +176,8 @@ class SettledPrediction {
 /// Prediksi yang laganya sudah selesai tapi blok result-nya belum ditulis.
 final unsettledPredictionsProvider =
     Provider<List<({FootballMatch match, Prediction prediction})>>((ref) {
-  final matches = ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
+  final matches =
+      ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
   final chain = ref.watch(chainProvider);
   final open = ref.watch(predictionsProvider);
 
@@ -152,13 +186,16 @@ final unsettledPredictionsProvider =
     if (!m.isFinished || !m.hasScore) continue;
     final p = open.where((e) => e.matchId == m.id).firstOrNull;
     if (p == null) continue;
-    final already = chain.any((b) =>
-        b.type == Prediction.blockTypeResult && b.data['match'] == m.id);
+    final already = chain.any(
+        (b) => b.type == Prediction.blockTypeResult && b.data['match'] == m.id);
     if (already) continue;
     out.add((match: m, prediction: p));
   }
   return out;
 });
+
+/// Laga yang dibatalkan/diundur: tidak ada skor, jadi tidak bisa direveal.
+bool isCancelledMatch(FootballMatch m) => isCancelledStatus(m.status);
 
 /// Tulis blok result untuk prediksi yang sudah bisa direveal.
 final settleActionProvider = Provider((ref) => SettleAction(ref));
@@ -168,43 +205,37 @@ class SettleAction {
   final Ref _ref;
 
   /// Kembalikan poin yang didapat, atau null bila reveal tidak sah.
+  ///
+  /// R1: kebenaran dihitung dari BLOK RANTAI lewat [verifyReveal], bukan dari
+  /// nilai yang tersimpan di Hive. Mengubah skor/salt/commit di Hive tidak
+  /// membuat reveal jadi sah.
   Future<SettledPrediction?> settle(FootballMatch m, Prediction p) async {
-    final valid = Prediction.verify(
-      matchId: p.matchId,
-      home: m.homeName,
-      away: m.awayName,
-      salt: p.salt,
-      expectedCommit: p.commit,
-    );
-    final points = valid
-        ? scorePoints(
-            predHome: p.homeScore,
-            predAway: p.awayScore,
-            realHome: m.homeScore!,
-            realAway: m.awayScore!,
-          )
-        : 0;
+    final chain = _ref.read(chainProvider);
+    final verdict = verifyReveal(chain: chain, prediction: p, match: m);
+    if (!verdict.valid || !m.hasScore) return null;
 
-    final owner = _ref.read(walletAddressProvider).valueOrNull ?? 'local';
-    await _ref.read(chainProvider.notifier).mint(
-          Prediction.blockTypeResult,
-          Prediction.resultData(
-            matchId: p.matchId,
-            salt: p.salt,
-            predHome: p.homeScore,
-            predAway: p.awayScore,
-            realHome: m.homeScore!,
-            realAway: m.awayScore!,
-            points: points,
-          ),
-          owner,
-        );
+    final walletFuture = _ref.read(walletAddressProvider.future);
+    final chainNotifier = _ref.read(chainProvider.notifier);
+    final owner = await walletFuture;
+    await chainNotifier.mint(
+      Prediction.blockTypeResult,
+      Prediction.resultData(
+        matchId: p.matchId,
+        salt: p.salt,
+        predHome: p.homeScore,
+        predAway: p.awayScore,
+        realHome: m.homeScore!,
+        realAway: m.awayScore!,
+        points: verdict.points,
+      ),
+      owner,
+    );
     return SettledPrediction(
       prediction: p,
       realHome: m.homeScore!,
       realAway: m.awayScore!,
-      valid: valid,
-      points: points,
+      valid: true,
+      points: verdict.points,
     );
   }
 }

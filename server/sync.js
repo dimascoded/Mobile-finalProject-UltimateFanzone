@@ -77,24 +77,37 @@ function upsertChain(userId, chain) {
   return n;
 }
 
+/**
+ * Upsert prediksi (S4).
+ *
+ * Klien mengirim bentuk commit-only sebelum kickoff: { matchId, commit,
+ * createdAt }. Kolom home_score / away_score / salt sengaja NULL sampai
+ * klien mengirim bentuk ter-reveal setelah blok result ditulis.
+ *
+ * Kolom yang NULL pada payload tidak menimpa nilai yang sudah ter-reveal:
+ * memakai COALESCE(excluded.x, x). Tanpa itu, sinkronisasi berikutnya
+ * (yang masih commit-only) akan menghapus salt yang sudah terexpose.
+ */
 function upsertPredictions(userId, predictions) {
   const stmt = db.prepare(`
     INSERT INTO predictions (user_id, match_id, home_score, away_score, salt, commit_hash, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, match_id) DO UPDATE SET
-      home_score = excluded.home_score,
-      away_score = excluded.away_score,
-      salt = excluded.salt,
+      home_score = COALESCE(excluded.home_score, home_score),
+      away_score = COALESCE(excluded.away_score, away_score),
+      salt       = COALESCE(excluded.salt, salt),
       commit_hash = excluded.commit_hash
   `);
   let n = 0;
   for (const p of predictions) {
+    // Bentuk commit-only berarti "belum ada yang boleh dibuka".
+    const revealed = p.salt != null && p.homeScore != null && p.awayScore != null;
     stmt.run(
       userId,
       Number(p.matchId),
-      Number(p.homeScore ?? 0),
-      Number(p.awayScore ?? 0),
-      String(p.salt ?? ''),
+      revealed ? Number(p.homeScore) : null,
+      revealed ? Number(p.awayScore) : null,
+      revealed ? String(p.salt) : null,
       String(p.commit ?? ''),
       String(p.createdAt ?? new Date().toISOString()),
     );

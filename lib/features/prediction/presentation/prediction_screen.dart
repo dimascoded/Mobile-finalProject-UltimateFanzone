@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/empty_state.dart';
+import '../../football/data/football_repository.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/prediction_repository.dart';
@@ -30,7 +31,8 @@ class PredictionScreen extends ConsumerWidget {
           ),
           if (pending.isNotEmpty) ...[
             const SizedBox(height: 8),
-            for (final e in pending) _SettleTile(match: e.match, prediction: e.prediction),
+            for (final e in pending)
+              _SettleTile(match: e.match, prediction: e.prediction),
           ],
           const SizedBox(height: 16),
           Text('Pilih skor sebelum kickoff',
@@ -44,14 +46,16 @@ class PredictionScreen extends ConsumerWidget {
           const _UpcomingPicker(),
           if (mine.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text('Tebakan tersimpan', style: Theme.of(context).textTheme.titleMedium),
+            Text('Tebakan tersimpan',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             for (final p in mine)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.lock_outline),
                 title: Text('${p.homeScore}-${p.awayScore}'),
-                subtitle: Text('match #${p.matchId} • commit ${p.commit.substring(0, 12)}...'),
+                subtitle: Text(
+                    'match #${p.matchId} • commit ${p.commit.substring(0, 12)}...'),
               ),
           ],
         ],
@@ -81,7 +85,8 @@ class _SettleTileState extends ConsumerState<_SettleTile> {
       child: ListTile(
         leading: const Icon(Icons.verified_outlined),
         title: Text('${m.homeShort} vs ${m.awayShort} selesai'),
-        subtitle: Text('Skor resmi ${m.homeScore}-${m.awayScore} - buka salt untuk dapat poin'),
+        subtitle: Text(
+            'Skor resmi ${m.homeScore}-${m.awayScore} - buka salt untuk dapat poin'),
         trailing: FilledButton(
           onPressed: _busy
               ? null
@@ -125,12 +130,26 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final matches = ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
+    final snapshot = ref.watch(matchesProvider).valueOrNull;
+    final matches = snapshot?.data ?? const <FootballMatch>[];
+    final isSample = snapshot?.source == DataSource.sample;
     final now = DateTime.now().toUtc();
+    // R3: laga POSTPONED/CANCELLED tidak punya skor resmi, jadi tidak bisa
+    // diprediksi.
     final upcoming = matches
-        .where((m) => !m.isFinished && m.kickoffUtc.isAfter(now))
+        .where((m) =>
+            !m.isFinished && !isCancelledMatch(m) && m.kickoffUtc.isAfter(now))
         .toList()
       ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
+
+    if (isSample) {
+      return const EmptyState(
+        icon: Icons.science_outlined,
+        title: 'Prediksi dinonaktifkan',
+        message: 'Jadwal yang dipakai masih data contoh. Set FOOTBALL_API_KEY '
+            'agar prediksi memakai jadwal sungguhan.',
+      );
+    }
 
     if (upcoming.isEmpty) {
       return const EmptyState(
@@ -148,12 +167,14 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
         DropdownButtonFormField<FootballMatch>(
           initialValue: selected,
           isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Laga', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+              labelText: 'Laga', border: OutlineInputBorder()),
           items: [
             for (final m in upcoming)
               DropdownMenuItem<FootballMatch>(
                 value: m,
-                child: Text('${m.homeShort} vs ${m.awayShort}', overflow: TextOverflow.ellipsis),
+                child: Text('${m.homeShort} vs ${m.awayShort}',
+                    overflow: TextOverflow.ellipsis),
               ),
           ],
           onChanged: (v) => setState(() => _match = v),
@@ -177,14 +198,15 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: () {
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(context);
             try {
-              final r = ref.read(predictionActionProvider).commit(
+              final r = await ref.read(predictionActionProvider).commit(
                     match: selected,
                     homeScore: _home,
                     awayScore: _away,
                   );
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(r.alreadyCommitted
                       ? 'Sudah ada prediksi untuk laga ini'
@@ -192,8 +214,8 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
                 ),
               );
             } catch (e) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text('$e')));
+              messenger.showSnackBar(SnackBar(
+                  content: Text(e.toString().replaceFirst('Exception: ', ''))));
             }
           },
           icon: const Icon(Icons.lock),
@@ -205,7 +227,8 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
 }
 
 class _Stepper extends StatelessWidget {
-  const _Stepper({required this.label, required this.value, required this.onChanged});
+  const _Stepper(
+      {required this.label, required this.value, required this.onChanged});
 
   final String label;
   final int value;

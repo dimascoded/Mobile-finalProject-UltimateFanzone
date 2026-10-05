@@ -77,6 +77,35 @@ test('chain dengan indeks sama ditimpa (idempoten)', () => {
   assert.strictEqual(sync.pull(uid).chain.length, 1);
 });
 
+test('S4: payload commit-only tidak menyimpan skor maupun salt', () => {
+  const uid = makeUser();
+  sync.push(uid, {
+    predictions: [{ matchId: 9001, commit: 'e'.repeat(64), createdAt: '2026-08-15T00:00:00Z' }],
+  });
+  const p = sync.pull(uid).predictions[0];
+  assert.strictEqual(p.matchId, 9001);
+  assert.strictEqual(p.commit, 'e'.repeat(64));
+  assert.strictEqual(p.salt, null, 'salt tidak boleh tersimpan sebelum reveal');
+  assert.strictEqual(p.homeScore, null, 'skor tebakan tidak boleh tersimpan sebelum reveal');
+  assert.strictEqual(p.awayScore, null);
+});
+
+test('S4: sinkronisasi commit-only berikutnya tidak menghapus salt yang sudah terbuka', () => {
+  const uid = makeUser();
+  // Bentuk ter-reveal (setelah blok result ditulis).
+  sync.push(uid, {
+    predictions: [{ matchId: 9002, homeScore: 2, awayScore: 1, salt: 'bcdf', commit: 'f'.repeat(64), createdAt: '2026-08-15T00:00:00Z' }],
+  });
+  // Sync berikutnya masih commit-only (mis. dari perangkat lain).
+  sync.push(uid, {
+    predictions: [{ matchId: 9002, commit: 'f'.repeat(64), createdAt: '2026-08-15T00:00:00Z' }],
+  });
+  const p = sync.pull(uid).predictions[0];
+  assert.strictEqual(p.salt, 'bcdf', 'salt yang sudah reveal tidak ditimpa');
+  assert.strictEqual(p.homeScore, 2);
+  assert.strictEqual(p.awayScore, 1);
+});
+
 test('prediksi menyimpan salt dan commit', () => {
   const uid = makeUser();
   sync.push(uid, {

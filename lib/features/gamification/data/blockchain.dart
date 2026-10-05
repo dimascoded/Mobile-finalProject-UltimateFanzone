@@ -60,8 +60,13 @@ class Blockchain {
   static final _zeros = '0' * difficulty;
   static final genesisPrevHash = '0' * 64;
 
-  static Block genesis() =>
-      mine(index: 0, timestamp: 0, type: 'genesis', data: const {}, owner: 'system', prevHash: genesisPrevHash);
+  static Block genesis() => mine(
+      index: 0,
+      timestamp: 0,
+      type: 'genesis',
+      data: const {},
+      owner: 'system',
+      prevHash: genesisPrevHash);
 
   /// Cari nonce sehingga hash diawali [difficulty] angka nol.
   static Block mine({
@@ -99,7 +104,8 @@ class Blockchain {
     }
   }
 
-  static Block next(List<Block> chain, String type, Map<String, dynamic> data, String owner) =>
+  static Block next(List<Block> chain, String type, Map<String, dynamic> data,
+          String owner) =>
       mine(
         index: chain.length,
         timestamp: DateTime.now().millisecondsSinceEpoch,
@@ -126,9 +132,35 @@ class Blockchain {
       );
       if (recomputed != b.hash || !b.hash.startsWith(_zeros)) return false;
       if (b.index != i) return false;
-      if (i == 0 ? b.prevHash != genesisPrevHash : b.prevHash != chain[i - 1].hash) {
+      if (i == 0
+          ? b.prevHash != genesisPrevHash
+          : b.prevHash != chain[i - 1].hash) {
         return false;
       }
+    }
+    return true;
+  }
+
+  /// Rantai dari server hanya boleh menggantikan rantai lokal bila:
+  /// - blockchain-nya valid (hash + PoW + prevHash),
+  /// - blok genesis-nya sama persis dengan lokal,
+  /// - dan lebih panjang dari rantai lokal (lokal hanya genesis = pemulihan
+  ///   perangkat baru).
+  ///
+  /// Selain itu rantai lokal dipertahankan, karena blok yang sudah di-mine
+  /// tidak bisa disambung tanpa mining ulang.
+  static bool canAdoptRemote(List<Block> local, List<Block> remote) {
+    if (remote.isEmpty) return false;
+    if (!isValid(remote)) return false;
+    if (local.isEmpty) return false;
+    if (local.first.hash != remote.first.hash) return false;
+    // Rantai lokal hanya genesis: pulihkan seluruh rantai server.
+    if (local.length == 1) return true;
+    // Rantai lokal sudah berisi blok: hanya boleh kalau server lebih panjang
+    // DAN sama persis sepanjang rantai lokal (rantai yang sama, bukan lain).
+    if (remote.length <= local.length) return false;
+    for (var i = 0; i < local.length; i++) {
+      if (local[i].hash != remote[i].hash) return false;
     }
     return true;
   }

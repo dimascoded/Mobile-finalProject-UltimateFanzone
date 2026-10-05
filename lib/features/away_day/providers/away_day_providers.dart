@@ -61,6 +61,13 @@ class AwayDayNotifier extends StateNotifier<List<AwayDayExpense>> {
     state = const [];
     await _repo.save(state);
   }
+
+  /// Terapkan hasil merge sinkronisasi (S1): daftar gabungan dari server dan
+  /// perangkat ini langsung disimpan ke Hive, bukan hanya dihitung.
+  Future<void> replaceAll(List<AwayDayExpense> list) async {
+    state = list;
+    await _repo.save(state);
+  }
 }
 
 final awayDayProvider =
@@ -78,7 +85,8 @@ final awayDayCategoryFilterProvider =
 /// Tampilkan hanya pengeluaran milik tim favorit.
 final awayDayFavOnlyProvider = StateProvider.autoDispose<bool>((ref) => false);
 
-final awayDayFilteredProvider = Provider.autoDispose<List<AwayDayExpense>>((ref) {
+final awayDayFilteredProvider =
+    Provider.autoDispose<List<AwayDayExpense>>((ref) {
   final q = ref.watch(awayDayQueryProvider).toLowerCase().trim();
   final cat = ref.watch(awayDayCategoryFilterProvider);
   final favOnly = ref.watch(awayDayFavOnlyProvider);
@@ -126,14 +134,15 @@ class BudgetNotifier extends StateNotifier<double> {
   }
 }
 
-final awayDayBudgetProvider =
-    StateNotifierProvider<BudgetNotifier, double>((ref) => BudgetNotifier(ref.watch(awayDayRepositoryProvider)));
+final awayDayBudgetProvider = StateNotifierProvider<BudgetNotifier, double>(
+    (ref) => BudgetNotifier(ref.watch(awayDayRepositoryProvider)));
 
 // ---------- Jam dunia (rubrik: WIB / WITA / WIT / London) ----------
 
 /// Semua klub Premier League basing di Inggris, jadi zona yang relevan adalah
 /// WIB, WITA, WIT, dan London (Europe/London, DST ikut dihitung oleh TimeUtils).
-final worldClockProvider = StreamProvider.autoDispose<Map<String, DateTime>>((ref) async* {
+final worldClockProvider =
+    StreamProvider.autoDispose<Map<String, DateTime>>((ref) async* {
   while (true) {
     final utc = TimeUtils.nowUtc();
     yield {

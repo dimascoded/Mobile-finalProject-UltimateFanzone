@@ -3,7 +3,8 @@ import 'package:premiere_league_fan_assistant/features/away_day/data/away_day_re
 import 'package:premiere_league_fan_assistant/features/prediction/data/prediction_repository.dart';
 import 'package:premiere_league_fan_assistant/features/sync/data/sync_models.dart';
 
-AwayDayExpense expense(String title, {double gbp = 10, DateTime? at}) => AwayDayExpense(
+AwayDayExpense expense(String title, {double gbp = 10, DateTime? at}) =>
+    AwayDayExpense(
       title: title,
       amountGbp: gbp,
       amountIdr: gbp * 20000,
@@ -11,19 +12,22 @@ AwayDayExpense expense(String title, {double gbp = 10, DateTime? at}) => AwayDay
       date: at ?? DateTime.utc(2026, 8, 15, 14),
     );
 
-Prediction prediction(int matchId, int home, int away) => Prediction(
+Prediction prediction(int matchId, int home, int away, {DateTime? createdAt}) =>
+    Prediction(
       matchId: matchId,
       homeScore: home,
       awayScore: away,
       salt: 'salt$matchId',
       commit: 'commit$matchId',
+      createdAt: createdAt,
     );
 
 void main() {
   group('payload expense', () {
     test('id expense_follows tanggal ISO', () {
       final at = DateTime.utc(2026, 8, 15, 14, 30);
-      expect(expenseToJson(expense('Tiket', at: at))['id'], at.toIso8601String());
+      expect(
+          expenseToJson(expense('Tiket', at: at))['id'], at.toIso8601String());
     });
 
     test('kirim kedua mata uang dan kategori', () {
@@ -49,21 +53,118 @@ void main() {
   });
 
   group('payload prediksi', () {
-    test('bawa matchId, skor, salt, dan commit', () {
-      final j = predictionToJson(prediction(7001, 2, 1));
+    test('S4: sebelum kickoff hanya matchId, commit, dan createdAt', () {
+      final j = predictionCommitToJson(prediction(7001, 2, 1));
+      expect(j.keys.toSet(), {'matchId', 'commit', 'createdAt'});
       expect(j['matchId'], 7001);
-      expect(j['homeScore'], 2);
-      expect(j['awayScore'], 1);
-      expect(j['salt'], 'salt7001');
       expect(j['commit'], 'commit7001');
     });
 
+    test('S4: skor dan salt tidak ikut terkirim sebelum kickoff', () {
+      final j = predictionCommitToJson(prediction(7001, 2, 1));
+      expect(j.containsKey('salt'), isFalse);
+      expect(j.containsKey('homeScore'), isFalse);
+      expect(j.containsKey('awayScore'), isFalse);
+      // Teks gabungan tidak boleh memuat jejak salt.
+      expect(j.values.join('|').contains('salt7001'), isFalse);
+    });
+
+    test('S4: bentuk penuh dipakai setelah blok result ditulis', () {
+      final j = revealedPredictionToJson(prediction(7001, 2, 1));
+      expect(j['salt'], 'salt7001');
+      expect(j['homeScore'], 2);
+      expect(j['awayScore'], 1);
+    });
+
     test('round trip json tidak mengubah data', () {
-      final kembali = predictionFromJson(predictionToJson(prediction(42, 0, 3)));
+      final kembali =
+          predictionFromJson(revealedPredictionToJson(prediction(42, 0, 3)));
       expect(kembali.matchId, 42);
       expect(kembali.homeScore, 0);
       expect(kembali.awayScore, 3);
       expect(kembali.salt, 'salt42');
+    });
+
+    test('R2: item tanpa salt ditolak, bukan dipaksa jadi data salah', () {
+      expect(
+        () => Prediction.fromJson({'matchId': 1, 'commit': 'abc'}),
+        throwsFormatException,
+      );
+    });
+
+    test('R2: createdAt bertahan saat round trip', () {
+      final asli =
+          prediction(42, 1, 1, createdAt: DateTime.utc(2026, 8, 15, 14));
+      final kembali = Prediction.fromJson(revealedPredictionToJson(asli));
+      expect(kembali.createdAt, asli.createdAt);
+    });
+  });
+
+  group('S4: bentuk payload dipilih dari rantai', () {
+    Map<String, dynamic> resultBlock(int matchId) => {
+          'index': 2,
+          'type': Prediction.blockTypeResult,
+          'data': {'match': matchId, 'salt': 'x', 'points': 3},
+        };
+
+    test('tanpa blok result hanya commit yang dikirim', () {
+      final out = predictionsToSync([
+        prediction(7001, 2, 1)
+      ], const [
+        {'index': 0, 'type': 'genesis', 'data': {}},
+      ]);
+      expect(out.single.keys.toSet(), {'matchId', 'commit', 'createdAt'});
+    });
+
+    test('ada blok result untuk laga itu, bentuk penuh yang dikirim', () {
+      final out = predictionsToSync(
+        [prediction(7001, 2, 1)],
+        [resultBlock(7001)],
+      );
+      expect(out.single['salt'], 'salt7001');
+      expect(out.single['homeScore'], 2);
+      expect(out.single['awayScore'], 1);
+    });
+
+    test('blok result laga lain tidak membuka prediksi ini', () {
+      final out = predictionsToSync(
+        [prediction(7001, 2, 1)],
+        [resultBlock(9999)],
+      );
+      expect(out.single.containsKey('salt'), isFalse);
+    });
+
+    test('blok commit saja tidak cukup untuk membuka salt', () {
+      final out = predictionsToSync(
+        [prediction(7001, 2, 1)],
+        [
+          {
+            'index': 1,
+            'type': Prediction.blockTypeCommit,
+            'data': {'match': 7001, 'commit': 'commit7001'},
+          },
+        ],
+      );
+      expect(out.single.containsKey('salt'), isFalse);
+    });
+
+    test('campuran: hanya prediksi yang sudah selesai yang terbuka', () {
+      final out = predictionsToSync(
+        [prediction(7001, 2, 1), prediction(7002, 0, 0)],
+        [resultBlock(7002)],
+      );
+      expect(out[0].containsKey('salt'), isFalse);
+      expect(out[1]['salt'], 'salt7002');
+    });
+
+    test('blok tanpa data tidak membuat crash', () {
+      final out = predictionsToSync(
+        [prediction(7001, 1, 0)],
+        [
+          {'index': 3, 'type': Prediction.blockTypeResult},
+        ],
+      );
+      expect(out.single.containsKey('salt'), isFalse);
     });
   });
 
@@ -83,7 +184,8 @@ void main() {
 
     test('id sama tidak digandakan', () {
       final at = DateTime.utc(2026, 8, 15);
-      final hasil = mergeExpenses([expense('Tiket', at: at)], [expenseToJson(expense('Tiket', at: at))]);
+      final hasil = mergeExpenses([expense('Tiket', at: at)],
+          [expenseToJson(expense('Tiket', at: at))]);
       expect(hasil.length, 1);
     });
 
@@ -104,7 +206,10 @@ void main() {
     });
 
     test('lokal kosong mengambil semua dari server', () {
-      final hasil = mergeExpenses(const [], [expenseToJson(expense('A')), expenseToJson(expense('B', at: DateTime.utc(2026, 8, 16)))]);
+      final hasil = mergeExpenses(const [], [
+        expenseToJson(expense('A')),
+        expenseToJson(expense('B', at: DateTime.utc(2026, 8, 16)))
+      ]);
       expect(hasil.length, 2);
     });
   });
@@ -113,7 +218,10 @@ void main() {
     test('satu prediksi per matchId', () {
       final hasil = mergePredictions(
         [prediction(7001, 2, 1)],
-        [predictionToJson(prediction(7001, 3, 0)), predictionToJson(prediction(7002, 1, 1))],
+        [
+          revealedPredictionToJson(prediction(7001, 3, 0)),
+          revealedPredictionToJson(prediction(7002, 1, 1))
+        ],
       );
       expect(hasil.length, 2);
     });
@@ -121,7 +229,7 @@ void main() {
     test('matchId sama, versi lokal yang dipakai', () {
       final hasil = mergePredictions(
         [prediction(7001, 2, 1)],
-        [predictionToJson(prediction(7001, 3, 0))],
+        [revealedPredictionToJson(prediction(7001, 3, 0))],
       );
       expect(hasil.length, 1);
       expect(hasil.first.homeScore, 2);
@@ -129,7 +237,8 @@ void main() {
     });
 
     test('prediksi dari server masuk tanpa hilang', () {
-      final hasil = mergePredictions(const [], [predictionToJson(prediction(7002, 0, 0))]);
+      final hasil = mergePredictions(
+          const [], [revealedPredictionToJson(prediction(7002, 0, 0))]);
       expect(hasil.length, 1);
       expect(hasil.first.matchId, 7002);
     });
@@ -142,7 +251,7 @@ void main() {
         chain: [
           {'index': 0, 'type': 'genesis'}
         ],
-        predictions: [predictionToJson(prediction(1, 1, 1))],
+        predictions: [revealedPredictionToJson(prediction(1, 1, 1))],
         feedback: {'kesan': 'Bagus'},
       ).toJson();
       expect((p['expenses'] as List).length, 1);

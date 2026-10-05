@@ -36,13 +36,49 @@ Map<String, dynamic> expenseToJson(AwayDayExpense e) => {
       'date': e.date.toIso8601String(),
     };
 
-Map<String, dynamic> predictionToJson(Prediction p) => {
+/// Bentuk yang aman dikirim sebelum kickoff (S4).
+///
+/// Yang boleh keluar hanya `matchId`, `commit`, dan `createdAt`. Skor tebakan
+/// dan `salt` TIDAK boleh ikut: kalau keduanya terkirim sebelum kickoff, orang
+/// lain bisa menghitung sendiri `sha256(matchId|home|away|salt)` dari data
+/// yang sama dan membandingkan dengan `commit`.
+Map<String, dynamic> predictionCommitToJson(Prediction p) => {
+      'matchId': p.matchId,
+      'commit': p.commit,
+      'createdAt': p.createdAt.toUtc().toIso8601String(),
+    };
+
+/// Bentuk lengkap, hanya boleh dipakai SETELAH blok result ditulis ke rantai,
+/// karena saat itu salt dan skor sudah terbuka secara publik.
+Map<String, dynamic> revealedPredictionToJson(Prediction p) => {
       'matchId': p.matchId,
       'homeScore': p.homeScore,
       'awayScore': p.awayScore,
       'salt': p.salt,
       'commit': p.commit,
+      'createdAt': p.createdAt.toUtc().toIso8601String(),
     };
+
+/// true kalau rantai lokal sudah punya blok result untuk laga ini.
+bool hasResultBlock(List<Map<String, dynamic>> chain, int matchId) => chain
+    .where((b) => b['type'] == Prediction.blockTypeResult)
+    .any((b) => b['data'] is Map && (b['data']! as Map)['match'] == matchId);
+
+/// Bentuk payload per prediksi (S4).
+///
+/// Kalau sudah ada blok result untuk laga itu, bentuk yang dikirim lengkap.
+/// Tanpa blok result, hanya commit.
+List<Map<String, dynamic>> predictionsToSync(
+  List<Prediction> predictions,
+  List<Map<String, dynamic>> chain,
+) =>
+    [
+      for (final p in predictions)
+        if (hasResultBlock(chain, p.matchId))
+          revealedPredictionToJson(p)
+        else
+          predictionCommitToJson(p),
+    ];
 
 AwayDayExpense expenseFromJson(Map<String, dynamic> j) => AwayDayExpense(
       title: (j['title'] ?? '').toString(),
@@ -89,13 +125,24 @@ List<AwayDayExpense> mergeExpenses(
 }
 
 /// Sama seperti [mergeExpenses], satu prediksi per matchId.
+///
+/// Entri server yang belum punya `salt` (hanya commit, lihat
+/// `predictionCommitToJson`) diabaikan: tanpa salt prediksi itu tidak akan
+/// pernah bisa direveal, jadi mengadopsinya hanya menambah data yang tidak
+/// bisa dipakai. Prediksi lokal selalu menang untuk matchId yang sama.
 List<Prediction> mergePredictions(
   List<Prediction> local,
   List<Map<String, dynamic>> remote,
 ) {
-  final byMatch = <int, Prediction>{
-    for (final r in remote) predictionFromJson(r).matchId: predictionFromJson(r),
-  };
+  final byMatch = <int, Prediction>{};
+  for (final r in remote) {
+    try {
+      final p = Prediction.fromJson(r);
+      byMatch[p.matchId] = p;
+    } catch (_) {
+      continue; // commit-only atau rusak: lewati
+    }
+  }
   final out = <Prediction>[...byMatch.values];
   for (final l in local) {
     final i = out.indexWhere((p) => p.matchId == l.matchId);

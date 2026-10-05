@@ -40,14 +40,16 @@ CREATE TABLE IF NOT EXISTS chain_blocks (
   PRIMARY KEY (user_id, idx)
 );
 
--- Prediksi skor: hanya commit yang boleh naik ke server.
--- Salt TIDAK ikut dikirim, karena itu rahasianya sampai laga selesai.
+-- Prediksi skor: sebelum kickoff HANYA commit yang boleh naik ke server.
+-- Salt dan skor tebakan baru boleh masuk setelah blok result ditulis, jadi
+-- kolomnya nullable. Kalau tidak nullable, data yang belum ter-reveal
+-- dipaksa jadi 0/"", artinya rahasia bocor sebelum waktunya.
 CREATE TABLE IF NOT EXISTS predictions (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   match_id   INTEGER NOT NULL,
-  home_score INTEGER NOT NULL,
-  away_score INTEGER NOT NULL,
-  salt       TEXT    NOT NULL,
+  home_score INTEGER,
+  away_score INTEGER,
+  salt       TEXT,
   -- "commit" adalah reserved word SQL, jadi kolomnya commit_hash.
   commit_hash TEXT   NOT NULL,
   created_at TEXT    NOT NULL,
