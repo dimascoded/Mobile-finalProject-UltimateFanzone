@@ -5,8 +5,10 @@
  *
  * Node 24 + addon native better-sqlite3 bisa assertion failure di
  * environment cleanup hook saat proses ditutup. Karena itu:
- *   1. test tidak memakai runner node:test, tapi dieksekusi sinkron di sini;
- *   2. semua output ditulis dengan fs.writeSync, karena write ke pipe di Node
+ *   1. test tidak memakai runner node:test, tapi dieksekusi di sini sendiri;
+ *   2. test boleh async (`async fn` atau `fn` yang mengembalikan Promise),
+ *      karena bcrypt sudah pindah ke versi async (B3);
+ *   3. semua output ditulis dengan fs.writeSync, karena write ke pipe di Node
  *      itu async dan akan hilang kalau proses sempat abort di akhir.
  */
 
@@ -28,7 +30,7 @@ function test(name, fn) {
   registry.push({ name, fn, group: currentGroup });
 }
 
-function run() {
+async function run() {
   let pass = 0;
   const failures = [];
   let lastGroup = null;
@@ -39,7 +41,7 @@ function run() {
       lastGroup = g;
     }
     try {
-      fn();
+      await fn();
       pass++;
       out(`  ok   ${name}`);
     } catch (e) {

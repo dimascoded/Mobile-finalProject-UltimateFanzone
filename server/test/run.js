@@ -22,14 +22,18 @@ for (const file of files) {
   require(path.join(__dirname, file));
 }
 
-const { pass, failures } = run();
+async function main() {
+  const { pass, failures } = await run();
 
-if (failures.length > 0) {
-  out(`\nserver: ${pass} passed, ${failures.length} failed`);
-  out('\nGagal:');
-  for (const f of failures) out(`  - ${f.name}`);
-  process.exit(1);
+  if (failures.length > 0) {
+    out(`\nserver: ${pass} passed, ${failures.length} failed`);
+    out('\nGagal:');
+    for (const f of failures) out(`  - ${f.name}`);
+    process.exit(1);
+  }
+
+  out(`\nserver: ${pass} passed, 0 failed`);
+  process.exit(0);
 }
 
-out(`\nserver: ${pass} passed, 0 failed`);
-process.exit(0);
+main();
