@@ -19,13 +19,26 @@ class SosScreen extends ConsumerWidget {
               onTriggered: () => ref.read(sosProvider.notifier).trigger(),
             ),
             const SizedBox(height: 12),
-            const Text('Tahan 3 detik untuk mengirim SOS'),
+            const Text('Tahan 3 detik untuk membaca lokasi Anda'),
             const Text('atau goyangkan HP 2x', style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
+            const Text(
+              'Aplikasi ini tidak mengirim pesan. Koordinat hanya ditampilkan '
+              'di perangkat ini. Telepon 999/112 untuk layanan darurat.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 16),
             state.when(
-              data: (m) => Text(m ?? 'Lokasi Anda akan dibagikan sebagai peringatan darurat'),
+              data: (m) => Text(
+                m ?? 'Tekan tombol untuk membaca lokasi Anda',
+                textAlign: TextAlign.center,
+              ),
               loading: () => const CircularProgressIndicator(),
-              error: (e, _) => Text('Gagal mengirim SOS: $e'),
+              error: (e, _) => Text(
+                'Gagal membaca lokasi: ${e.toString().replaceFirst('Exception: ', '')}',
+                textAlign: TextAlign.center,
+              ),
             ),
             const SizedBox(height: 24),
             Card(

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../football/data/models.dart';
+import '../../football/providers/football_providers.dart';
 import '../data/blockchain.dart';
 import '../data/chain_repository.dart';
 import '../data/wallet_repository.dart';
@@ -39,20 +40,53 @@ const stampRadiusMeters = 800.0;
 /// Mode demo: melewati verifikasi GPS (dicatat gps_verified=false di blok).
 final demoModeProvider = StateProvider<bool>((ref) => false);
 
+/// Jarak (meter) dari posisi pengguna ke stadion klub favorit, atau null bila
+/// GPS belum aktif / izin lokasi belum diberikan.
+///
+/// Sengaja TIDAK meminta izin sendiri: pemicunya tetap tombol "Cap stamp"
+/// lewat confirmPermission, supaya rationale tampil sebelum permintaan OS.
+final stampDistanceProvider = FutureProvider.autoDispose<int?>((ref) async {
+  final club = ref.watch(favoriteClubProvider);
+  if (club == null) return null;
+  if (!await Geolocator.isLocationServiceEnabled()) return null;
+  final perm = await Geolocator.checkPermission();
+  if (perm == LocationPermission.denied ||
+      perm == LocationPermission.deniedForever) {
+    return null;
+  }
+  try {
+    final pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 10),
+    );
+    return Geolocator.distanceBetween(
+            pos.latitude, pos.longitude, club.lat, club.lng)
+        .round();
+  } catch (_) {
+    return null;
+  }
+});
+
 class StampNotifier extends StateNotifier<AsyncValue<String?>> {
   StampNotifier(this._ref) : super(const AsyncData(null));
   final Ref _ref;
 
   Future<void> stamp(PlClub club) async {
+    final demo = _ref.read(demoModeProvider);
     state = const AsyncLoading();
     final result = await AsyncValue.guard(() async {
-      final demo = _ref.read(demoModeProvider);
+      // Semua dependensi dibaca SEBELUM await: ref tidak boleh dipakai
+      // setelah provider di-dispose.
       final already = _ref.read(stampsProvider).any(
           (b) => b.data['club'] == club.key && b.data['stadium'] == club.stadium);
       if (already) throw Exception('Stamp ${club.stadium} sudah dimiliki');
 
       var distance = 0;
       if (!demo) {
+        if (!await Geolocator.isLocationServiceEnabled()) {
+          throw Exception(
+              'Lokasi GPS belum aktif. Nyalakan lokasi perangkat lalu coba lagi.');
+        }
         var perm = await Geolocator.checkPermission();
         if (perm == LocationPermission.denied) {
           perm = await Geolocator.requestPermission();
@@ -61,8 +95,13 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
             perm == LocationPermission.deniedForever) {
           throw Exception('Izin lokasi ditolak');
         }
-        final pos = await Geolocator.getCurrentPosition();
-        distance = Geolocator.distanceBetween(pos.latitude, pos.longitude, club.lat, club.lng).round();
+        final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 15),
+        );
+        distance = Geolocator.distanceBetween(
+                pos.latitude, pos.longitude, club.lat, club.lng)
+            .round();
         if (distance > stampRadiusMeters) {
           throw Exception(
               'Anda ${distance}m dari ${club.stadium}. Harus dalam ${stampRadiusMeters.round()}m.');
@@ -79,6 +118,7 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
     });
     if (!mounted) return; // layar sudah ditutup
     state = result;
+    if (!demo) _ref.invalidate(stampDistanceProvider);
   }
 }
 

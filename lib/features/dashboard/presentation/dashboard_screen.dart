@@ -39,8 +39,9 @@ class DashboardScreen extends ConsumerWidget {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
           }
         },
-        error: (e, _) => ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Gagal mengirim SOS: $e'))),
+        error: (e, _) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Gagal membaca lokasi: '
+                '${e.toString().replaceFirst('Exception: ', '')}'))),
       );
     });
 

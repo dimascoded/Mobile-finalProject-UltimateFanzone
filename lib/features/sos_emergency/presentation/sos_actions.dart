@@ -8,13 +8,15 @@ Future<void> showSosConfirm(BuildContext context, WidgetRef ref) async {
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('HP terdeteksi digoyang'),
-      content: const Text('Kirim SOS dan bagikan lokasi Anda?'),
+      content: const Text(
+          'Baca lokasi Anda sekarang? Catatan: lokasi hanya ditampilkan di '
+          'perangkat ini, tidak dikirim ke siapa pun.'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Kirim SOS'),
+          child: const Text('Baca lokasi'),
         ),
       ],
     ),

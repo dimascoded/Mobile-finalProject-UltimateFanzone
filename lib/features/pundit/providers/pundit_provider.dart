@@ -38,10 +38,16 @@ class PunditNotifier extends StateNotifier<AsyncValue<PunditResult?>> {
       final r = await repo.generate(club, standings, last5);
       if (mounted) state = AsyncData(r);
     } catch (e, st) {
-      // Offline / API key kosong / rate limited -> pakai hasil cache terakhir.
+      // Model salah / API key kosong / offline -> pakai hasil cache terakhir,
+      // tapi tetap beri tahu pengguna lewat [PunditState.message].
       final cache = repo.cached(club.key);
       if (!mounted) return;
-      state = cache != null ? AsyncData(cache) : AsyncError(e, st);
+      if (cache != null) {
+        state = AsyncData(cache);
+      } else {
+        state = AsyncError(
+            Exception(e.toString().replaceFirst('Exception: ', '')), st);
+      }
     }
   }
 
