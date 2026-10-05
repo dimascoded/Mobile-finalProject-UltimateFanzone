@@ -5,15 +5,23 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/database/hive_service.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../sync/providers/sync_provider.dart';
 
 /// Indeks tab aktif Bottom Navigation.
 final tabIndexProvider = StateProvider<int>((ref) => 0);
 
-/// Logout: hapus token, reset indeks tab ke 0.
+/// Logout: hapus token, bersihkan data pengguna, reset state yang tersisa.
+///
+/// [AuthNotifier.logout] sudah menghapus isi Hive; invalidate di sini membuang
+/// foto profil dan saran yang masih tertahan di memori notifier (U4).
 final logoutProvider = Provider<Future<void> Function()>((ref) {
   return () async {
     await ref.read(authProvider.notifier).logout();
-    ref.read(tabIndexProvider.notifier).state = 0;
+    ref
+      ..invalidate(profilePhotoProvider)
+      ..invalidate(feedbackProvider)
+      ..invalidate(syncProvider)
+      ..read(tabIndexProvider.notifier).state = 0;
   };
 });
 
@@ -24,11 +32,13 @@ class ProfilePhotoNotifier extends StateNotifier<String?> {
   final _picker = ImagePicker();
 
   Future<void> pick(ImageSource source) async {
-    final x = await _picker.pickImage(source: source, maxWidth: 800, imageQuality: 85);
+    final x = await _picker.pickImage(
+        source: source, maxWidth: 800, imageQuality: 85);
     if (x == null) return;
     // Salin ke folder permanen (file picker berada di cache sementara).
     final dir = await getApplicationDocumentsDirectory();
-    final dest = '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final dest =
+        '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
     await File(x.path).copy(dest);
     final old = state;
     state = dest;
@@ -37,8 +47,9 @@ class ProfilePhotoNotifier extends StateNotifier<String?> {
   }
 }
 
-final profilePhotoProvider = StateNotifierProvider<ProfilePhotoNotifier, String?>(
-    (ref) => ProfilePhotoNotifier());
+final profilePhotoProvider =
+    StateNotifierProvider<ProfilePhotoNotifier, String?>(
+        (ref) => ProfilePhotoNotifier());
 
 // ---------- Saran & Kesan mata kuliah PAM ----------
 class PamFeedback {

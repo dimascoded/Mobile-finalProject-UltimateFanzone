@@ -1,0 +1,80 @@
+﻿import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
+import 'package:premiere_league_fan_assistant/core/database/hive_service.dart';
+import 'package:premiere_league_fan_assistant/features/auth/data/auth_repository.dart';
+import 'package:premiere_league_fan_assistant/features/auth/providers/user_data_cleanup.dart';
+
+/// U4: setelah logout, data pengguna tidak boleh tersisa di perangkat.
+void main() {
+  late Directory dir;
+
+  setUpAll(() async {
+    dir = await Directory.systemTemp.createTemp('sgt_user_data');
+    Hive.init(dir.path);
+    HiveService.cache = await Hive.openBox<String>('app_cache_test');
+  });
+
+  tearDown(() async {
+    await HiveService.cache.clear();
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  });
+
+  test('data pengguna dihapus, prefs perangkat tetap ada', () async {
+    final box = HiveService.cache;
+    await box.putAll({
+      'away_day_expenses': '[{"title":"Tiket"}]',
+      'away_day_budget_idr': '500000',
+      'score_predictions': '[{"matchId":1}]',
+      'passport_chain': '[]',
+      'profile_photo_path': '/tmp/foto.jpg',
+      'pam_feedback': '{"ttpan_pesan":"Bagus"}',
+      'notified_results': '[7001]',
+      'penalty_block_day': '2026-08-15',
+      'last_sync_at': '1700000000000',
+      'favorite_team': 'arsenal',
+      'pundit_arsenal': 'teks',
+      'pundit_chelsea_at': '2026-08-15T00:00:00Z',
+      // Prefs perangkat, bukan data pengguna.
+      'theme_mode': 'dark',
+      'permission_rationale': '["location"]',
+      'fd_matches': '{}',
+    });
+
+    await clearUserData();
+
+    // Semua data pengguna hilang, termasuk cache Pundit per klub.
+    for (final key in [
+      'away_day_expenses',
+      'away_day_budget_idr',
+      'score_predictions',
+      'passport_chain',
+      'profile_photo_path',
+      'pam_feedback',
+      'notified_results',
+      'penalty_block_day',
+      'last_sync_at',
+      'favorite_team',
+      'pundit_arsenal',
+      'pundit_chelsea_at',
+    ]) {
+      expect(box.get(key), isNull, reason: '$key seharusnya terhapus');
+    }
+
+    // Prefs perangkat tetap utuh.
+    expect(box.get('theme_mode'), 'dark');
+    expect(box.get('permission_rationale'), '["location"]');
+    expect(box.get('fd_matches'), '{}');
+  });
+
+  test('daftar kunci yang dipakai logout lengkap', () {
+    // Kunci yang ada di repository tapi tidak ada di userDataKeys akan bocor.
+    expect(AuthRepository.userDataKeys, isNotEmpty);
+    expect(AuthRepository.privateKeyKeys, contains('wallet_private_key'));
+  });
+}

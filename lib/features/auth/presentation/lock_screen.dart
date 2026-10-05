@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
+import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
 import 'login_screen.dart';
 
@@ -28,8 +29,9 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                 MaterialPageRoute(builder: (_) => const DashboardScreen()));
           }
         },
+        // U2: kalimat Indonesia, bukan `PlatformException` mentah.
         error: (e, _) => ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e'))),
+            .showSnackBar(SnackBar(content: Text(describeAuthError(e)))),
       );
     });
     final loading = ref.watch(authProvider).isLoading;
@@ -42,7 +44,8 @@ class _LockScreenState extends ConsumerState<LockScreen> {
           const Text('Aplikasi terkunci'),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: loading ? null : () => ref.read(authProvider.notifier).unlock(),
+            onPressed:
+                loading ? null : () => ref.read(authProvider.notifier).unlock(),
             icon: const Icon(Icons.fingerprint),
             label: const Text('Buka dengan Biometrik'),
           ),

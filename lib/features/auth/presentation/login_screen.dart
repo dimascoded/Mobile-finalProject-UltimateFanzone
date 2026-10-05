@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
+import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -31,8 +33,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 MaterialPageRoute(builder: (_) => const DashboardScreen()));
           }
         },
+        // U2: tampilkan kalimat Indonesia, bukan teks galat mentah.
         error: (e, _) => ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e'))),
+            .showSnackBar(SnackBar(content: Text(describeAuthError(e)))),
       );
     });
 
@@ -61,7 +64,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 decoration: InputDecoration(
                   labelText: 'Password',
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                    icon: Icon(
+                        _obscure ? Icons.visibility : Icons.visibility_off),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
@@ -87,9 +91,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               OutlinedButton.icon(
                 onPressed: loading
                     ? null
-                    : () => ref.read(authProvider.notifier).loginWithBiometric(),
+                    : () =>
+                        ref.read(authProvider.notifier).loginWithBiometric(),
                 icon: const Icon(Icons.fingerprint),
                 label: const Text('Masuk dengan Biometrik'),
+              ),
+              const SizedBox(height: 4),
+              // U1: tanpa ini tidak ada cara membuat akun dari aplikasi.
+              TextButton(
+                onPressed: loading
+                    ? null
+                    : () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        )),
+                child: const Text('Belum punya akun? Daftar'),
               ),
             ]),
           ),
