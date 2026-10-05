@@ -38,8 +38,18 @@ class NotificationService {
         ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 
-  /// Slot id memakai match.id (int) langsung, jadi stabil dan tidak bentrok.
-  static int _slotId(int matchId) => matchId;
+  // ---------- Slot id notifikasi ----------
+  //
+  // Satu laga punya DUA notifikasi (pengingat kickoff + pengingat hasil), jadi
+  // keduanya harus memakai id berbeda agar tidak saling menimpa.
+  // SOS memakai id 0.
+  static const sosId = 0;
+
+  /// Id notifikasi terjadwal untuk pengingat kickoff sebuah laga.
+  static int kickoffId(int matchId) => matchId * 10 + 1;
+
+  /// Id notifikasi terjadwal untuk pengingat hasil akhir sebuah laga.
+  static int resultId(int matchId) => matchId * 10 + 2;
 
   static NotificationDetails _matchDetails() => const NotificationDetails(
         android: AndroidNotificationDetails(
@@ -52,6 +62,46 @@ class NotificationService {
         iOS: DarwinNotificationDetails(),
       );
 
+  /// Jadwalkan pengingat pada [when] (UTC). Mengembalikan false bila
+  /// waktunya sudah lewat.
+  static Future<bool> _scheduleAt(
+    int id,
+    DateTime when,
+    String title,
+    String body,
+  ) async {
+    if (!_tzReady) await init();
+    if (!when.toUtc().isAfter(DateTime.now().toUtc())) return false;
+
+    try {
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(when, tz.local),
+        _matchDetails(),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      return true;
+    } catch (e) {
+      // Android 12+ bisa menolak exact alarm bila izin dicabut pengguna.
+      debugPrint('zonedSchedule exact gagal, fallback inexact: $e');
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(when, tz.local),
+        _matchDetails(),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      return true;
+    }
+  }
+
   /// Jadwalkan pengingat kickoff. [minutesBefore] default 30 menit.
   /// Mengembalikan false bila waktunya sudah lewat.
   static Future<bool> scheduleKickoff({
@@ -60,48 +110,37 @@ class NotificationService {
     required String title,
     required String body,
     int minutesBefore = 30,
-  }) async {
-    if (!_tzReady) await init();
-    final when = kickoffUtc.toUtc().subtract(Duration(minutes: minutesBefore));
-    if (!when.isAfter(DateTime.now().toUtc())) return false;
+  }) =>
+      _scheduleAt(
+          kickoffId(matchId),
+          kickoffUtc.toUtc().subtract(Duration(minutes: minutesBefore)),
+          title,
+          body);
 
-    try {
-      await _plugin.zonedSchedule(
-        _slotId(matchId),
-        title,
-        body,
-        tz.TZDateTime.from(when, tz.local),
-        _matchDetails(),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      );
-      return true;
-    } catch (e) {
-      // Android 12+ bisa menolak exact alarm bila izin dicabut pengguna.
-      debugPrint('zonedSchedule exact gagal, fallback inexact: $e');
-      await _plugin.zonedSchedule(
-        _slotId(matchId),
-        title,
-        body,
-        tz.TZDateTime.from(when, tz.local),
-        _matchDetails(),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      );
-      return true;
-    }
+  /// Jadwalkan notifikasi hasil akhir (dipakai result_notification_provider).
+  static Future<bool> scheduleResult({
+    required int matchId,
+    required DateTime whenUtc,
+    required String title,
+    required String body,
+  }) =>
+      _scheduleAt(resultId(matchId), whenUtc.toUtc(), title, body);
+
+  /// Batalkan kedua notifikasi milik sebuah laga.
+  static Future<void> cancelMatch(int matchId) async {
+    await _plugin.cancel(kickoffId(matchId));
+    await _plugin.cancel(resultId(matchId));
   }
 
-  static Future<void> cancelMatch(int matchId) => _plugin.cancel(_slotId(matchId));
-
-  /// Notifikasi hasil akhir (dipanggil begitu status jadi FINISHED).
+  /// Notifikasi hasil akhir langsung tampil (bukan terjadwal), mis. karena
+  /// perkiraan akhir laga sudah lewat saat aplikasi dibuka.
   static Future<void> showResult({
     required int matchId,
     required String title,
     required String body,
   }) async {
     await _plugin.show(
-      _slotId(matchId),
+      resultId(matchId),
       title,
       body,
       _matchDetails(),
@@ -118,6 +157,6 @@ class NotificationService {
       ),
       iOS: DarwinNotificationDetails(),
     );
-    return _plugin.show(0, title, body, details);
+    return _plugin.show(sosId, title, body, details);
   }
 }

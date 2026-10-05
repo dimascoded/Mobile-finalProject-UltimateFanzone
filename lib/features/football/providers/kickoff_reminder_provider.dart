@@ -4,35 +4,85 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../sos_emergency/data/notification_service.dart';
+import '../data/football_repository.dart';
 import '../data/models.dart';
 import 'football_providers.dart';
 
 /// Berapa menit sebelum kickoff pengingat ditampilkan.
 const kickoffReminderMinutes = 30;
 
+/// Batas jumlah pengingat yang dijadwalkan. iOS hanya menerima 64 notifikasi
+/// terjadwal, jadi kita bertahan jauh di bawah batas itu.
+const maxKickoffReminders = 20;
+
 /// Signature jadwal yang terakhir diproses, supaya tidak menjadwal ulang
 /// event yang sama setiap kali provider dibangun ulang.
 final _lastScheduledProvider = StateProvider<String>((ref) => '');
 
-String _signature(List<FootballMatch> matches, int minutesBefore) {
+/// Laga yang perlu pengingat: hanya yang memuat tim favorit, maksimal
+/// [maxKickoffReminders] laga terdekat. Kosong bila tim favorit belum dipilih.
+List<FootballMatch> reminderTargets(
+  List<FootballMatch> matches,
+  PlClub? favorite,
+) {
+  if (favorite == null) return const <FootballMatch>[];
   final now = DateTime.now().toUtc();
-  final parts = matches
-      .where((m) => !m.isFinished && m.kickoffUtc.isAfter(now))
-      .map((m) => '${m.id}@${m.kickoffUtc.toIso8601String()}');
+  final pool = matches
+      .where((m) => !m.isFinished && m.involves(favorite))
+      .toList()
+    ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
+  return pool
+      .take(maxKickoffReminders)
+      .where((m) => m.kickoffUtc.isAfter(now))
+      .toList();
+}
+
+String _signature(List<FootballMatch> targets, int minutesBefore) {
+  final parts =
+      targets.map((m) => '${m.id}@${m.kickoffUtc.toIso8601String()}');
   return '$minutesBefore|${parts.join('|')}';
 }
 
-/// Dijalankan sekali setelah cache pertandingan termuat.
+/// Dijalankan sekali setelah cache pertandingan termuat, dan setiap kali tim
+/// favorit berubah (N3: jadwal lama dibatalkan lalu dibuat ulang).
 final kickoffReminderSyncProvider = Provider<void>((ref) {
-  ref.listen(matchesProvider, (_, next) {
-    final data = next.valueOrNull?.data;
+  void reschedule(AsyncValue<FootballResult<List<FootballMatch>>> next) {
+    final snapshot = next.valueOrNull;
+    final data = snapshot?.data;
     if (data == null) return;
-    final sig = _signature(data, kickoffReminderMinutes);
+
+    // N4: tanpa FOOTBALL_API_KEY semua data adalah contoh -> jangan jadwalkan.
+    if (snapshot?.source == DataSource.sample) {
+      debugPrint('Data contoh: pengingat kickoff tidak dijadwalkan.');
+      return;
+    }
+
+    final targets = reminderTargets(data, ref.read(favoriteClubProvider));
+    final sig = _signature(targets, kickoffReminderMinutes);
     if (ref.read(_lastScheduledProvider) == sig) return;
     ref.read(_lastScheduledProvider.notifier).state = sig;
-    unawaited(_scheduleAll(data, minutesBefore: kickoffReminderMinutes));
-  }, fireImmediately: true);
+    unawaited(scheduleReminders(targets,
+        minutesBefore: kickoffReminderMinutes));
+  }
+
+  ref.listen(matchesProvider, (_, next) => reschedule(next),
+      fireImmediately: true);
+
+  // Tim favorit diganti -> batalkan semua jadwal lama, lalu susun ulang.
+  ref.listen(favoriteClubProvider, (prev, next) {
+    final data = ref.read(matchesProvider).valueOrNull?.data;
+    ref.read(_lastScheduledProvider.notifier).state = '';
+    unawaited(cancelReminders(data ?? const <FootballMatch>[]));
+    reschedule(ref.read(matchesProvider));
+  });
 });
+
+/// Batalkan pengingat kickoff untuk daftar [matches] yang diberikan.
+Future<void> cancelReminders(List<FootballMatch> matches) async {
+  for (final m in matches) {
+    await NotificationService.cancelMatch(m.id);
+  }
+}
 
 /// Dipanggil tombol "Atur pengingat" di Match Center. Mengembalikan jumlah
 /// pengingat yang berhasil dijadwalkan.
@@ -40,29 +90,37 @@ Future<int> scheduleRemindersForUpcoming(
   WidgetRef ref, {
   int minutesBefore = kickoffReminderMinutes,
 }) async {
-  final data = ref.read(matchesProvider).valueOrNull?.data;
-  if (data == null) return 0;
-  return _scheduleAll(data, minutesBefore: minutesBefore);
+  final snapshot = ref.read(matchesProvider).valueOrNull;
+  if (snapshot == null) return 0;
+  // N4: data contoh tidak pernah dijadwalkan.
+  if (snapshot.source == DataSource.sample) {
+    debugPrint('Data contoh: pengingat kickoff tidak dijadwalkan.');
+    return 0;
+  }
+  final targets = reminderTargets(snapshot.data, ref.read(favoriteClubProvider));
+  return scheduleReminders(targets, minutesBefore: minutesBefore);
 }
 
-Future<int> _scheduleAll(List<FootballMatch> matches, {required int minutesBefore}) async {
-  final now = DateTime.now().toUtc();
-  final upcoming = matches
-      .where((m) => !m.isFinished && m.kickoffUtc.isAfter(now))
-      .toList()
-    ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
-
-  var count = 0;
-  for (final m in upcoming) {
-    final ok = await NotificationService.scheduleKickoff(
+/// Jadwalkan [targets] secara paralel dan mengembalikan jumlah berhasil.
+Future<int> scheduleReminders(
+  List<FootballMatch> targets, {
+  required int minutesBefore,
+}) async {
+  if (targets.isEmpty) {
+    debugPrint('Tidak ada pengingat yang dijadwalkan (tim favorit kosong).');
+    return 0;
+  }
+  final results = await Future.wait(targets.map((m) {
+    return NotificationService.scheduleKickoff(
       matchId: m.id,
       kickoffUtc: m.kickoffUtc,
       title: 'Kickoff ${m.homeShort} vs ${m.awayShort}',
-      body: 'Liga Inggris - mulai dalam $minutesBefore menit',
+      body: 'Mulai dalam $minutesBefore menit',
       minutesBefore: minutesBefore,
     );
-    if (ok) count++;
-  }
-  debugPrint('Pengingat kickoff terjadwal: $count dari ${upcoming.length} laga');
+  }));
+  final count = results.where((ok) => ok).length;
+  debugPrint(
+      'Pengingat kickoff terjadwal: $count dari ${targets.length} laga');
   return count;
 }

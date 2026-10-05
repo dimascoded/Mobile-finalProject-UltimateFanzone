@@ -32,8 +32,8 @@ class _PenaltyScreenState extends ConsumerState<PenaltyScreen> {
         permissionKey: 'sensors',
         icon: Icons.vibration,
         title: 'Butuh sensor HP',
-        message: 'Game ini memakai gyroscope (arah) dan accelerometer (kekuatan). '
-            'Jalankan di HP fisik.',
+        message: 'Game ini memakai accelerometer: kemiringan HP menentukan arah '
+            'dan ayunan menentukan kekuatan tendangan. Jalankan di HP fisik.',
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
@@ -185,13 +185,19 @@ class _Meters extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Arah (gyroscope): ${degrees(state.tiltZ).toStringAsFixed(1)} derajat',
-            style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          'Arah (roll accelerometer): '
+          '${degrees(state.tiltZ).toStringAsFixed(1)} derajat',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         const SizedBox(height: 4),
         LinearProgressIndicator(value: tiltNorm, minHeight: 8),
         const SizedBox(height: 12),
-        Text('Kekuatan (accelerometer): ${state.shake.toStringAsFixed(1)} m/s2',
-            style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          'Kekuatan (puncak accelerometer): '
+          '${state.shake.toStringAsFixed(1)} m/s2',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         const SizedBox(height: 4),
         LinearProgressIndicator(value: power, minHeight: 8),
       ],
@@ -257,14 +263,44 @@ class _Controls extends StatelessWidget {
           const Text('Tahan HP datar dulu sebelum menendang.',
               style: TextStyle(color: Colors.orange)),
         const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: notifier.shoot,
-            icon: const Icon(Icons.sports_soccer),
-            label: Text('Tendang (${state.taken + 1}/${penaltyRules.attempts})'),
+        if (state.isSwinging) ...[
+          Text(
+            'Ayunkan HP sekarang… puncak ${state.shake.toStringAsFixed(1)} m/s2',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        ),
+          const SizedBox(height: 4),
+          const Text(
+              'Tendangan menembak otomatis saat puncak ayunan terdeteksi.',
+              style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: notifier.cancelSwing,
+              icon: const Icon(Icons.close),
+              label: const Text('Batal ayun'),
+            ),
+          ),
+        ] else ...[
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: notifier.arm,
+              icon: const Icon(Icons.sports_soccer),
+              label:
+                  Text('Siap & Ayun (${state.taken + 1}/${penaltyRules.attempts})'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () => notifier.shoot(),
+              icon: const Icon(Icons.flash_on),
+              label: const Text('Tendang manual (tanpa ayun)'),
+            ),
+          ),
+        ],
       ],
     );
   }

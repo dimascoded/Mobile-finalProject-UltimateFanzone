@@ -4,10 +4,24 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
+import '../../../core/database/hive_service.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../data/penalty_rules.dart';
 
 enum Phase { idle, ready, charging, resolved, finished }
+
+/// Jendela deteksi puncak ayunan setelah tombol "Siap" ditekan (P2).
+const swingWindow = Duration(milliseconds: 1500);
+
+/// Jeda sebelum tendangan otomatis ditebak, supaya puncak ayunan sempat
+/// tercatat.
+const peakSettleDelay = Duration(milliseconds: 350);
+
+/// Throttle status sensor agar layar tidak dibangun ulang 50x/detik (P3).
+const sensorThrottle = Duration(milliseconds: 66);
+
+/// Kunci Hive untuk menyimpan hari terakhir blok achievement dicetak (P3).
+const _mintDayKey = 'penalty_block_day';
 
 class PenaltyState {
   const PenaltyState({
@@ -24,10 +38,11 @@ class PenaltyState {
   final Phase phase;
   final List<ShotResult> results;
 
-  /// Kemiringan HP (rad), positif = condong ke kanan.
+  /// Kemiringan HP (rad), positif = condong ke kanan. Diturunkan dari roll
+  /// accelerometer (`atan2(x, z)`), bukan laju putar gyroscope.
   final double tiltZ;
 
-  /// Magnitudo ayunan (m/s^2).
+  /// Puncak ayunan (m/s^2 di atas gravitasi) pada jendela aktif.
   final double shake;
   final ShotResult? last;
   final int score;
@@ -41,7 +56,9 @@ class PenaltyState {
   int get goals => results.where((r) => r.isGoal).length;
   int get taken => results.length;
   int get remaining => penaltyRules.attempts - taken;
-  bool get isFinished => phase == Phase.finished || taken >= penaltyRules.attempts;
+  bool get isFinished =>
+      phase == Phase.finished || taken >= penaltyRules.attempts;
+  bool get isSwinging => phase == Phase.charging;
 }
 
 final penaltyProvider =
@@ -51,61 +68,97 @@ final penaltyProvider =
 
 class PenaltyNotifier extends StateNotifier<PenaltyState> {
   PenaltyNotifier(this._ref) : super(const PenaltyState()) {
-    _gyroSub = gyroscopeEventStream().listen(
-      (e) {
-        if (!mounted) return;
-        state = state.copyWith(tiltZ: e.z, demo: false);
-      },
+    _accelSub = accelerometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 20),
+    ).listen(
+      _onAccel,
       onError: (Object _) {
         if (mounted) state = state.copyWith(demo: true);
       },
       cancelOnError: true,
     );
-    // Magnitudo ayunan: akar jumlah kuadrat komponen accelerometer, dikurangi gravitasi.
-    _accelSub = accelerometerEventStream().listen((e) {
-      if (!mounted) return;
-      final m = sqrt(e.x * e.x + e.y * e.y + e.z * e.z);
-      _peakShake = max(_peakShake * 0.90, m - 9.8);
-      state = state.copyWith(shake: _peakShake);
-    }, onError: (Object _) {}, cancelOnError: true);
+
+    // P1/P3: jangan sandera mode demo pada nilai tilt. Cukup tunggu event
+    // accelerometer pertama; bila tidak pernah datang, sensor memang absen.
+    Future<void>.delayed(const Duration(seconds: 1), () {
+      if (mounted && !_sensorSeen) state = state.copyWith(demo: true);
+    });
   }
 
   final Ref _ref;
   final _rnd = Random();
-  StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription<AccelerometerEvent>? _accelSub;
-  double _peakShake = 0;
 
-  bool _sensorsReady = false;
+  /// True setelah event accelerometer pertama diterima.
+  bool _sensorSeen = false;
 
-  void _ensureSensorsChecked() {
-    if (_sensorsReady) return;
-    _sensorsReady = true;
-    // Beri 1 detik agar sensor terinisialisasi; kalau tidak ada event gyroscope,
-    // gyroscope, aktifkan mode demo.
-    Future<void>.delayed(const Duration(seconds: 1), () {
-      if (mounted && state.tiltZ == 0 && !state.demo) {
-        state = state.copyWith(demo: true);
-      }
-    });
+  /// Puncak ayunan pada jendela aktif (tanpa peluruhan, P2).
+  double _peak = 0;
+
+  Timer? _peakTimer;
+  DateTime _lastEmit = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _onAccel(AccelerometerEvent e) {
+    _sensorSeen = true;
+    if (!mounted) return;
+
+    // Roll: sudut kemiringan kiri-kanan. HP datar -> 0, miring kanan -> positif.
+    final roll = rollFromAccel(e.x, e.z);
+
+    // Magnitudo ayunan: komponen yang berubah cepat, gravitasi (~9.8) dieliminasi.
+    final m = shakeFromAccel(e.x, e.y, e.z);
+    if (state.isSwinging && m > _peak) _peak = m;
+
+    // P3: batasi emisi state ~15 Hz.
+    final now = DateTime.now();
+    if (now.difference(_lastEmit) < sensorThrottle) return;
+    _lastEmit = now;
+    state = state.copyWith(tiltZ: roll, shake: _peak, demo: false);
+
+    // P2: deteksi puncak di dalam jendela ayunan, lalu tendang otomatis.
+    if (state.isSwinging && m > penaltyRules.minShake && _peakTimer == null) {
+      _peakTimer = Timer(peakSettleDelay, () {
+        _peakTimer = null;
+        if (!mounted || !state.isSwinging) return;
+        shoot(manual: false);
+      });
+    }
   }
 
   /// Mulai sesi baru.
   void reset() {
-    _peakShake = 0;
+    _cancelTimers();
+    _peak = 0;
     state = const PenaltyState(phase: Phase.ready);
   }
 
-  /// Siapkan tendangan: reset ayunan, tunggu HP diam.
+  /// Siapkan tendangan: buka jendela ayunan dan tunggu puncak (P2).
   void arm() {
-    _peakShake = 0;
-    state = state.copyWith(phase: Phase.ready, shake: 0, last: null);
+    if (state.isFinished) return;
+    _cancelTimers();
+    _peak = 0;
+    state = state.copyWith(
+      phase: Phase.charging,
+      shake: 0,
+      clearLast: true,
+    );
   }
 
-  /// Tendangkan bola. Memakai sensor, atau nilai acak bila mode demo.
-  Future<void> shoot() async {
-    _ensureSensorsChecked();
+  /// Batalkan ayunan dan kembali ke posisi siap.
+  void cancelSwing() {
+    if (!state.isSwinging) return;
+    _cancelTimers();
+    _peak = 0;
+    state = state.copyWith(phase: Phase.ready, shake: 0, clearLast: true);
+  }
+
+  /// Tendangkan bola. [manual] dipanggil dari tombol cadangan; ayunan otomatis
+  /// memakai puncak yang sudah terdeteksi.
+  Future<void> shoot({bool manual = true}) async {
     if (state.isFinished) return;
+    // Tendangan manual tidak boleh menabrak ayunan yang sedang berjalan.
+    if (state.isSwinging && manual) return;
+    _cancelTimers();
 
     final double tiltZ;
     final double shake;
@@ -113,10 +166,15 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
       final d = demoShot(_rnd);
       tiltZ = d.tiltZ;
       shake = d.shake;
+    } else if (manual && _peak <= penaltyRules.minShake) {
+      // Tombol cadangan tanpa ayunan: pakai kekuatan minimum yang sah.
+      tiltZ = state.tiltZ;
+      shake = penaltyRules.minShake + 0.5;
     } else {
       tiltZ = state.tiltZ;
-      shake = state.shake;
+      shake = _peak;
     }
+    _peak = 0;
 
     final result = penaltyRules.evaluate(
       tiltZ: tiltZ,
@@ -137,11 +195,25 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     if (finished) await _mintAchievement();
   }
 
+  void _cancelTimers() {
+    _peakTimer?.cancel();
+    _peakTimer = null;
+  }
+
   Future<void> _mintAchievement() async {
-    if (state.minted) return;
+    // P3: tidak ada blok achievement dari sesi tanpa gol, dan maksimal satu
+    // blok per hari agar rantai tidak tumbuh karena main berulang.
+    if (state.minted || state.goals <= 0) return;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (HiveService.cache.get(_mintDayKey) == today) {
+      if (mounted) state = state.copyWith(minted: true);
+      return;
+    }
+
     final goals = state.goals;
+    final score = state.score;
     final hash = sessionHash(
-      score: state.score,
+      score: score,
       goals: goals,
       attempts: penaltyRules.attempts,
     );
@@ -151,17 +223,18 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     final owner = await walletFuture;
     await chain.mint('achievement', {
       'game': 'Penalty Shootout',
-      'score': state.score,
+      'score': score,
       'goals': goals,
       'attempts': penaltyRules.attempts,
       'hash': hash,
     }, owner);
+    await HiveService.cache.put(_mintDayKey, today);
     if (mounted) state = state.copyWith(minted: true);
   }
 
   @override
   void dispose() {
-    _gyroSub?.cancel();
+    _cancelTimers();
     _accelSub?.cancel();
     super.dispose();
   }
@@ -174,6 +247,7 @@ extension on PenaltyState {
     double? tiltZ,
     double? shake,
     ShotResult? last,
+    bool clearLast = false,
     int? score,
     bool? demo,
     bool? minted,
@@ -183,7 +257,8 @@ extension on PenaltyState {
         results: results ?? this.results,
         tiltZ: tiltZ ?? this.tiltZ,
         shake: shake ?? this.shake,
-        last: last ?? this.last,
+        // P3: `last` harus bisa dikosongkan; `??` biasa tidak bisa.
+        last: clearLast ? null : (last ?? this.last),
         score: score ?? this.score,
         demo: demo ?? this.demo,
         minted: minted ?? this.minted,

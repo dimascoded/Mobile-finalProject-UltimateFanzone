@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../data/football_repository.dart';
 import '../data/models.dart';
 import '../providers/football_providers.dart';
 import '../providers/kickoff_reminder_provider.dart';
@@ -42,16 +43,27 @@ class MatchCenterScreen extends ConsumerWidget {
 
   Future<void> _setReminders(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final n = await scheduleRemindersForUpcoming(ref);
-    messenger.showSnackBar(
-      SnackBar(
+    final source = ref.read(matchesProvider).valueOrNull?.source;
+    if (source == DataSource.sample) {
+      messenger.showSnackBar(const SnackBar(
         content: Text(
-          n > 0
-              ? '$n pengingat kickoff dijadwalkan (30 menit sebelum main)'
-              : 'Tidak ada laga mendatang untuk dijadwalkan',
-        ),
-      ),
-    );
+            'Pengingat dinonaktifkan: data contoh, bukan jadwal sebenarnya.'),
+      ));
+      return;
+    }
+    final fav = ref.read(favoriteClubProvider);
+    if (fav == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text(
+              'Pilih tim favorit dulu agar pengingat bisa dijadwalkan.')));
+      return;
+    }
+    final n = await scheduleRemindersForUpcoming(ref);
+    final message = n > 0
+        ? '$n pengingat kickoff untuk ${fav.name} dijadwalkan '
+            '(30 menit sebelum main, maks $maxKickoffReminders laga)'
+        : 'Tidak ada laga ${fav.name} mendatang untuk dijadwalkan';
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

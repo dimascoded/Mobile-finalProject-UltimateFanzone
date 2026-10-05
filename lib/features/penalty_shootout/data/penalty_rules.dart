@@ -5,8 +5,13 @@ import '../../../core/utils/crypto_utils.dart';
 /// Mini game Penalty Shootout.
 ///
 /// Sesuai rubrik:
-/// - arah tendangan    = kemiringan HP (gyroscope, sumbu Z)
-/// - kekuatan tendangan = ayunan HP (accelerometer)
+/// - arah tendangan     = kemiringan HP dari roll accelerometer
+///                        (`atan2(x, z)`), bukan `gyroscope.z` yang hanya
+///                        mengukur laju putar.
+/// - kekuatan tendangan = puncak ayunan accelerometer di atas gravitasi
+///
+/// Parameter [tiltZ] pada [PenaltyRules.evaluate] menerima nilai roll tersebut
+/// dalam radian; positif berarti HP condong ke kanan.
 ///
 /// Logika di file ini murni dan tidak menyentuh sensor, jadi bisa diuji.
 /// Sensor hanya dibaca di provider.
@@ -139,5 +144,18 @@ String sessionHash({
 
 /// Apakah HP cukup diam untuk memulai tendangan.
 bool steadyEnough(double tiltZ, {double tolerance = 0.35}) => tiltZ.abs() <= tolerance;
+
+/// Roll accelerometer -> sudut kemiringan kiri-kanan (rad).
+///
+/// HP datar (x = 0) menghasilkan 0; miring ke kanan menghasilkan nilai positif.
+/// Dipakai provider sebagai sumber arah tendangan, dipisah agar bisa diuji.
+double rollFromAccel(double x, double z) => math.atan2(x, z);
+
+/// Magnitudo ayunan dari satu sampel accelerometer: jarak vektor terhadap
+/// gravitasi (~9.81 m/s^2). Nilai mendekati 0 saat HP diam.
+double shakeFromAccel(double x, double y, double z, {double gravity = 9.81}) {
+  final magnitude = math.sqrt(x * x + y * y + z * z);
+  return magnitude - gravity;
+}
 
 double degrees(double radians) => radians * 180 / math.pi;
