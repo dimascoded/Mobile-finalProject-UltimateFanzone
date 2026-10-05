@@ -186,42 +186,42 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
 
 ## Batch 5 — Hardening backend (`server/`) — semua butir (terbukti)
 
-- [ ] **B1 · Secret dev bisa memalsukan token** — P0 · S
+- [x] **B1 · Secret dev bisa memalsukan token** — P0 · S
   - File: `index.js`
   - Perbaikan: selalu `throw` bila `JWT_SECRET` kosong (hapus fallback `'dev-only-secret'`); untuk dev,
     sediakan `.env.example` dan jalankan dengan `JWT_SECRET=...`. Sesuaikan test agar menyetel secret.
 
-- [ ] **B2 · Enumerasi email lewat waktu respons** — P1 · S
+- [x] **B2 · Enumerasi email lewat waktu respons** — P1 · S
   - File: `auth.js`
   - Perbaikan: buat `const DUMMY_HASH = bcrypt.hashSync('dummy', 10)` sekali saat start, bandingkan dengannya saat user
     tidak ada. Hapus hash `'$2a$10$invalid…'` dan perbaiki komentarnya.
   - Selesai bila: selisih waktu login email-ada vs email-tidak-ada < ~10 ms.
 
-- [ ] **B3 · Tanpa pembatasan percobaan; bcrypt memblokir event loop** — P1 · S
+- [x] **B3 · Tanpa pembatasan percobaan; bcrypt memblokir event loop** — P1 · S
   - Perbaikan: `npm i express-rate-limit`, batasi `/auth/login` dan `/auth/register` (mis. 10 per 15 menit per IP);
     pakai `bcrypt.hash/compare` versi async + handler async (`wrap` mendukung Promise).
   - Selesai bila: percobaan ke-11 mendapat 429.
 
-- [ ] **B4 · Blok rantai bisa ditimpa dengan hash palsu** — P0 · M
+- [x] **B4 · Blok rantai bisa ditimpa dengan hash palsu** — P0 · M
   - File: `sync.js`
   - Perbaikan: `ON CONFLICT DO NOTHING` (blok yang sudah ada tidak boleh berubah); sebelum menyimpan, verifikasi tiap
     blok (SHA-256 dengan format yang sama seperti `Block.computeHash`, awalan `000`, `index` berurutan,
     `prevHash` = hash sebelumnya). Tolak dengan 400 bila tidak valid.
   - Ubah test "chain dengan indeks sama ditimpa" menjadi "blok yang sudah ada tidak berubah".
 
-- [ ] **B5 · Salt dan skor prediksi tersimpan sebelum kickoff** — P1 · M
+- [x] **B5 · Salt dan skor prediksi tersimpan sebelum kickoff** — P1 · M
   - File: `schema.sql`, `sync.js`
   - Perbaikan: jadikan `home_score`, `away_score`, `salt` **nullable**; terima hanya `commit` sebelum reveal;
     perbarui komentar skema agar sesuai perilaku sebenarnya. Sesuaikan test "prediksi menyimpan salt dan commit".
 
-- [ ] **B6 · Payload tidak valid → 500; tidak transaksional** — P1 · M
+- [x] **B6 · Payload tidak valid → 500; tidak transaksional** — P1 · M
   - File: `sync.js`
   - Perbaikan: validasi tipe (`Number.isInteger`, `Number.isFinite`, string tidak kosong, batas panjang) dan lempar
     `HttpError(400, …)`; batasi jumlah `expenses`/`predictions` (seperti `MAX_CHAIN`); bungkus `push` dengan
     `BEGIN`/`COMMIT` dan `ROLLBACK` saat galat.
   - Selesai bila: `index: 'abc'` dan `amountGbp: 'abc'` menghasilkan 400 dan tidak ada data tersimpan sebagian.
 
-- [ ] **B7 · Perapian lain** — P2 · S
+- [x] **B7 · Perapian lain** — P2 · S
   - `ORDER BY id` pada pull expense mengurutkan berdasarkan alias; pakai `ORDER BY created_at`.
   - Hapus komentar rusak "idempoten:AUS" di `sync.js`.
   - Selaraskan `package.json` (`engines`, ketergantungan `better-sqlite3` bila memakai `node:sqlite`) dan dokumentasikan
@@ -236,17 +236,17 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
 
 ## Batch 6 — UI/UX
 
-- [ ] **UI1 · Home terlalu rata dan ada kartu ganda** — P1 · M
+- [x] **UI1 · Home terlalu rata dan ada kartu ganda** — P1 · M
   - File: `dashboard/presentation/home_tab.dart`, `fan_summary.dart`, `favorite_team_card.dart`
   - Perbaikan: kelompokkan menu dengan judul bagian (Pertandingan · Seru-seruan · Alat Bantu); gabungkan
     `FanSummary` ke `FavoriteTeamCard` atau hapus duplikasi (tim, laga berikutnya); sisakan ruang bawah untuk tombol SOS.
 
-- [ ] **UI2 · Tab kehilangan state** — P1 · S
+- [x] **UI2 · Tab kehilangan state** — P1 · S
   - File: `dashboard_screen.dart`
   - Perbaikan: ganti `_pages[index]` dengan `IndexedStack` (atau `AutomaticKeepAliveClientMixin`) agar isian
     Saran dan Kesan tidak hilang saat pindah tab.
 
-- [ ] **UI3 · Layar Prediksi Skor** — P1 · M
+- [x] **UI3 · Layar Prediksi Skor** — P1 · M
   - File: `prediction/presentation/prediction_screen.dart`
   - Perbaikan:
     - Default tampilkan laga **tim favorit** (dengan tombol "Semua laga"), tampilkan tanggal + jam WIB di tiap pilihan,
@@ -255,7 +255,7 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
     - "Tebakan tersimpan" tampilkan nama tim, waktu kickoff, status, dan poin setelah settle (riwayat).
     - Ganti teks "Buka salt" menjadi "Cek hasil".
 
-- [ ] **UI4 · Layar Away Day** — P1 · S–M
+- [x] **UI4 · Layar Away Day** — P1 · S–M
   - File: `away_day/presentation/away_day_screen.dart`
   - Perbaikan:
     - Normalisasi desimal: `text.replaceAll(',', '.')` sebelum `double.tryParse` (keyboard berkoma).
@@ -263,20 +263,20 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
     - Saat kurs offline dan input GBP, jangan simpan `amountIdr = 0`: minta Rupiah manual atau tunda simpan.
     - Ubah judul dialog "Anggaran harian" menjadi "Anggaran total" (atau implementasikan benar-benar harian).
 
-- [ ] **UI5 · Kompas Stadion** — P2 · S
+- [x] **UI5 · Kompas Stadion** — P2 · S
   - Perbaikan: default `selectedStadiumIndex` = indeks klub favorit; sinkronkan dropdown bila favorit berubah.
     Hapus provider accelerometer/gyroscope yang tidak dipakai, atau tampilkan datanya (kemiringan) dengan jelas.
 
-- [ ] **UI6 · Layar Pundit AI** — P1 · M
+- [x] **UI6 · Layar Pundit AI** — P1 · M
   - File: `pundit/presentation/pundit_screen.dart`, `pundit_provider.dart`, `pundit_repository.dart`
   - Perbaikan: nonaktifkan tombol saat loading; tampilkan chip "Data tersimpan • <waktu>"; render teks sebagai
     paragraf (minta Gemini membalas teks biasa, atau pakai `flutter_markdown`); pesan galat ramah; masukkan baris klasemen
     klub favorit + lawan berikutnya ke prompt; **jangan** memakai data contoh (tolak dengan pesan jelas); simpan cap waktu cache.
 
-- [ ] **UI7 · Lens mengenali klub** — P2 · M
+- [x] **UI7 · Lens mengenali klub** — P2 · M
   - Perbaikan: setelah OCR, cocokkan teks dengan `PlClub.isTeam`; jika cocok tampilkan tombol "Lihat jadwal <klub>".
 
-- [ ] **UI8 · Loading, kosong, aksesibilitas** — P2 · M
+- [x] **UI8 · Loading, kosong, aksesibilitas** — P2 · M
   - Perbaikan: skeleton sederhana untuk daftar pertandingan dan klasemen; `Semantics`/`tooltip` untuk ikon;
     uji tampilan dengan ukuran font besar dan mode gelap; pindahkan `File(photo).existsSync()` keluar dari `build`.
 

@@ -29,7 +29,30 @@ class Block {
     required int nonce,
   }) =>
       CryptoUtils.sha256Hash(
-          '$index|$timestamp|$type|${jsonEncode(data)}|$owner|$prevHash|$nonce');
+          '$index|$timestamp|$type|${canonicalDataJson(data)}|$owner|$prevHash|$nonce');
+
+  /// Bentuk JSON yang sama di Dart dan di JavaScript.
+  ///
+  /// Server menghitung ulang hash blok (B4) dengan `JSON.stringify` atas data
+  /// yang dia terima. Masalahnya `jsonEncode(1500.0)` di Dart menghasilkan
+  /// `1500.0`, sementara `JSON.parse` + `JSON.stringify` di Node menghasilkan
+  /// `1500`. Blok dengan `distance_m` bulat seperti itu akan dianggap dipalsukan
+  /// padahal isinya sah. Jadi sebelum di-encode, setiap double tanpa bagian
+  /// desimal dinormalkan menjadi int; setelah itu kedua sisi selalu sama.
+  static String canonicalDataJson(Map<String, dynamic> data) =>
+      jsonEncode(_canonicalValue(data));
+
+  static Object? _canonicalValue(Object? value) {
+    if (value is double) {
+      final whole = value.isFinite && value == value.roundToDouble();
+      return whole && value.abs() <= 9007199254740992 ? value.toInt() : value;
+    }
+    if (value is Map) {
+      return value.map((key, v) => MapEntry(key.toString(), _canonicalValue(v)));
+    }
+    if (value is List) return value.map(_canonicalValue).toList();
+    return value;
+  }
 
   Map<String, dynamic> toJson() => {
         'index': index,

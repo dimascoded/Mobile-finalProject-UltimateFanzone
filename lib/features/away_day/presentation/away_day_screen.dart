@@ -9,6 +9,20 @@ import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
 import '../providers/away_day_providers.dart';
 
+/// Parse angka yang diketik pengguna.
+///
+/// Keyboard di Indonesia sering mengirim koma sebagai pemisah desimal
+/// ("45,50"), sedangkan [double.tryParse] hanya menerima titik. Karena itu koma
+/// diganti dulu. String lain (mis. "1.234,56" dari format Accounting) ditolak
+/// dengan pesan yang jelas daripada diam-diam jadi 0.
+double? parseAmount(String raw) {
+  final cleaned = raw.trim().replaceAll(' ', '');
+  if (cleaned.isEmpty) return null;
+  if (cleaned.contains('.')) return double.tryParse(cleaned);
+  if (cleaned.contains(',')) return double.tryParse(cleaned.replaceAll(',', '.'));
+  return double.tryParse(cleaned);
+}
+
 /// Pemisah ribuan tanpa menambah dependensi intl.
 String _group(int v) {
   final s = v.abs().toString();
@@ -314,7 +328,9 @@ Future<void> _editBudget(BuildContext context, WidgetRef ref) async {
   final saved = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Anggaran harian'),
+      // UI4: judulnya "harian" padahal nilainya dipakai sebagai batas total
+      // seluruh pengeluaran yang tercatat.
+      title: const Text('Anggaran total'),
       content: TextField(
         controller: ctl,
         autofocus: true,
@@ -385,14 +401,14 @@ class _AddFormState extends ConsumerState<_AddForm> {
 
   void _syncFromGbp() {
     if (!_useGbp) return;
-    final v = double.tryParse(_gbp.text);
+    final v = parseAmount(_gbp.text);
     final idr = v == null ? null : gbpToIdr(v, widget.rates);
     _idr.text = idr == null ? '' : idr.round().toString();
   }
 
   void _syncFromIdr() {
     if (_useGbp) return;
-    final v = double.tryParse(_idr.text);
+    final v = parseAmount(_idr.text);
     final g = v == null ? null : idrToGbp(v, widget.rates);
     _gbp.text = g == null ? '' : g.toStringAsFixed(2);
   }
@@ -446,10 +462,25 @@ class _AddFormState extends ConsumerState<_AddForm> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'Jumlah (IDR)', prefixText: 'Rp ', border: OutlineInputBorder()),
             ),
+          if (offline) ...[
+            const SizedBox(height: 8),
+            // Tanpa kurs, input GBP tidak boleh disimpan sebagai Rp 0: itu
+            // akan membuat total pengeluaran terlihat jauh lebih murah dan
+            // merusak anggaran. User diminta mengetik Rupiah-nya sendiri.
+            TextField(
+              controller: _idr,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Nilai Rupiah (wajib diisi manual)',
+                prefixText: 'Rp ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             offline
-                ? 'Kurs tidak tersedia. Masukkan nilai Rupiah manual.'
+                ? 'Kurs tidak tersedia. Nilai Rupiah harus diisi manual.'
                 : 'Kurs: 1 GBP = ${_rp(1 / rates[awayDayCurrency]!)}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -486,14 +517,35 @@ class _AddFormState extends ConsumerState<_AddForm> {
     );
   }
 
+  /// Kembalikan pesan galat, atau null kalau input siap disimpan.
+  ///
+  /// UI4: sebelumnya `_submit` langsung `return` diam-diam, jadi user menekan
+  /// Simpan lalu tidak terjadi apa-apa tanpa penjelasan.
+  String? validate({required bool offline}) {
+    if (_title.text.trim().isEmpty) return 'Keterangan belum diisi.';
+    final g = parseAmount(_gbp.text) ?? 0;
+    final i = parseAmount(_idr.text) ?? 0;
+    if (g <= 0 && i <= 0) return 'Jumlah harus lebih besar dari nol.';
+    // Kurs hilang: Rupiah wajib ada, kalau tidak total jadi nol tanpa jejak.
+    if (offline && i <= 0) {
+      return 'Kurs tidak tersedia. Isi nilai Rupiah secara manual.';
+    }
+    return null;
+  }
+
   void _submit() {
-    final g = double.tryParse(_gbp.text) ?? 0;
-    final i = double.tryParse(_idr.text) ?? 0;
-    if (_title.text.trim().isEmpty || (g <= 0 && i <= 0)) return;
+    final offline = ref.read(ratesProvider).valueOrNull == null;
+    final problem = validate(offline: offline);
+    if (problem != null) {
+      ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(problem)));
+      return;
+    }
     ref.read(awayDayProvider.notifier).add(
           title: _title.text.trim(),
-          amountGbp: g,
-          amountIdr: i,
+          amountGbp: parseAmount(_gbp.text) ?? 0,
+          amountIdr: parseAmount(_idr.text) ?? 0,
           category: _cat,
           clubKey: _clubKey,
         );

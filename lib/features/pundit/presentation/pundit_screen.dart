@@ -43,6 +43,28 @@ class PunditScreen extends ConsumerWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (r.warning != null)
+                    Card(
+                      color: scheme.tertiaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.warning_amber_rounded,
+                                size: 20, color: scheme.onTertiaryContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Analisis terbaru gagal dimuat, jadi yang tampil '
+                                'adalah hasil tersimpan. ${r.warning}',
+                                style: TextStyle(color: scheme.onTertiaryContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   if (r.fromCache)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
@@ -59,7 +81,10 @@ class PunditScreen extends ConsumerWidget {
                 ],
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
             error: (e, _) => Card(
               color: scheme.errorContainer,
               child: Padding(

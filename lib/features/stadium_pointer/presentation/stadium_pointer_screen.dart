@@ -69,6 +69,7 @@ class _Picker extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: DropdownButtonFormField<PlClub>(
+            key: ValueKey(target?.key),
             initialValue: target,
             isExpanded: true,
             decoration: const InputDecoration(

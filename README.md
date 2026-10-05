@@ -42,3 +42,30 @@ curl -H "X-Auth-Token: KEY_ANDA" https://api.football-data.org/v4/competitions/P
 - Tanpa key, app memakai **DATA CONTOH** (ada banner merah) — bukan jadwal resmi.
 - Tier gratis: 10 request/menit, skor tertunda. Hasil di-cache 15 menit di Hive; jika gagal, data terakhir dipakai.
 - Jangan commit API key ke repositori publik.
+
+## Server sinkronisasi (opsional)
+
+Backend sinkronisasi hanya dipakai bila aplikasi dijalankan dengan
+`--dart-define=BACKEND_URL=https://...`. Tanpa `BACKEND_URL`, login dan
+sinkronisasi memakai mode lokal (mock).
+
+```bash
+cd server
+npm install
+cp .env.example .env        # isi JWT_SECRET (wajib, B1)
+node --env-file=.env index.js
+# endpoint: http://localhost:3000  (cek http://localhost:3000/health)
+```
+
+- **Wajib Node.js 22.5 atau lebih baru** (`node -v`): driver utama memakai
+  `node:sqlite` bawaan Node. `better-sqlite3` hanya cadangan bila modul itu tidak
+  tersedia.
+- `JWT_SECRET` wajib diisi. Server berhenti saat start kalau kosong, jadi tidak
+  mungkin berjalan dengan kunci yang ditebak.
+- `helmet` dipasang untuk header keamanan; `express-rate-limit` membatasi
+  `/auth/login` dan `/auth/register` (default 10 percobaan / 15 menit / IP).
+- Di produksi, taruh server di belakang reverse proxy yang mengakhiri TLS dan
+  set `TRUST_PROXY_HOPS` sesuai jumlah proxy di depan server.
+- Batasan yang diketahui: blok rantai yang sudah tersimpan tidak bisa diedit
+  (ditolak dengan 400), salt dan skor prediksi hanya diterima bersama-sama
+  sebagai bentuk ter-reveal, dan `POST /sync` dibatasi 5 MB per request.

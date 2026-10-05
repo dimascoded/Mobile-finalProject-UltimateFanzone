@@ -63,16 +63,15 @@ static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
       Center(
         child: GestureDetector(
           onTap: () => _choosePhoto(context, ref),
-          child: Stack(alignment: Alignment.bottomRight, children: [
-            CircleAvatar(
-              radius: 56,
-              backgroundImage: photo != null && File(photo).existsSync()
-                  ? FileImage(File(photo))
-                  : null,
-              child: photo == null ? const Icon(Icons.person, size: 56) : null,
-            ),
-            const CircleAvatar(radius: 16, child: Icon(Icons.edit, size: 16)),
-          ]),
+          child: Semantics(
+            button: true,
+            label: 'Ganti foto profil',
+            child: Stack(alignment: Alignment.bottomRight, children: [
+              // UI8: checks file existence once, not on every build.
+              _ProfileAvatar(path: photo),
+              const CircleAvatar(radius: 16, child: Icon(Icons.edit, size: 16)),
+            ]),
+          ),
         ),
       ),
       const SizedBox(height: 12),
@@ -133,5 +132,51 @@ static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
               'Blok #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
         ),
     ]);
+  }
+}
+
+/// UI8: `File(path).existsSync()` dipanggil di dalam `build()`, jadi setiap
+/// frame membangun ulang (mis. saat provider berubah) menyentuh storage
+/// sinkron. Dicek sekali lewat FutureBuilder; kalau file hilang, avatar
+/// kembali ke ikon orang.
+class _ProfileAvatar extends StatefulWidget {
+  const _ProfileAvatar({this.path});
+
+  final String? path;
+
+  @override
+  State<_ProfileAvatar> createState() => _ProfileAvatarState();
+}
+
+class _ProfileAvatarState extends State<_ProfileAvatar> {
+  Future<bool>? _exists;
+
+  @override
+  void didUpdateWidget(_ProfileAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.path != widget.path) _exists = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final path = widget.path;
+    if (path == null) {
+      return const CircleAvatar(
+        radius: 56,
+        child: Icon(Icons.person, size: 56),
+      );
+    }
+    final exists = _exists ??= File(path).exists();
+    return FutureBuilder<bool>(
+      future: exists,
+      builder: (context, snap) {
+        final ok = snap.data ?? false;
+        return CircleAvatar(
+          radius: 56,
+          backgroundImage: ok ? FileImage(File(path)) : null,
+          child: ok ? null : const Icon(Icons.person, size: 56),
+        );
+      },
+    );
   }
 }

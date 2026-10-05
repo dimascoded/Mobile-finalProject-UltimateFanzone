@@ -5,10 +5,27 @@ import '../../../core/utils/app_config.dart';
 import '../../football/data/models.dart';
 
 class PunditResult {
-  PunditResult(this.text, {this.fromCache = false, this.cachedAt});
+  PunditResult(
+    this.text, {
+    this.fromCache = false,
+    this.cachedAt,
+    this.warning,
+  });
   final String text;
   final bool fromCache;
   final DateTime? cachedAt;
+
+  /// Terisi kalau teks ini bukan hasil request baru, tapi cache lama yang
+  /// dipakai setelah request gagal. UI wajib menampilkannya supaya pengguna
+  /// tidak mengira analisisnya baru saja dibuat.
+  final String? warning;
+
+  PunditResult copyWith({String? warning}) => PunditResult(
+        text,
+        fromCache: fromCache,
+        cachedAt: cachedAt,
+        warning: warning ?? this.warning,
+      );
 }
 
 class PunditRepository {
@@ -35,12 +52,22 @@ class PunditRepository {
       model: AppConfig.geminiModel,
       apiKey: AppConfig.geminiApiKey,
     );
-    final last = last5.map((m) => '${m.homeShort} vs ${m.awayShort} (${m.homeScore}-${m.awayScore}, ${m.status})').join('; ');
+    // UI6: kalau klasemen atau riwayat kosong, prompt tidak boleh berisi
+    // "Klasemen: ." yang membuat model mengarang angka. Bagian yang tidak ada
+    // diganti kalimat eksplisit, dan model diminta menyatakan keterbatasan.
+    final standingsText = standings.isEmpty
+        ? 'Data klasemen belum tersedia.'
+        : 'Klasemen: ${standings.take(6).map((s) => '${s.position}.${s.teamShort} ${s.points}pts').join(', ')}.';
+    final resultsText = last5.isEmpty
+        ? 'Riwayat 5 laga belum tersedia.'
+        : '5 hasil terakhir: ${last5.map((m) => '${m.homeShort} vs ${m.awayShort} (${m.homeScore}-${m.awayScore}, ${m.status})').join('; ')}.';
+
     final prompt = 'Buat analisis singkat untuk penggemar ${club.name}. '
-        'Klasemen top 5 relevan: ${standings.take(6).map((s) => '${s.position}.${s.teamShort} ${s.points}pts').join(', ')}. '
-        '5 hasil terakhir: $last. '
-        'Berikan prediksi realistis (bukan taruhan), kekuatan/lemahnya, dan saran nonton. '
-        'Balas dalam bahasa Indonesia, max 200 kata.';
+        '$standingsText $resultsText '
+        'Jangan mengarang angka, pemain, atau hasil yang tidak ada di data di atas; '
+        'kalau datanya kurang, sebutkan kekurangannya. '
+        'Berikan prediksi realistis (bukan rekomendasi betting), kekuatan/lemahnya, dan saran nonton. '
+        'Balas dalam bahasa Indonesia, max 200 kata, dalam 3 paragraf.';
     final res = await _generate(model, prompt);
     final text = res.text ?? '';
     if (text.isEmpty) throw Exception('Respons AI kosong');

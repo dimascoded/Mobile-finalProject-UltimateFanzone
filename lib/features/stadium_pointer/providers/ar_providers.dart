@@ -1,17 +1,24 @@
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 
-final selectedStadiumIndexProvider = StateProvider.autoDispose<int>((ref) => 0);
+/// null = belum ada pilihan manual, jadi mengikuti klub favorit.
+final selectedStadiumIndexProvider = StateProvider.autoDispose<int?>((ref) => null);
 
 final selectedStadiumProvider = Provider.autoDispose<PlClub?>((ref) {
   final clubs = ref.watch(clubsProvider).valueOrNull;
   if (clubs == null || clubs.isEmpty) return null;
-  final i = ref.watch(selectedStadiumIndexProvider);
-  return clubs[i.clamp(0, clubs.length - 1)];
+  final fav = ref.watch(favoriteClubProvider);
+  // UI5: default-nya stadion tim favorit, bukan klub pertama di daftar JSON.
+  final chosen = ref.watch(selectedStadiumIndexProvider);
+  if (chosen != null) return clubs[chosen.clamp(0, clubs.length - 1)];
+  if (fav != null) {
+    final i = clubs.indexWhere((c) => c.key == fav.key);
+    if (i >= 0) return clubs[i];
+  }
+  return clubs.first;
 });
 
 final positionProvider = StreamProvider.autoDispose<Position>((ref) async* {
@@ -31,8 +38,12 @@ final compassProvider = StreamProvider.autoDispose<double>((ref) {
   return events.where((e) => e.heading != null).map((e) => (e.heading! + 360) % 360);
 });
 
-final accelerometerProvider = StreamProvider.autoDispose<AccelerometerEvent>((ref) => accelerometerEventStream());
-final gyroscopeProvider = StreamProvider.autoDispose<GyroscopeEvent>((ref) => gyroscopeEventStream());
+// Catatan (UI5): accelerometerProvider/gyroscopeProvider yang pernah ada di sini
+// dihapus karena tidak ada layar yang membacanya. Membukanya lewat
+// StreamProvider berarti sensor tetap aktif selama ada yang menonton,
+// memboroskan baterai tanpa manfaat. Data accelerometer yang berguna
+// (ayunan HP untuk penalty) sudah punya provider sendiri di
+// features/penalty_shootout/providers/shake_provider.dart.
 
 class PointerInfo {
   const PointerInfo(this.distanceKm, this.bearing);

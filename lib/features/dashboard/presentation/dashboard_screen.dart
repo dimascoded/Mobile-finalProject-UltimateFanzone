@@ -22,6 +22,13 @@ class DashboardScreen extends ConsumerWidget {
     SizedBox.shrink(), // slot Logout (aksi, bukan halaman)
   ];
 
+  static const _titles = <String>[
+    'Smart Football Fan',
+    'Profil',
+    'Saran & Kesan',
+    '',
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(tabIndexProvider);
@@ -47,7 +54,7 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Smart Football Fan'),
+        title: Text(_titles[index]),
         actions: [
           IconButton(
             tooltip: isDark ? 'Mode terang' : 'Mode gelap',
@@ -60,7 +67,12 @@ class DashboardScreen extends ConsumerWidget {
       ),
       body: Column(children: [
         const OfflineBanner(),
-        Expanded(child: _pages[index]),
+        // UI2: IndexedStack menyimpan semua tab di tree yang sama. Dengan
+        // `_pages[index]` saja, pindah tab membuang state sehingga isian Saran
+        // dan Kesan yang diketik hilang begitu user berpindah tab.
+        Expanded(
+          child: IndexedStack(index: index, children: _pages),
+        ),
       ]),
       floatingActionButton: SosHoldButton(
         size: 64,
