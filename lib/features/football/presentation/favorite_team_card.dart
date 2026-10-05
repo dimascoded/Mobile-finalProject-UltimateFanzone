@@ -22,7 +22,8 @@ class FavoriteTeamCard extends ConsumerWidget {
         child: ListTile(
           leading: const Icon(Icons.sports_soccer, size: 36),
           title: const Text('Pilih tim favorit'),
-          subtitle: const Text('Jadwal, pengingat, dan fitur lain menyesuaikan timmu'),
+          subtitle: const Text(
+              'Jadwal, pengingat, dan fitur lain menyesuaikan timmu'),
           trailing: FilledButton(onPressed: pick, child: const Text('Pilih')),
         ),
       );
@@ -40,15 +41,17 @@ class FavoriteTeamCard extends ConsumerWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(club.name,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(color: fg, fontWeight: FontWeight.bold)),
-                Text('${club.stadium} • ${club.city}',
-                    style: TextStyle(color: fg.withAlpha(217))),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(club.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(color: fg, fontWeight: FontWeight.bold)),
+                    Text('${club.stadium} • ${club.city}',
+                        style: TextStyle(color: fg.withAlpha(217))),
+                  ]),
             ),
             IconButton(onPressed: pick, icon: Icon(Icons.edit, color: fg)),
           ]),
@@ -56,41 +59,49 @@ class FavoriteTeamCard extends ConsumerWidget {
           next.when(
             data: (m) {
               if (m == null) {
-                return Text('Tidak ada laga mendatang.', style: TextStyle(color: fg));
+                return Text('Tidak ada laga mendatang.',
+                    style: TextStyle(color: fg));
               }
               final home = club.isTeam(m.homeName, m.homeTla);
               final opponent = home ? m.awayShort : m.homeShort;
               final remaining = m.kickoffUtc.difference(now.toUtc());
-              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Laga berikutnya (${home ? 'kandang' : 'tandang'})',
-                    style: TextStyle(color: fg.withAlpha(217), fontSize: 12)),
-                Text('vs $opponent',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: fg, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                KickoffTimes(utc: m.kickoffUtc, light: fg == Colors.white),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Icon(Icons.timer, size: 18, color: fg),
-                  const SizedBox(width: 6),
-                  Text(TimeUtils.formatCountdown(remaining),
-                      style: TextStyle(
-                          color: fg, fontWeight: FontWeight.bold, fontSize: 16)),
-                  if (isDiniHari(m.kickoffUtc)) ...[
-                    const SizedBox(width: 12),
-                    const Chip(
-                      visualDensity: VisualDensity.compact,
-                      avatar: Icon(Icons.nightlight, size: 14),
-                      label: Text("Dini hari", style: TextStyle(fontSize: 11)),
-                    ),
-                  ],
-                ]),
-              ]);
+              return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Laga berikutnya (${home ? 'kandang' : 'tandang'})',
+                        style:
+                            TextStyle(color: fg.withAlpha(217), fontSize: 12)),
+                    Text('vs $opponent',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(color: fg, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    KickoffTimes(utc: m.kickoffUtc, light: fg == Colors.white),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Icon(Icons.timer, size: 18, color: fg),
+                      const SizedBox(width: 6),
+                      Text(TimeUtils.formatCountdown(remaining),
+                          style: TextStyle(
+                              color: fg,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                      if (isDiniHari(m.kickoffUtc)) ...[
+                        const SizedBox(width: 12),
+                        const Chip(
+                          visualDensity: VisualDensity.compact,
+                          avatar: Icon(Icons.nightlight, size: 14),
+                          label:
+                              Text("Dini hari", style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ]),
+                  ]);
             },
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('Gagal memuat jadwal: $e', style: TextStyle(color: fg)),
+            error: (e, _) =>
+                Text('Gagal memuat jadwal: $e', style: TextStyle(color: fg)),
           ),
         ]),
       ),

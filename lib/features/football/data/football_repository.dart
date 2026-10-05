@@ -16,7 +16,8 @@ class FootballResult<T> {
   final DataSource source;
   final DateTime? fetchedAt;
 
-  FootballResult<R> map<R>(R Function(T) f) => FootballResult(f(data), source, fetchedAt);
+  FootballResult<R> map<R>(R Function(T) f) =>
+      FootballResult(f(data), source, fetchedAt);
 }
 
 /// Klien football-data.org (tier gratis: 10 req/menit, skor tertunda).
@@ -43,7 +44,8 @@ class FootballRepository {
         key: 'fd_standings',
         path: '/competitions/PL/standings',
         parse: (b) {
-          final all = ((b['standings'] as List?) ?? const []).whereType<Map>().toList();
+          final all =
+              ((b['standings'] as List?) ?? const []).whereType<Map>().toList();
           Map? total;
           for (final s in all) {
             if (s['type'] == 'TOTAL') {
@@ -87,8 +89,10 @@ class FootballRepository {
   }) async {
     final raw = HiveService.cache.get(key);
     final atMs = int.tryParse(HiveService.cache.get('${key}_at') ?? '');
-    final fetchedAt = atMs == null ? null : DateTime.fromMillisecondsSinceEpoch(atMs);
-    final fresh = fetchedAt != null && DateTime.now().difference(fetchedAt) < _ttl;
+    final fetchedAt =
+        atMs == null ? null : DateTime.fromMillisecondsSinceEpoch(atMs);
+    final fresh =
+        fetchedAt != null && DateTime.now().difference(fetchedAt) < _ttl;
 
     FootballResult<T>? fromCache() => raw == null
         ? null
@@ -116,19 +120,25 @@ class FootballRepository {
       final body = Map<String, dynamic>.from(res.data as Map);
       final now = DateTime.now();
       await HiveService.cache.put(key, jsonEncode(body));
-      await HiveService.cache.put('${key}_at', now.millisecondsSinceEpoch.toString());
+      await HiveService.cache
+          .put('${key}_at', now.millisecondsSinceEpoch.toString());
       return FootballResult(parse(body), DataSource.live, now);
     } on DioException catch (e) {
       final stale = fromCache();
-      if (stale != null) return stale; // offline / limit: tampilkan data terakhir
+      if (stale != null) {
+        return stale; // offline / limit: tampilkan data terakhir
+      }
       final code = e.response?.statusCode;
       if (code == 429) {
-        throw Exception('Batas permintaan API (10/menit) tercapai. Coba lagi sebentar.');
+        throw Exception(
+            'Batas permintaan API (10/menit) tercapai. Coba lagi sebentar.');
       }
       if (code == 401 || code == 403) {
-        throw Exception('API key ditolak atau kompetisi tidak tersedia di tier gratis.');
+        throw Exception(
+            'API key ditolak atau kompetisi tidak tersedia di tier gratis.');
       }
-      throw Exception('Gagal memuat data pertandingan. Periksa koneksi internet.');
+      throw Exception(
+          'Gagal memuat data pertandingan. Periksa koneksi internet.');
     }
   }
 }

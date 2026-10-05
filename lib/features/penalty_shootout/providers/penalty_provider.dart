@@ -221,13 +221,16 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     final walletFuture = _ref.read(walletAddressProvider.future);
     final chain = _ref.read(chainProvider.notifier);
     final owner = await walletFuture;
-    await chain.mint('achievement', {
-      'game': 'Penalty Shootout',
-      'score': score,
-      'goals': goals,
-      'attempts': penaltyRules.attempts,
-      'hash': hash,
-    }, owner);
+    await chain.mint(
+        'achievement',
+        {
+          'game': 'Penalty Shootout',
+          'score': score,
+          'goals': goals,
+          'attempts': penaltyRules.attempts,
+          'hash': hash,
+        },
+        owner);
     await HiveService.cache.put(_mintDayKey, today);
     if (mounted) state = state.copyWith(minted: true);
   }

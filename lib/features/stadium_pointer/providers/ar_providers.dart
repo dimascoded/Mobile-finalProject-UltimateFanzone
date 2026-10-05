@@ -5,7 +5,8 @@ import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 
 /// null = belum ada pilihan manual, jadi mengikuti klub favorit.
-final selectedStadiumIndexProvider = StateProvider.autoDispose<int?>((ref) => null);
+final selectedStadiumIndexProvider =
+    StateProvider.autoDispose<int?>((ref) => null);
 
 final selectedStadiumProvider = Provider.autoDispose<PlClub?>((ref) {
   final clubs = ref.watch(clubsProvider).valueOrNull;
@@ -23,19 +24,27 @@ final selectedStadiumProvider = Provider.autoDispose<PlClub?>((ref) {
 
 final positionProvider = StreamProvider.autoDispose<Position>((ref) async* {
   var perm = await Geolocator.checkPermission();
-  if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
-  if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+  if (perm == LocationPermission.denied) {
+    perm = await Geolocator.requestPermission();
+  }
+  if (perm == LocationPermission.denied ||
+      perm == LocationPermission.deniedForever) {
     throw Exception('Izin lokasi ditolak');
   }
   yield* Geolocator.getPositionStream(
-    locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 2),
+    locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high, distanceFilter: 2),
   );
 });
 
 final compassProvider = StreamProvider.autoDispose<double>((ref) {
   final events = FlutterCompass.events;
-  if (events == null) return Stream.error(Exception('Sensor kompas tidak tersedia'));
-  return events.where((e) => e.heading != null).map((e) => (e.heading! + 360) % 360);
+  if (events == null) {
+    return Stream.error(Exception('Sensor kompas tidak tersedia'));
+  }
+  return events
+      .where((e) => e.heading != null)
+      .map((e) => (e.heading! + 360) % 360);
 });
 
 // Catatan (UI5): accelerometerProvider/gyroscopeProvider yang pernah ada di sini
@@ -51,7 +60,8 @@ class PointerInfo {
 }
 
 PointerInfo computePointer(Position p, PlClub c) {
-  final d = Geolocator.distanceBetween(p.latitude, p.longitude, c.lat, c.lng) / 1000;
+  final d =
+      Geolocator.distanceBetween(p.latitude, p.longitude, c.lat, c.lng) / 1000;
   final b = Geolocator.bearingBetween(p.latitude, p.longitude, c.lat, c.lng);
   return PointerInfo(d, (b + 360) % 360);
 }

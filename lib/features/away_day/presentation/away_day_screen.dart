@@ -19,7 +19,9 @@ double? parseAmount(String raw) {
   final cleaned = raw.trim().replaceAll(' ', '');
   if (cleaned.isEmpty) return null;
   if (cleaned.contains('.')) return double.tryParse(cleaned);
-  if (cleaned.contains(',')) return double.tryParse(cleaned.replaceAll(',', '.'));
+  if (cleaned.contains(',')) {
+    return double.tryParse(cleaned.replaceAll(',', '.'));
+  }
   return double.tryParse(cleaned);
 }
 
@@ -104,7 +106,8 @@ class _Summary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final pct = budget > 0 ? (totals.idr / budget * 100).clamp(0.0, 100.0) : 0.0;
+    final pct =
+        budget > 0 ? (totals.idr / budget * 100).clamp(0.0, 100.0) : 0.0;
     final over = budget > 0 && totals.idr > budget;
 
     return Card(
@@ -113,7 +116,8 @@ class _Summary extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Total pengeluaran', style: Theme.of(context).textTheme.labelMedium),
+            Text('Total pengeluaran',
+                style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 4),
             Text(
               _rp(totals.idr),
@@ -121,7 +125,8 @@ class _Summary extends ConsumerWidget {
                     color: over ? scheme.error : scheme.primary,
                   ),
             ),
-            Text(_gbp(totals.gbp), style: Theme.of(context).textTheme.bodyMedium),
+            Text(_gbp(totals.gbp),
+                style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 12),
             if (budget > 0) ...[
               LinearProgressIndicator(
@@ -174,12 +179,14 @@ class _WorldClock extends StatelessWidget {
               children: [
                 const Icon(Icons.public, size: 18),
                 const SizedBox(width: 8),
-                Text('Jam dunia', style: Theme.of(context).textTheme.labelLarge),
+                Text('Jam dunia',
+                    style: Theme.of(context).textTheme.labelLarge),
               ],
             ),
             const SizedBox(height: 12),
             clock.when(
-              loading: () => const SizedBox(height: 40, child: LinearProgressIndicator()),
+              loading: () =>
+                  const SizedBox(height: 40, child: LinearProgressIndicator()),
               error: (e, _) => Text('Gagal: $e'),
               data: (m) => Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -187,7 +194,8 @@ class _WorldClock extends StatelessWidget {
                   for (final e in m.entries)
                     Column(
                       children: [
-                        Text(e.key, style: Theme.of(context).textTheme.labelSmall),
+                        Text(e.key,
+                            style: Theme.of(context).textTheme.labelSmall),
                         const SizedBox(height: 2),
                         Text(
                           TimeUtils.formatHm(e.value),
@@ -233,8 +241,9 @@ class _Filters extends ConsumerWidget {
               FilterChip(
                 label: const Text('Semua'),
                 selected: cat == null,
-                onSelected: (_) =>
-                    ref.read(awayDayCategoryFilterProvider.notifier).state = null,
+                onSelected: (_) => ref
+                    .read(awayDayCategoryFilterProvider.notifier)
+                    .state = null,
               ),
               const SizedBox(width: 8),
               if (hasFav) ...[
@@ -273,7 +282,11 @@ class _Tile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final club = ref.watch(clubsProvider).valueOrNull?.where((c) => c.key == expense.clubKey).firstOrNull;
+    final club = ref
+        .watch(clubsProvider)
+        .valueOrNull
+        ?.where((c) => c.key == expense.clubKey)
+        .firstOrNull;
 
     return Dismissible(
       key: ValueKey(expense.id),
@@ -292,15 +305,16 @@ class _Tile extends ConsumerWidget {
         margin: const EdgeInsets.only(bottom: 8),
         child: ListTile(
           leading: CircleAvatar(
-            backgroundColor:
-                club?.colorValue ?? Theme.of(context).colorScheme.surfaceContainerHighest,
+            backgroundColor: club?.colorValue ??
+                Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Icon(
               _catIcon[expense.category],
               size: 20,
               color: club == null ? null : Colors.white,
             ),
           ),
-          title: Text(expense.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title:
+              Text(expense.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             [
               _catLabel[expense.category],
@@ -312,8 +326,10 @@ class _Tile extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(_rp(expense.amountIdr), style: Theme.of(context).textTheme.titleSmall),
-              Text(_gbp(expense.amountGbp), style: Theme.of(context).textTheme.bodySmall),
+              Text(_rp(expense.amountIdr),
+                  style: Theme.of(context).textTheme.titleSmall),
+              Text(_gbp(expense.amountGbp),
+                  style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ),
@@ -324,7 +340,8 @@ class _Tile extends ConsumerWidget {
 
 Future<void> _editBudget(BuildContext context, WidgetRef ref) async {
   final current = ref.read(awayDayBudgetProvider);
-  final ctl = TextEditingController(text: current > 0 ? current.round().toString() : '');
+  final ctl = TextEditingController(
+      text: current > 0 ? current.round().toString() : '');
   final saved = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -339,18 +356,24 @@ Future<void> _editBudget(BuildContext context, WidgetRef ref) async {
         decoration: const InputDecoration(prefixText: 'Rp ', hintText: '0'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Simpan')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Simpan')),
       ],
     ),
   );
   if (saved == true) {
-    await ref.read(awayDayBudgetProvider.notifier).set(double.tryParse(ctl.text) ?? 0);
+    await ref
+        .read(awayDayBudgetProvider.notifier)
+        .set(double.tryParse(ctl.text) ?? 0);
   }
 }
 
 Future<void> _showAddSheet(BuildContext context, WidgetRef ref) async {
-  final rates = ref.read(ratesProvider).valueOrNull;
+  final snap = ref.read(ratesProvider).valueOrNull;
   final favKey = ref.read(favoriteKeyProvider);
   final clubs = ref.read(clubsProvider).valueOrNull ?? const [];
   await showModalBottomSheet<void>(
@@ -358,13 +381,14 @@ Future<void> _showAddSheet(BuildContext context, WidgetRef ref) async {
     isScrollControlled: true,
     builder: (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: _AddForm(rates: rates, favKey: favKey, clubs: clubs),
+      child: _AddForm(rates: snap?.rates, favKey: favKey, clubs: clubs),
     ),
   );
 }
 
 class _AddForm extends ConsumerStatefulWidget {
-  const _AddForm({required this.rates, required this.favKey, required this.clubs});
+  const _AddForm(
+      {required this.rates, required this.favKey, required this.clubs});
 
   final Map<String, double>? rates;
   final String? favKey;
@@ -386,7 +410,9 @@ class _AddFormState extends ConsumerState<_AddForm> {
   void initState() {
     super.initState();
     _clubKey = widget.favKey;
-    if (widget.rates == null) _useGbp = false;
+    if ((widget.rates ?? const <String, double>{})[awayDayCurrency] == null) {
+      _useGbp = false;
+    }
     _gbp.addListener(_syncFromGbp);
     _idr.addListener(_syncFromIdr);
   }
@@ -415,8 +441,11 @@ class _AddFormState extends ConsumerState<_AddForm> {
 
   @override
   Widget build(BuildContext context) {
-    final rates = ref.watch(ratesProvider).valueOrNull;
-    final offline = rates == null;
+    // C2: `valueOrNull` null berarti kurs belum pernah berhasil dimuat dan
+    // tidak ada cache; kalau cache ada, `fromCache` true tapi tetap bisa dipakai.
+    final snap = ref.watch(ratesProvider).valueOrNull;
+    final perIdr = snap?.gbpPerIdr;
+    final offline = perIdr == null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -424,18 +453,26 @@ class _AddFormState extends ConsumerState<_AddForm> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Catat pengeluaran', style: Theme.of(context).textTheme.titleLarge),
+          Text('Catat pengeluaran',
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 16),
           TextField(
             controller: _title,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Keterangan', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'Keterangan', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 12),
           SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(value: true, label: Text('GBP'), icon: Icon(Icons.attach_money)),
-              ButtonSegment(value: false, label: Text('IDR'), icon: Icon(Icons.payments_outlined)),
+              ButtonSegment(
+                  value: true,
+                  label: Text('GBP'),
+                  icon: Icon(Icons.attach_money)),
+              ButtonSegment(
+                  value: false,
+                  label: Text('IDR'),
+                  icon: Icon(Icons.payments_outlined)),
             ],
             selected: {_useGbp},
             onSelectionChanged: offline
@@ -453,14 +490,21 @@ class _AddFormState extends ConsumerState<_AddForm> {
           if (_useGbp)
             TextField(
               controller: _gbp,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Jumlah (GBP)', prefixText: '\u00A3', border: OutlineInputBorder()),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Jumlah (GBP)',
+                  prefixText: '\u00A3',
+                  border: OutlineInputBorder()),
             )
           else
             TextField(
               controller: _idr,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Jumlah (IDR)', prefixText: 'Rp ', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  labelText: 'Jumlah (IDR)',
+                  prefixText: 'Rp ',
+                  border: OutlineInputBorder()),
             ),
           if (offline) ...[
             const SizedBox(height: 8),
@@ -469,7 +513,8 @@ class _AddFormState extends ConsumerState<_AddForm> {
             // merusak anggaran. User diminta mengetik Rupiah-nya sendiri.
             TextField(
               controller: _idr,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Nilai Rupiah (wajib diisi manual)',
                 prefixText: 'Rp ',
@@ -478,29 +523,48 @@ class _AddFormState extends ConsumerState<_AddForm> {
             ),
           ],
           const SizedBox(height: 8),
-          Text(
-            offline
-                ? 'Kurs tidak tersedia. Nilai Rupiah harus diisi manual.'
-                : 'Kurs: 1 GBP = ${_rp(1 / rates[awayDayCurrency]!)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (offline)
+            Text(
+              'Kurs tidak tersedia dan belum pernah tersimpan. '
+              'Isi nilai Rupiah secara manual.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else if (snap!.fromCache)
+            // Kurs dari cache: tampilkan waktunya supaya pengguna tahu angka
+            // konversi bukan yang terbaru.
+            Text(
+              'Kurs tersimpan â€¢ ${TimeUtils.formatDate(
+                TimeUtils.wib(snap.fetchedAt ?? DateTime.now()),
+              )} ${TimeUtils.formatHm(TimeUtils.wib(snap.fetchedAt ?? DateTime.now()))} WIB'
+              ' â€¢ 1 GBP = ${_rp(1 / perIdr)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            Text(
+              'Kurs: 1 GBP = ${_rp(1 / perIdr)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           const SizedBox(height: 12),
           DropdownButtonFormField<AwayDayCategory>(
             initialValue: _cat,
-            decoration: const InputDecoration(labelText: 'Kategori', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'Kategori', border: OutlineInputBorder()),
             items: [
               for (final c in AwayDayCategory.values)
                 DropdownMenuItem(value: c, child: Text(_catLabel[c]!)),
             ],
-            onChanged: (v) => setState(() => _cat = v ?? AwayDayCategory.lainnya),
+            onChanged: (v) =>
+                setState(() => _cat = v ?? AwayDayCategory.lainnya),
           ),
           const SizedBox(height: 12),
           if (widget.clubs.isNotEmpty)
             DropdownButtonFormField<String>(
               initialValue: _clubKey,
-              decoration: const InputDecoration(labelText: 'Klub', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  labelText: 'Klub', border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem<String>(value: null, child: Text('Umum')),
+                const DropdownMenuItem<String>(
+                    value: null, child: Text('Umum')),
                 for (final c in widget.clubs)
                   DropdownMenuItem<String>(value: c.key, child: Text(c.name)),
               ],
@@ -534,12 +598,12 @@ class _AddFormState extends ConsumerState<_AddForm> {
   }
 
   void _submit() {
-    final offline = ref.read(ratesProvider).valueOrNull == null;
+    final offline = ref.read(ratesProvider).valueOrNull?.gbpPerIdr == null;
     final problem = validate(offline: offline);
     if (problem != null) {
       ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(problem)));
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(problem)));
       return;
     }
     ref.read(awayDayProvider.notifier).add(

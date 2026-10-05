@@ -34,7 +34,8 @@ class SosNotifier extends StateNotifier<AsyncValue<String?>> {
       // PENTING: aplikasi ini tidak punya backend pengirim. Yang dilakukan
       // hanya menampilkan koordinat di perangkat ini + notifikasi lokal.
       // Jangan menulis "terkirim" karena tidak ada yang dikirim.
-      await NotificationService.show('SOS Darurat - Lokasi Tertangkap', koordinat);
+      await NotificationService.show(
+          'SOS Darurat - Lokasi Tertangkap', koordinat);
       return 'Lokasi Anda: $koordinat\n'
           'Koordinat ini baru ditampilkan di perangkat ini dan BELUM '
           'dikirim ke siapa pun. Gunakan telepon layanan darurat 999/112 '

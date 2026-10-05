@@ -1,5 +1,5 @@
-﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:premiere_league_fan_assistant/features/gamification/data/blockchain.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_football_fan/features/gamification/data/blockchain.dart';
 
 /// B4: server menghitung ulang hash blok dengan `JSON.stringify` atas data yang
 /// diterimanya. Bentuk JSON harus sama di kedua sisi, termasuk untuk angka.
@@ -7,7 +7,8 @@ void main() {
   group('Block.canonicalDataJson', () {
     test('double bulat diserialisasi tanpa .0 seperti di JavaScript', () {
       // Dart jsonEncode(1500.0) = "1500.0", Node JSON.stringify(1500) = "1500".
-      expect(Block.canonicalDataJson({'distance_m': 1500.0}), '{"distance_m":1500}');
+      expect(Block.canonicalDataJson({'distance_m': 1500.0}),
+          '{"distance_m":1500}');
     });
 
     test('double pecahan tetap utuh', () {

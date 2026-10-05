@@ -264,7 +264,8 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
     - Ubah judul dialog "Anggaran harian" menjadi "Anggaran total" (atau implementasikan benar-benar harian).
 
 - [x] **UI5 · Kompas Stadion** — P2 · S
-  - Perbaikan: default `selectedStadiumIndex` = indeks klub favorit; sinkronkan dropdown bila favorit berubah.
+  - Perbaikan: `selectedStadiumIndex` nullable (null = ikut tim favorit), jadi berubahnya klub favorit
+    ikut mengubah stadion yang dituju tanpa menimpa pilihan manual pengguna.
     Hapus provider accelerometer/gyroscope yang tidak dipakai, atau tampilkan datanya (kemiringan) dengan jelas.
 
 - [x] **UI6 · Layar Pundit AI** — P1 · M
@@ -284,34 +285,34 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
 
 ## Batch 7 — Kualitas kode dan proyek
 
-- [ ] **C1 · Penamaan konsisten** — P1 · M
+- [x] **C1 · Penamaan konsisten** — P1 · M
   - Perbaikan: samakan nama folder, `name:` di `pubspec.yaml`, `applicationId`/namespace, label aplikasi, dan README
     (hindari "Premier League" pada nama paket/logo; pertimbangkan nama seperti `kickoffku`).
     Ganti `com.example.*` dengan ID unik; ikuti `flutter pub get` + `flutter clean` setelah rename.
 
-- [ ] **C2 · Penyimpanan** — P1 · M
+- [x] **C2 · Penyimpanan** — P1 · M
   - Perbaikan: tambahkan `schema_version` di Hive + fungsi migrasi; parse per-item toleran di semua `fromJson`
     (`AwayDayExpense`, `Prediction`, `Block`); kunci data per pengguna (lihat U4); cache `ratesProvider` di Hive dengan
     cap waktu agar konversi tetap bisa dipakai offline.
 
-- [ ] **C3 · Kode mati dan janggal** — P2 · S
+- [x] **C3 · Kode mati dan janggal** — P2 · S
   - Hapus `pendingResultNotificationsProvider` (tak terpakai) dan `rates?['GBP'] ?? rates?['GBP']`;
     hapus/ganti `Speed Tapper` bila Penalty menggantikannya; hapus `sessionHash` redundan atau ubah fungsinya;
     rapikan indentasi `_syncSubtitle` (`dart format .`); hapus `TODO` setelah F3.
 
-- [ ] **C4 · Higiene repositori** — P2 · S
+- [x] **C4 · Higiene repositori** — P2 · S
   - Perbaikan: tambahkan `.gitattributes` (`* text=auto eol=lf`) lalu normalisasi `git add --renormalize .`;
     pastikan `.idea/`, `android/.gradle/`, `android/local.properties`, `server/node_modules/`, `server/data/` tidak ikut
     zip/commit; naikkan `flutter_lints` dan aktifkan aturan tambahan
     (`avoid_print`, `use_build_context_synchronously`, `unawaited_futures`, `prefer_const_constructors`).
 
-- [ ] **C5 · Konfigurasi platform** — P1 · S–M
+- [x] **C5 · Konfigurasi platform** — P1 · S–M
   - Android: hilangkan `USE_EXACT_ALARM` (cukup `SCHEDULE_EXACT_ALARM` + minta izin lewat
     `requestExactAlarmsPermission()`), siapkan keystore rilis (jangan `signingConfig = debug`).
   - iOS: di `AppDelegate.swift` set `UNUserNotificationCenter.current().delegate` agar notifikasi tampil saat aplikasi
     terbuka; uji izin lokasi/kamera/notifikasi.
 
-- [ ] **C6 · Konfigurasi dan dokumentasi** — P2 · S
+- [x] **C6 · Konfigurasi dan dokumentasi** — P2 · S
   - Perbarui README dan `GUIDELINE_LANJUTAN.md`: daftar `--dart-define` (`GEMINI_API_KEY`, `GEMINI_MODEL`,
     `FOOTBALL_API_KEY`, `BACKEND_URL`), cara menjalankan server (`JWT_SECRET`, versi Node), dan batasan yang diketahui.
 

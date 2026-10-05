@@ -1,6 +1,6 @@
 {
-    "name": "premiere_league_fan_assistant",
-    "short_name": "premiere_league_fan_assistant",
+    "name": "Smart Football Fan",
+    "short_name": "Smart Football Fan",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

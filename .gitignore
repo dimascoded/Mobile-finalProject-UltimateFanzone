@@ -44,5 +44,21 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# C4: artefak dan konfigurasi lokal Android.
+/android/.gradle/
+/android/build/
+/android/local.properties
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+*.jks
+*.keystore
+key.properties
+
 # Widget Preview related
 .widget_preview/
+
+# C4: dependensi dan data lokal server. `server/.gitignore` juga menolaknya,
+# tapi diulang di sini supaya zipped folder tidak ikut membawa node_modules.
+server/node_modules/
+server/data/

@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:premiere_league_fan_assistant/features/auth/data/auth_repository.dart';
-import 'package:premiere_league_fan_assistant/features/prediction/data/prediction_repository.dart';
-import 'package:premiere_league_fan_assistant/features/sync/data/sync_repository.dart';
+import 'package:smart_football_fan/features/auth/data/auth_repository.dart';
+import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
+import 'package:smart_football_fan/features/sync/data/sync_repository.dart';
 
 /// Adapter yang menjawab dari dalam memory, tanpa jaringan.
 ///

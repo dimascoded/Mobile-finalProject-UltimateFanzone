@@ -2,11 +2,22 @@
 
 Panduan lengkap ada di **GUIDELINE_LANJUTAN.md**.
 
+| Item | Nilai |
+|---|---|
+| Nama paket Dart | `smart_football_fan` |
+| Label aplikasi | Smart Football Fan |
+| `applicationId` / namespace Android | `com.smartfootballfan` |
+| Bundle ID iOS | `com.smartfootballfan` |
+
+> Folder repositori masih bernama `smart_global_traveler` (nama lama tidak diubah
+> supaya riwayat Git tetap terhubung). Nama paket dan ID di dalam proyek sudah
+> memakai `smart_football_fan` / `com.smartfootballfan`.
+
 ## Setup
 ```bash
 cd smart_global_traveler
-flutter create . --org com.example --project-name premiere_league_fan_assistant
-# JANGAN timpa lib/main.dart & pubspec.yaml. Hapus test/widget_test.dart bawaan.
+# Proyek sudah lengkap; perintah di bawah hanya bila perlu meregenerasi
+# platform. JANGAN timpa lib/main.dart & pubspec.yaml.
 flutter pub get
 flutter analyze
 flutter run \
@@ -69,3 +80,22 @@ node --env-file=.env index.js
 - Batasan yang diketahui: blok rantai yang sudah tersimpan tidak bisa diedit
   (ditolak dengan 400), salt dan skor prediksi hanya diterima bersama-sama
   sebagai bentuk ter-reveal, dan `POST /sync` dibatasi 5 MB per request.
+
+## Build rilis Android (C5)
+
+Buat keystore sekali, lalu isi `android/key.properties` (file itu di-ignore Git):
+
+```bash
+keytool -genkey -v -keystore ~/upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+```properties
+storePassword=...
+keyPassword=...
+keyAlias=upload
+storeFile=/path/ke/upload-keystore.jks
+```
+
+Tanpa file itu, `flutter build apk --release` tetap berjalan memakai debug key
+(berguna untuk demo lokal) tetapi APK-nya tidak boleh diunggah ke Play Store.

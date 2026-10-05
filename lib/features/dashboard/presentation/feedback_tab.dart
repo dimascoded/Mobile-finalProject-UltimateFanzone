@@ -36,20 +36,22 @@ class _FeedbackTabState extends ConsumerState<FeedbackTab> {
       TextField(
         controller: _kesan,
         maxLines: 5,
-        decoration: const InputDecoration(
-            labelText: 'Kesan', alignLabelWithHint: true),
+        decoration:
+            const InputDecoration(labelText: 'Kesan', alignLabelWithHint: true),
       ),
       const SizedBox(height: 16),
       TextField(
         controller: _saran,
         maxLines: 5,
-        decoration: const InputDecoration(
-            labelText: 'Saran', alignLabelWithHint: true),
+        decoration:
+            const InputDecoration(labelText: 'Saran', alignLabelWithHint: true),
       ),
       const SizedBox(height: 16),
       FilledButton.icon(
         onPressed: () async {
-          await ref.read(feedbackProvider.notifier).save(_kesan.text, _saran.text);
+          await ref
+              .read(feedbackProvider.notifier)
+              .save(_kesan.text, _saran.text);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context)
               .showSnackBar(const SnackBar(content: Text('Tersimpan')));

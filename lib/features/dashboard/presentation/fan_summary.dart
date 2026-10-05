@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../away_day/providers/away_day_providers.dart';
-import '../../gamification/providers/gamification_providers.dart';
 import '../../football/providers/football_providers.dart';
+import '../../gamification/providers/gamification_providers.dart';
 
-/// Ringkasan angka privatization pengguna: pengeluaran, stamp, dan tebakan.
+/// Ringkasan angka privat pengguna: pengeluaran, stamp, dan tebakan.
 ///
 /// Tim favorit dan laga berikutnya TIDAK diulang di sini karena keduanya sudah
 /// tampil di `FavoriteTeamCard` (UI1: sebelumnya dua kartu menampilkan data
@@ -32,7 +32,9 @@ class FanSummary extends ConsumerWidget {
               icon: Icons.account_balance_wallet_outlined,
               label: 'Away Day',
               value: 'Rp ${totals.idr.round()}',
-              detail: budget > 0 ? 'dari Rp ${budget.round()}' : 'belum ada anggaran',
+              detail: budget > 0
+                  ? 'dari Rp ${budget.round()}'
+                  : 'belum ada anggaran',
             ),
           ),
           Expanded(

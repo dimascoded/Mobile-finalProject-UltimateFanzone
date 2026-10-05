@@ -69,9 +69,8 @@ const resultNotifyAfterMinutes = 15;
 const assumedMatchMinutes = 105;
 
 /// Kapan notifikasi hasil sebuah laga seharusnya dibunyikan (UTC).
-DateTime resultNotifyAt(FootballMatch m) => m.kickoffUtc
-    .toUtc()
-    .add(const Duration(minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
+DateTime resultNotifyAt(FootballMatch m) => m.kickoffUtc.toUtc().add(
+    const Duration(minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
 
 /// Jadwalkan notifikasi hasil untuk satu laga. Mengembalikan jumlah jadwal
 /// yang benar-benar dibuat (0 bila waktunya sudah lewat).
@@ -92,21 +91,8 @@ Future<int> scheduleResultNotification(FootballMatch m) async {
   return ok ? 1 : 0;
 }
 
-/// Daftar laga yang hasil akhirnya selesai tapi belum dinotifikasi.
-final pendingResultNotificationsProvider =
-    Provider<List<FootballMatch>>((ref) {
-  final snapshot = ref.watch(matchesProvider).valueOrNull;
-  final matches = snapshot?.data ?? const <FootballMatch>[];
-  final done = ref.watch(notifiedMatchIdsProvider);
-  final cutoff = DateTime.now().toUtc().subtract(resultNotifyMaxAge);
-  return matches
-      .where((m) =>
-          m.isFinished &&
-          m.hasScore &&
-          !done.contains(m.id) &&
-          m.kickoffUtc.toUtc().isAfter(cutoff))
-      .toList();
-});
+// C3: `pendingResultNotificationsProvider` dihapus. Tidak ada layar yang
+// membacanya; notifikasi hasil ditangani `resultNotifierSyncProvider` di bawah.
 
 /// Dipanggil setiap cache pertandingan berubah, untuk mengnotifikasi hasil baru.
 final resultNotifierSyncProvider = Provider<void>((ref) {
@@ -123,7 +109,7 @@ final resultNotifierSyncProvider = Provider<void>((ref) {
     }
 
     final store = ref.read(notifiedStoreProvider);
-    var done = store.load();
+    final done = store.load();
     final seeded = done.isEmpty;
     var changed = false;
     final scheduled = {...ref.read(_scheduledResultsProvider)};

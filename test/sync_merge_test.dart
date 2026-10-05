@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:premiere_league_fan_assistant/features/away_day/data/away_day_repository.dart';
-import 'package:premiere_league_fan_assistant/features/prediction/data/prediction_repository.dart';
-import 'package:premiere_league_fan_assistant/features/sync/data/sync_models.dart';
+import 'package:smart_football_fan/features/away_day/data/away_day_repository.dart';
+import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
+import 'package:smart_football_fan/features/sync/data/sync_models.dart';
 
 AwayDayExpense expense(String title, {double gbp = 10, DateTime? at}) =>
     AwayDayExpense(

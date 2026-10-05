@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:premiere_league_fan_assistant/features/football/data/models.dart';
-import 'package:premiere_league_fan_assistant/features/football/providers/result_notification_provider.dart';
+import 'package:smart_football_fan/features/football/data/models.dart';
+import 'package:smart_football_fan/features/football/providers/result_notification_provider.dart';
 
 void main() {
   FootballMatch mk({
@@ -99,15 +99,15 @@ void main() {
     test('laga yang sudah lama selesai tidak dijadwalkan ulang', () {
       // kickoff 4 jam lalu -> waktu notifikasi sudah lewat
       final kickoff = DateTime.now().toUtc().subtract(const Duration(hours: 4));
-      final when = kickoff
-          .add(const Duration(minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
+      final when = kickoff.add(const Duration(
+          minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
       expect(when.isAfter(DateTime.now().toUtc()), isFalse);
     });
 
     test('laga yang baru akan main dijadwalkan', () {
       final kickoff = DateTime.now().toUtc().add(const Duration(hours: 2));
-      final when = kickoff
-          .add(const Duration(minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
+      final when = kickoff.add(const Duration(
+          minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
       expect(when.isAfter(DateTime.now().toUtc()), isTrue);
     });
   });

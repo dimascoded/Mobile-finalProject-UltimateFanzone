@@ -10,7 +10,8 @@ final lastResultsProvider = Provider<List<FootballMatch>>((ref) {
   return ref.watch(matchesProvider).maybeWhen(
         data: (r) {
           final done = r.data.where((m) => m.isFinished).toList();
-          final scoped = fav == null ? done : done.where((m) => m.involves(fav)).toList();
+          final scoped =
+              fav == null ? done : done.where((m) => m.involves(fav)).toList();
           return (scoped..sort((a, b) => b.kickoffUtc.compareTo(a.kickoffUtc)));
         },
         orElse: () => const <FootballMatch>[],
@@ -26,10 +27,12 @@ class PunditNotifier extends StateNotifier<AsyncValue<PunditResult?>> {
   Future<void> generate() async {
     final club = _ref.read(favoriteClubProvider);
     if (club == null) {
-      state = AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
+      state =
+          AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
       return;
     }
-    final standings = _ref.read(standingsProvider).valueOrNull?.data ?? const [];
+    final standings =
+        _ref.read(standingsProvider).valueOrNull?.data ?? const [];
     final last5 = _ref.read(lastResultsProvider).take(5).toList();
     final repo = _ref.read(punditRepositoryProvider);
 

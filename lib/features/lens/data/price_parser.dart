@@ -22,7 +22,9 @@ class PriceParser {
         if (digits.length > 7) continue; // kemungkinan nomor telepon/kode
         final v = parse(raw, currency);
         if (v == null || v <= 0) continue;
-        if (seen.add('${line.trim()}|$v')) out.add(DetectedPrice(line.trim(), v));
+        if (seen.add('${line.trim()}|$v')) {
+          out.add(DetectedPrice(line.trim(), v));
+        }
       }
     }
     return out;

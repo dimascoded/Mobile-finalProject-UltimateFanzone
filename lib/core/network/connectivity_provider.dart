@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 Future<bool> _hasInternet() async {
   try {
-    final r = await InternetAddress.lookup('example.com').timeout(const Duration(seconds: 3));
+    final r = await InternetAddress.lookup('example.com')
+        .timeout(const Duration(seconds: 3));
     return r.isNotEmpty && r.first.rawAddress.isNotEmpty;
   } catch (_) {
     return false;

@@ -20,6 +20,7 @@ class LensResult {
     required this.currency,
     required this.prices,
     this.mentionedClubs = const [],
+    this.ratesFromCache = false,
   });
   final String imagePath, text, currency;
   final List<LensPrice> prices;
@@ -28,6 +29,9 @@ class LensResult {
   /// hasil scan tidak pernah dicocokkan ke klub mana pun, jadi pengguna
   /// tidak tahu foto struk/karcis itu milik tim yang mana.
   final List<PlClub> mentionedClubs;
+
+  /// true bila konversi Rupiah memakai kurs dari cache Hive, bukan request baru.
+  final bool ratesFromCache;
 }
 
 /// Cocokkan teks OCR dengan daftar klub lewat [PlClub.isTeam].
@@ -64,10 +68,12 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
     final club = _ref.read(favoriteClubProvider);
     const currency = 'GBP';
     if (club == null) {
-      state = AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
+      state =
+          AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
       return;
     }
-    final x = await _picker.pickImage(source: source, maxWidth: 1600, imageQuality: 90);
+    final x = await _picker.pickImage(
+        source: source, maxWidth: 1600, imageQuality: 90);
     if (x == null) return;
 
     state = const AsyncLoading();
@@ -75,22 +81,26 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
       final text = await _ref.read(lensRepositoryProvider).recognize(x.path);
       final found = PriceParser.extract(text, currency);
 
-      Map<String, double>? rates;
+      // C2: `ratesProvider` sudah mengembalikan cache Hive saat offline,
+      // jadi `null` di sini berarti benar-benar tidak ada kurs sama sekali.
+      RatesSnapshot? snap;
       try {
-        rates = await _ref.read(ratesProvider.future);
+        snap = await _ref.read(ratesProvider.future);
       } catch (_) {
-        rates = null; // offline: tetap tampilkan harga mentah
+        snap = null; // tetap tampilkan harga mentah
       }
-      final rate = rates?[currency];
+      final rate = snap?.gbpPerIdr;
       final clubs = _ref.read(clubsProvider).valueOrNull ?? const <PlClub>[];
       return LensResult(
         imagePath: x.path,
         text: text,
         currency: currency,
         mentionedClubs: detectClubs(text, clubs),
+        ratesFromCache: snap?.fromCache ?? false,
         prices: [
           for (final p in found)
-            LensPrice(p.line, p.amount, rate == null || rate == 0 ? null : p.amount / rate),
+            LensPrice(p.line, p.amount,
+                rate == null || rate == 0 ? null : p.amount / rate),
         ],
       );
     });
@@ -101,5 +111,6 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
   void clear() => state = const AsyncData(null);
 }
 
-final lensProvider = StateNotifierProvider.autoDispose<LensNotifier, AsyncValue<LensResult?>>(
-    (ref) => LensNotifier(ref));
+final lensProvider =
+    StateNotifierProvider.autoDispose<LensNotifier, AsyncValue<LensResult?>>(
+        (ref) => LensNotifier(ref));

@@ -15,7 +15,8 @@ class DataSourceBanner extends StatelessWidget {
     late final Color bg, fg;
     switch (source) {
       case DataSource.sample:
-        text = 'DATA CONTOH - bukan jadwal resmi. Isi FOOTBALL_API_KEY untuk data asli.';
+        text =
+            'DATA CONTOH - bukan jadwal resmi. Isi FOOTBALL_API_KEY untuk data asli.';
         icon = Icons.science;
         bg = scheme.errorContainer;
         fg = scheme.onErrorContainer;

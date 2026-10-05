@@ -44,7 +44,8 @@ class PunditRepository {
       'Perbarui GEMINI_MODEL saat build, contoh: '
       '--dart-define=GEMINI_MODEL=gemini-3.8-flash';
 
-  Future<PunditResult> generate(PlClub club, List<StandingRow> standings, List<FootballMatch> last5) async {
+  Future<PunditResult> generate(PlClub club, List<StandingRow> standings,
+      List<FootballMatch> last5) async {
     if (AppConfig.geminiApiKey.isEmpty) {
       throw Exception('GEMINI_API_KEY belum diset (gunakan --dart-define)');
     }
@@ -55,9 +56,19 @@ class PunditRepository {
     // UI6: kalau klasemen atau riwayat kosong, prompt tidak boleh berisi
     // "Klasemen: ." yang membuat model mengarang angka. Bagian yang tidak ada
     // diganti kalimat eksplisit, dan model diminta menyatakan keterbatasan.
+    String rowText(StandingRow s) => '${s.position}.${s.teamShort} ${s.points}pts';
+    // Baris klub favorit selalu ikut, walau posisinya di luar enam teratas.
+    // Tanpa ini model bisa salah menyebut posisi tim yang jadi dasar analisis.
+    final own = standings.where((s) => s.teamShort == club.tla).toList();
+    final rows = <String>{
+      ...standings.take(6).map(rowText),
+      ...own.map(rowText),
+    }.toList();
     final standingsText = standings.isEmpty
         ? 'Data klasemen belum tersedia.'
-        : 'Klasemen: ${standings.take(6).map((s) => '${s.position}.${s.teamShort} ${s.points}pts').join(', ')}.';
+        : 'Klasemen: ${rows.join(', ')}. '
+            'Posisi ${club.tla}: '
+            '${own.isEmpty ? 'tidak ada di data' : rowText(own.first)}.';
     final resultsText = last5.isEmpty
         ? 'Riwayat 5 laga belum tersedia.'
         : '5 hasil terakhir: ${last5.map((m) => '${m.homeShort} vs ${m.awayShort} (${m.homeScore}-${m.awayScore}, ${m.status})').join('; ')}.';
@@ -72,8 +83,8 @@ class PunditRepository {
     final text = res.text ?? '';
     if (text.isEmpty) throw Exception('Respons AI kosong');
     await HiveService.cache.put(_key(club.key), text);
-    await HiveService.cache.put(
-        '${_key(club.key)}_at', DateTime.now().toUtc().toIso8601String());
+    await HiveService.cache
+        .put('${_key(club.key)}_at', DateTime.now().toUtc().toIso8601String());
     return PunditResult(text);
   }
 
@@ -107,4 +118,5 @@ class PunditRepository {
     await HiveService.cache.deleteAll(keys);
   }
 }
+
 final punditRepositoryProvider = Provider((ref) => PunditRepository());

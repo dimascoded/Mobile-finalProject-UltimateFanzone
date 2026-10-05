@@ -1,0 +1,25 @@
+# Normalisasi akhir baris: repo menyimpan LF, checked-out di Windows memakai CRLF
+# hanya untuk file teks. Tanpa ini, hash file berbeda antar mesin dan diff
+# penuh baris kosong muncul kalau ada editor yang menormalkan sendiri (C4).
+* text=auto eol=lf
+
+# Binary tidak boleh disentuh normalisasi baris akhir.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.jar   binary
+*.keystore binary
+*.jks   binary
+*.pdf   binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+
+# Skrip dan konfigurasi yang memakai CRLF secara sengaja.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf

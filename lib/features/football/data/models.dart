@@ -65,7 +65,8 @@ class FootballMatch {
   final String? homeTla, awayTla;
 
   bool get isFinished => status == 'FINISHED';
-  bool get isOngoing => status == 'IN_PLAY' || status == 'PAUSED' || status == 'LIVE';
+  bool get isOngoing =>
+      status == 'IN_PLAY' || status == 'PAUSED' || status == 'LIVE';
   bool get hasScore => homeScore != null && awayScore != null;
 
   bool involves(PlClub c) =>
@@ -76,8 +77,10 @@ class FootballMatch {
       final home = Map<String, dynamic>.from(j['homeTeam'] as Map);
       final away = Map<String, dynamic>.from(j['awayTeam'] as Map);
       final ft = (j['score'] as Map?)?['fullTime'] as Map?;
-      String nameOf(Map<String, dynamic> t) => '${t['name'] ?? t['shortName'] ?? '?'}';
-      String shortOf(Map<String, dynamic> t) => '${t['shortName'] ?? t['name'] ?? '?'}';
+      String nameOf(Map<String, dynamic> t) =>
+          '${t['name'] ?? t['shortName'] ?? '?'}';
+      String shortOf(Map<String, dynamic> t) =>
+          '${t['shortName'] ?? t['name'] ?? '?'}';
       return FootballMatch(
         id: (j['id'] as num).toInt(),
         kickoffUtc: DateTime.parse(j['utcDate'] as String).toUtc(),

@@ -38,8 +38,7 @@ List<FootballMatch> reminderTargets(
 }
 
 String _signature(List<FootballMatch> targets, int minutesBefore) {
-  final parts =
-      targets.map((m) => '${m.id}@${m.kickoffUtc.toIso8601String()}');
+  final parts = targets.map((m) => '${m.id}@${m.kickoffUtc.toIso8601String()}');
   return '$minutesBefore|${parts.join('|')}';
 }
 
@@ -61,8 +60,8 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
     final sig = _signature(targets, kickoffReminderMinutes);
     if (ref.read(_lastScheduledProvider) == sig) return;
     ref.read(_lastScheduledProvider.notifier).state = sig;
-    unawaited(scheduleReminders(targets,
-        minutesBefore: kickoffReminderMinutes));
+    unawaited(
+        scheduleReminders(targets, minutesBefore: kickoffReminderMinutes));
   }
 
   ref.listen(matchesProvider, (_, next) => reschedule(next),
@@ -97,7 +96,8 @@ Future<int> scheduleRemindersForUpcoming(
     debugPrint('Data contoh: pengingat kickoff tidak dijadwalkan.');
     return 0;
   }
-  final targets = reminderTargets(snapshot.data, ref.read(favoriteClubProvider));
+  final targets =
+      reminderTargets(snapshot.data, ref.read(favoriteClubProvider));
   return scheduleReminders(targets, minutesBefore: minutesBefore);
 }
 
@@ -120,7 +120,6 @@ Future<int> scheduleReminders(
     );
   }));
   final count = results.where((ok) => ok).length;
-  debugPrint(
-      'Pengingat kickoff terjadwal: $count dari ${targets.length} laga');
+  debugPrint('Pengingat kickoff terjadwal: $count dari ${targets.length} laga');
   return count;
 }

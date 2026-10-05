@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../pundit/presentation/pundit_screen.dart';
-import '../../stadium_pointer/presentation/stadium_pointer_screen.dart';
 import '../../away_day/presentation/away_day_screen.dart';
+import '../../football/presentation/favorite_team_card.dart';
+import '../../football/presentation/match_center_screen.dart';
 import '../../gamification/presentation/game_screen.dart';
 import '../../gamification/presentation/passport_screen.dart';
 import '../../lens/presentation/lens_screen.dart';
 import '../../penalty_shootout/presentation/penalty_screen.dart';
 import '../../prediction/presentation/prediction_screen.dart';
+import '../../pundit/presentation/pundit_screen.dart';
 import '../../sos_emergency/presentation/sos_screen.dart';
-import '../../football/presentation/favorite_team_card.dart';
-import '../../football/presentation/match_center_screen.dart';
+import '../../stadium_pointer/presentation/stadium_pointer_screen.dart';
 import 'fan_summary.dart';
 
 /// Satu grup tombol. Dipakai supaya Home tidak terlihat seperti daftar panjang
@@ -26,18 +26,38 @@ class HomeTab extends StatelessWidget {
 
   static final _groups = <_MenuGroup>[
     const _MenuGroup('Pertandingan', [
-      (label: 'Match Center', icon: Icons.sports_soccer, page: MatchCenterScreen()),
-      (label: 'Prediksi Skor', icon: Icons.scoreboard_outlined, page: PredictionScreen()),
-      (label: 'Kompas Stadion', icon: Icons.explore, page: StadiumPointerScreen()),
+      (
+        label: 'Match Center',
+        icon: Icons.sports_soccer,
+        page: MatchCenterScreen()
+      ),
+      (
+        label: 'Prediksi Skor',
+        icon: Icons.scoreboard_outlined,
+        page: PredictionScreen()
+      ),
+      (
+        label: 'Kompas Stadion',
+        icon: Icons.explore,
+        page: StadiumPointerScreen()
+      ),
     ]),
     const _MenuGroup('Seru-seruan', [
       (label: 'Paspor Digital', icon: Icons.approval, page: PassportScreen()),
-      (label: 'Penalty Shootout', icon: Icons.sports_gymnastics, page: PenaltyScreen()),
-      (label: 'Mini Game', icon: Icons.sports_esports, page: GameScreen()),
+      (
+        label: 'Penalty Shootout',
+        icon: Icons.sports_gymnastics,
+        page: PenaltyScreen()
+      ),
+      (label: 'Speed Tapper', icon: Icons.sports_esports, page: GameScreen()),
     ]),
     const _MenuGroup('Alat Bantu', [
       (label: 'Pundit AI', icon: Icons.auto_awesome, page: PunditScreen()),
-      (label: 'Lens (OCR Harga)', icon: Icons.document_scanner, page: LensScreen()),
+      (
+        label: 'Lens (OCR Harga)',
+        icon: Icons.document_scanner,
+        page: LensScreen()
+      ),
       (label: 'Away Day', icon: Icons.currency_exchange, page: AwayDayScreen()),
     ]),
   ];
@@ -92,7 +112,8 @@ class _GroupHeader extends StatelessWidget {
 }
 
 class _MenuTile extends StatelessWidget {
-  const _MenuTile({required this.label, required this.icon, required this.page});
+  const _MenuTile(
+      {required this.label, required this.icon, required this.page});
 
   final String label;
   final IconData icon;
@@ -103,7 +124,8 @@ class _MenuTile extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
+        onTap: () =>
+            Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
         child: Semantics(
           button: true,
           label: label,
@@ -115,7 +137,10 @@ class _MenuTile extends StatelessWidget {
               children: [
                 Icon(icon, size: 32),
                 const SizedBox(height: 8),
-                Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -136,7 +161,8 @@ class SosCard extends StatelessWidget {
       color: Theme.of(context).colorScheme.errorContainer,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SosScreen())),
+        onTap: () => Navigator.push(
+            context, MaterialPageRoute(builder: (_) => const SosScreen())),
         child: Semantics(
           button: true,
           label: 'SOS Darurat',
@@ -144,7 +170,9 @@ class SosCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
-              Icon(Icons.sos, size: 36, color: Theme.of(context).colorScheme.onErrorContainer),
+              Icon(Icons.sos,
+                  size: 36,
+                  color: Theme.of(context).colorScheme.onErrorContainer),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
@@ -155,7 +183,8 @@ class SosCard extends StatelessWidget {
                       ),
                 ),
               ),
-              Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onErrorContainer),
+              Icon(Icons.chevron_right,
+                  color: Theme.of(context).colorScheme.onErrorContainer),
             ]),
           ),
         ),

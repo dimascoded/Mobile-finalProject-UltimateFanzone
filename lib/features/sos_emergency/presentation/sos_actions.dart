@@ -12,7 +12,9 @@ Future<void> showSosConfirm(BuildContext context, WidgetRef ref) async {
           'Baca lokasi Anda sekarang? Catatan: lokasi hanya ditampilkan di '
           'perangkat ini, tidak dikirim ke siapa pun.'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal')),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
           onPressed: () => Navigator.pop(ctx, true),

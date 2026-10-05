@@ -1,13 +1,13 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:premiere_league_fan_assistant/core/utils/crypto_utils.dart';
-import 'package:premiere_league_fan_assistant/core/utils/jwt_utils.dart';
-import 'package:premiere_league_fan_assistant/features/auth/data/auth_repository.dart';
+import 'package:smart_football_fan/core/utils/crypto_utils.dart';
+import 'package:smart_football_fan/core/utils/jwt_utils.dart';
+import 'package:smart_football_fan/features/auth/data/auth_repository.dart';
 
 /// JWT palsu: yang penting payload-nya, signature memang tidak bisa
 /// diverifikasi dari sisi klien karena kuncinya ada di server.

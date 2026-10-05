@@ -40,7 +40,8 @@ class SampleData {
           final finished = offsetDays < 0;
           return FootballMatch(
             id: 900000 + i,
-            kickoffUtc: day0.add(Duration(days: offsetDays, hours: hours[i % 4])),
+            kickoffUtc:
+                day0.add(Duration(days: offsetDays, hours: hours[i % 4])),
             status: finished ? 'FINISHED' : 'TIMED',
             matchday: 1 + i ~/ 2,
             homeName: h[0],

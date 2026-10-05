@@ -48,7 +48,8 @@ class Block {
       return whole && value.abs() <= 9007199254740992 ? value.toInt() : value;
     }
     if (value is Map) {
-      return value.map((key, v) => MapEntry(key.toString(), _canonicalValue(v)));
+      return value
+          .map((key, v) => MapEntry(key.toString(), _canonicalValue(v)));
     }
     if (value is List) return value.map(_canonicalValue).toList();
     return value;
@@ -65,15 +66,23 @@ class Block {
         'hash': hash,
       };
 
+  /// Parse toleran (C2): field yang hilang atau salah tipe tidak boleh membuat
+  /// seluruh rantai hilang. `hash` yang kosong dipakai agar blok tetap bisa
+  /// dihitung ulang; `chainValidProvider` yang akan menandainya tidak valid.
   factory Block.fromJson(Map<String, dynamic> j) => Block(
-        index: j['index'],
-        timestamp: j['timestamp'],
-        type: j['type'],
-        data: Map<String, dynamic>.from(j['data']),
-        owner: j['owner'],
-        prevHash: j['prevHash'],
-        nonce: j['nonce'],
-        hash: j['hash'],
+        index: (j['index'] as num?)?.toInt() ?? 0,
+        timestamp: (j['timestamp'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        type: (j['type'] as String?)?.trim().isNotEmpty == true
+            ? (j['type'] as String).trim()
+            : 'unknown',
+        data: j['data'] is Map
+            ? Map<String, dynamic>.from(j['data'] as Map)
+            : const <String, dynamic>{},
+        owner: (j['owner'] as String?) ?? '',
+        prevHash: (j['prevHash'] as String?) ?? '',
+        nonce: (j['nonce'] as num?)?.toInt() ?? 0,
+        hash: (j['hash'] as String?) ?? '',
       );
 }
 

@@ -1,17 +1,17 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:premiere_league_fan_assistant/features/football/data/models.dart';
-import 'package:premiere_league_fan_assistant/features/football/providers/kickoff_reminder_provider.dart';
-import 'package:premiere_league_fan_assistant/features/penalty_shootout/data/penalty_rules.dart';
-import 'package:premiere_league_fan_assistant/features/sos_emergency/data/notification_service.dart';
+import 'package:smart_football_fan/features/football/data/models.dart';
+import 'package:smart_football_fan/features/football/providers/kickoff_reminder_provider.dart';
+import 'package:smart_football_fan/features/penalty_shootout/data/penalty_rules.dart';
+import 'package:smart_football_fan/features/sos_emergency/data/notification_service.dart';
 
 void main() {
   group('N1: id notifikasi kickoff dan hasil tidak bentrok', () {
     test('satu laga punya dua id berbeda', () {
       for (final id in [1, 7, 12, 380, 2026]) {
-        expect(
-            NotificationService.kickoffId(id), isNot(NotificationService.resultId(id)));
+        expect(NotificationService.kickoffId(id),
+            isNot(NotificationService.resultId(id)));
       }
     });
 
@@ -144,9 +144,13 @@ void main() {
 
     test('roll menentukan hasil tendangan', () {
       final onTarget = penaltyRules.evaluate(
-          tiltZ: rollFromAccel(1.0, 9.8), shake: penaltyRules.maxShake, keeperDive: 1.0);
+          tiltZ: rollFromAccel(1.0, 9.8),
+          shake: penaltyRules.maxShake,
+          keeperDive: 1.0);
       final wide = penaltyRules.evaluate(
-          tiltZ: rollFromAccel(8.0, 3.0), shake: penaltyRules.maxShake, keeperDive: 1.0);
+          tiltZ: rollFromAccel(8.0, 3.0),
+          shake: penaltyRules.maxShake,
+          keeperDive: 1.0);
       expect(onTarget.outcome, isNot(ShotOutcome.wide));
       expect(wide.outcome, ShotOutcome.wide);
     });

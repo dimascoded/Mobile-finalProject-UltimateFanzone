@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:premiere_league_fan_assistant/features/football/data/models.dart';
-import 'package:premiere_league_fan_assistant/features/gamification/data/blockchain.dart';
-import 'package:premiere_league_fan_assistant/features/prediction/data/prediction_repository.dart';
-import 'package:premiere_league_fan_assistant/features/prediction/data/reveal_verifier.dart';
+import 'package:smart_football_fan/features/football/data/models.dart';
+import 'package:smart_football_fan/features/gamification/data/blockchain.dart';
+import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
+import 'package:smart_football_fan/features/prediction/data/reveal_verifier.dart';
 
 /// Bangun rantai yang valid: genesis lalu blok dengan PoW asli.
 List<Block> chainWith(List<({String type, Map<String, dynamic> data})> blocks) {

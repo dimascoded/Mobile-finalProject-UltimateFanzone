@@ -155,8 +155,8 @@ final worldClockProvider =
   }
 });
 
-/// Kurs GBP per 1 Rupiah (null saat offline / gagal fetch).
+/// Kurs GBP per 1 Rupiah (null saat offline dan tidak ada cache).
 final gbpRateProvider = Provider<double?>((ref) {
-  final rates = ref.watch(ratesProvider).valueOrNull;
-  return rates?[awayDayCurrency];
+  final snap = ref.watch(ratesProvider).valueOrNull;
+  return snap?.gbpPerIdr;
 });

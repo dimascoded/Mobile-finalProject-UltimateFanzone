@@ -58,7 +58,8 @@ class PunditScreen extends ConsumerWidget {
                               child: Text(
                                 'Analisis terbaru gagal dimuat, jadi yang tampil '
                                 'adalah hasil tersimpan. ${r.warning}',
-                                style: TextStyle(color: scheme.onTertiaryContainer),
+                                style: TextStyle(
+                                    color: scheme.onTertiaryContainer),
                               ),
                             ),
                           ],
@@ -72,8 +73,7 @@ class PunditScreen extends ConsumerWidget {
                         avatar: const Icon(Icons.history, size: 18),
                         label: Text(r.cachedAt == null
                             ? 'Data tersimpan (tanpa waktu)'
-                            : 'Data tersimpan • ${TimeUtils.formatHm(
-                                TimeUtils.wib(r.cachedAt!))} WIB'),
+                            : 'Data tersimpan • ${TimeUtils.formatHm(TimeUtils.wib(r.cachedAt!))} WIB'),
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
@@ -98,9 +98,8 @@ class PunditScreen extends ConsumerWidget {
                     Text(e.toString().replaceFirst('Exception: ', '')),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      onPressed: () => ref
-                          .read(punditProvider.notifier)
-                          .generate(),
+                      onPressed: () =>
+                          ref.read(punditProvider.notifier).generate(),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Coba lagi'),
                     ),

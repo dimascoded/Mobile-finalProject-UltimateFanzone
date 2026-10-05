@@ -34,7 +34,8 @@ class TeamPickerScreen extends ConsumerWidget {
               ),
               title: Text(c.name),
               subtitle: Text('${c.stadium} • ${c.city}'),
-              trailing: c.key == selected ? const Icon(Icons.check_circle) : null,
+              trailing:
+                  c.key == selected ? const Icon(Icons.check_circle) : null,
               onTap: () async {
                 await ref.read(favoriteKeyProvider.notifier).set(c.key);
                 if (context.mounted) Navigator.pop(context);

@@ -1,4 +1,4 @@
-name: premiere_league_fan_assistant
+name: smart_football_fan
 description: Smart Football Fan - pendamping menonton Liga Inggris (Flutter + Riverpod)
 publish_to: 'none'
 version: 1.1.0+2

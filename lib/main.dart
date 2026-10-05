@@ -37,8 +37,10 @@ class MyApp extends ConsumerWidget {
       // Sesi valid -> LockScreen (biometrik); tidak ada/kedaluwarsa -> Login.
       home: session.when(
         data: (valid) => valid ? const LockScreen() : const LoginScreen(),
-        loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-        error: (e, _) => Scaffold(body: Center(child: Text('Gagal memuat sesi: $e'))),
+        loading: () =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (e, _) =>
+            Scaffold(body: Center(child: Text('Gagal memuat sesi: $e'))),
       ),
     );
   }

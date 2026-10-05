@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:premiere_league_fan_assistant/features/penalty_shootout/data/penalty_rules.dart';
+import 'package:smart_football_fan/features/penalty_shootout/data/penalty_rules.dart';
 
 void main() {
   const r = penaltyRules;
@@ -148,7 +148,8 @@ void main() {
         }
         final s = sessionScore(results);
         expect(s, greaterThanOrEqualTo(0));
-        expect(s, lessThanOrEqualTo(100 * results.where((e) => e.isGoal).length));
+        expect(
+            s, lessThanOrEqualTo(100 * results.where((e) => e.isGoal).length));
       }
     });
   });

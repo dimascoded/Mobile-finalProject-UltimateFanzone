@@ -43,7 +43,8 @@ class DashboardScreen extends ConsumerWidget {
       next.whenOrNull(
         data: (m) {
           if (m != null) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(m)));
           }
         },
         error: (e, _) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -89,8 +90,12 @@ class DashboardScreen extends ConsumerWidget {
                 title: const Text('Keluar?'),
                 content: const Text('Sesi akan dihapus dari perangkat ini.'),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                  FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Keluar')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Batal')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Keluar')),
                 ],
               ),
             );

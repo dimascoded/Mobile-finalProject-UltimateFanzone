@@ -6,12 +6,29 @@ import 'blockchain.dart';
 class ChainRepository {
   static const _key = 'passport_chain';
 
+  /// Parse per-item (C2): blok rusak dilewati, blok lain tetap termuat.
+  /// Kalau semuanya hilang, kembalikan genesis supaya aplikasi masih punya
+  /// rantai yang valid daripada `load()` yang melempar.
   List<Block> load() {
     final raw = HiveService.cache.get(_key);
     if (raw == null) return [Blockchain.genesis()];
-    return (jsonDecode(raw) as List)
-        .map((e) => Block.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } catch (_) {
+      return [Blockchain.genesis()];
+    }
+    if (decoded is! List) return [Blockchain.genesis()];
+    final out = <Block>[];
+    for (final e in decoded) {
+      if (e is! Map) continue;
+      try {
+        out.add(Block.fromJson(Map<String, dynamic>.from(e)));
+      } catch (_) {
+        continue;
+      }
+    }
+    return out.isEmpty ? [Blockchain.genesis()] : out;
   }
 
   Future<void> save(List<Block> chain) => HiveService.cache

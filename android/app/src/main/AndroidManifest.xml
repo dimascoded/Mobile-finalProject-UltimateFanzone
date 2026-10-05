@@ -10,10 +10,11 @@
     <!-- Pengingat kickoff (zonedSchedule). -->
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- Android 12+ mewajibkan izin ini agar jadwal tepat waktu. -->
+    <!-- C5: hanya SCHEDULE_EXACT_ALARM. USE_EXACT_ALARM hanya diberikan Play
+         Store untuk aplikasi alarm, dan akan ditolak saat review, jadi izin itu
+         diminta saat runtime lewat
+         AndroidFlutterLocalNotificationsPlugin.requestExactAlarmsPermission(). -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <!-- Android 13+ memakai izin ini untuk alarm berjadwal. -->
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 
     <application
         android:label="Smart Football Fan"

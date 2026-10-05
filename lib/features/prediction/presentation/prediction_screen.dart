@@ -14,16 +14,17 @@ import '../providers/prediction_provider.dart';
 const kMaxUpcomingMatches = 20;
 
 /// Laga mendatang milik tim favorit saja, dibatasi [kMaxUpcomingMatches].
-final favoriteUpcomingMatchesProvider =
-    Provider<List<FootballMatch>>((ref) {
-  final matches = ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
+final favoriteUpcomingMatchesProvider = Provider<List<FootballMatch>>((ref) {
+  final matches =
+      ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
   final fav = ref.watch(favoriteClubProvider);
   return upcomingMatches(matches, fav);
 });
 
 /// Laga mendatang tanpa filter tim, dibatasi juga.
 final allUpcomingMatchesProvider = Provider<List<FootballMatch>>((ref) {
-  final matches = ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
+  final matches =
+      ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
   return upcomingMatches(matches, null);
 });
 
@@ -44,9 +45,10 @@ List<FootballMatch> upcomingMatches(List<FootballMatch> matches, PlClub? fav) {
 }
 
 /// Riwayat tebakan: poin diambil dari blok result, bukan dari nilai lokal.
-final predictionHistoryProvider =
-    Provider<List<({FootballMatch? match, Prediction prediction, int? points})>>((ref) {
-  final matches = ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
+final predictionHistoryProvider = Provider<
+    List<({FootballMatch? match, Prediction prediction, int? points})>>((ref) {
+  final matches =
+      ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
   final chain = ref.watch(chainProvider);
   final predictions = ref.watch(predictionsProvider);
 
@@ -99,7 +101,8 @@ class PredictionScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Text('Siap dicek', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            for (final e in pending) _SettleTile(match: e.match, prediction: e.prediction),
+            for (final e in pending)
+              _SettleTile(match: e.match, prediction: e.prediction),
           ],
           const SizedBox(height: 16),
           Text('Pilih skor sebelum kickoff',
@@ -114,14 +117,16 @@ class PredictionScreen extends ConsumerWidget {
             const EmptyState(
               icon: Icons.science_outlined,
               title: 'Prediksi dinonaktifkan',
-              message: 'Jadwal yang dipakai masih data contoh. Set FOOTBALL_API_KEY '
+              message:
+                  'Jadwal yang dipakai masih data contoh. Set FOOTBALL_API_KEY '
                   'agar prediksi memakai jadwal sungguhan.',
             )
           else
             const _UpcomingPicker(),
           if (history.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text('Tebakan tersimpan', style: Theme.of(context).textTheme.titleMedium),
+            Text('Tebakan tersimpan',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             for (final h in history) _HistoryTile(entry: h),
           ],
@@ -193,9 +198,8 @@ class _HistoryTile extends StatelessWidget {
     final p = entry.prediction;
     final m = entry.match;
     final wib = TimeUtils.wib(p.createdAt);
-    final title = m == null
-        ? 'Laga #${p.matchId}'
-        : '${m.homeShort} vs ${m.awayShort}';
+    final title =
+        m == null ? 'Laga #${p.matchId}' : '${m.homeShort} vs ${m.awayShort}';
     final status = entry.points != null
         ? 'Selesai • +${entry.points} poin'
         : (m == null
@@ -206,9 +210,11 @@ class _HistoryTile extends StatelessWidget {
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(entry.points != null ? Icons.workspace_premium : Icons.lock_outline),
+      leading: Icon(
+          entry.points != null ? Icons.workspace_premium : Icons.lock_outline),
       title: Text('$title  ${p.homeScore}-${p.awayScore}'),
-      subtitle: Text('${TimeUtils.formatDate(wib)}, ${TimeUtils.formatHm(wib)} WIB • $status'),
+      subtitle: Text(
+          '${TimeUtils.formatDate(wib)}, ${TimeUtils.formatHm(wib)} WIB • $status'),
     );
   }
 }

@@ -121,8 +121,12 @@ int sessionScore(List<ShotResult> results) {
   return (goals.length * avg * 100).round();
 }
 
-/// Hash hasil sesi untuk blok achievement, supaya skor tidak bisa diubah
-/// diam-diam tanpa membuat rantai invalid.
+/// Ringkasan hasil sesi untuk blok achievement.
+///
+/// Blake2b blok sudah menutupi isi `data`, jadi hash ini bukan pengaman
+/// terhadap manipulasi. Fungsinya yang nyata: mengikat skor, gol, dan jumlah
+/// percobaan menjadi satu token pendek, sehingga viewer bisa mencocokkan blok
+/// achievement dengan sesi tertentu tanpa membaca seluruh isi blok.
 String sessionHash({
   required int score,
   required int goals,
@@ -143,7 +147,8 @@ String sessionHash({
 }
 
 /// Apakah HP cukup diam untuk memulai tendangan.
-bool steadyEnough(double tiltZ, {double tolerance = 0.35}) => tiltZ.abs() <= tolerance;
+bool steadyEnough(double tiltZ, {double tolerance = 0.35}) =>
+    tiltZ.abs() <= tolerance;
 
 /// Roll accelerometer -> sudut kemiringan kiri-kanan (rad).
 ///

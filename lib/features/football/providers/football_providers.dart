@@ -3,8 +3,8 @@ import '../data/football_repository.dart';
 import '../data/models.dart';
 
 // ---------- Klub & tim favorit ----------
-final clubsProvider =
-    FutureProvider<List<PlClub>>((ref) => ref.watch(clubRepositoryProvider).load());
+final clubsProvider = FutureProvider<List<PlClub>>(
+    (ref) => ref.watch(clubRepositoryProvider).load());
 
 class FavoriteTeamNotifier extends StateNotifier<String?> {
   FavoriteTeamNotifier(this._repo) : super(_repo.favoriteKey());
@@ -16,8 +16,9 @@ class FavoriteTeamNotifier extends StateNotifier<String?> {
   }
 }
 
-final favoriteKeyProvider = StateNotifierProvider<FavoriteTeamNotifier, String?>(
-    (ref) => FavoriteTeamNotifier(ref.watch(clubRepositoryProvider)));
+final favoriteKeyProvider =
+    StateNotifierProvider<FavoriteTeamNotifier, String?>(
+        (ref) => FavoriteTeamNotifier(ref.watch(clubRepositoryProvider)));
 
 final favoriteClubProvider = Provider<PlClub?>((ref) {
   final key = ref.watch(favoriteKeyProvider);
@@ -57,7 +58,8 @@ final matchFilterProvider =
 final matchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
 final filteredMatchesProvider =
-    Provider.autoDispose<AsyncValue<FootballResult<List<FootballMatch>>>>((ref) {
+    Provider.autoDispose<AsyncValue<FootballResult<List<FootballMatch>>>>(
+        (ref) {
   final filter = ref.watch(matchFilterProvider);
   final q = ref.watch(matchQueryProvider).toLowerCase().trim();
   final fav = ref.watch(favoriteClubProvider);
@@ -94,7 +96,8 @@ final nextMatchProvider = Provider<AsyncValue<FootballMatch?>>((ref) {
     if (fav == null) return null;
     final cutoff = DateTime.now().toUtc().subtract(const Duration(hours: 3));
     final list = r.data
-        .where((m) => !m.isFinished && m.kickoffUtc.isAfter(cutoff) && m.involves(fav))
+        .where((m) =>
+            !m.isFinished && m.kickoffUtc.isAfter(cutoff) && m.involves(fav))
         .toList()
       ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
     return list.isEmpty ? null : list.first;

@@ -1,4 +1,4 @@
-package com.example.premiere_league_fan_assistant
+package com.smartfootballfan
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

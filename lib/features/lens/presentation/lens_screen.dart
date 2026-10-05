@@ -56,8 +56,9 @@ class LensScreen extends ConsumerWidget {
                     child: ElevatedButton.icon(
                       onPressed: busy
                           ? null
-                          : () =>
-                              ref.read(lensProvider.notifier).scan(ImageSource.camera),
+                          : () => ref
+                              .read(lensProvider.notifier)
+                              .scan(ImageSource.camera),
                       icon: const Icon(Icons.camera_alt),
                       label: const Text('Kamera'),
                     ),
@@ -71,8 +72,9 @@ class LensScreen extends ConsumerWidget {
                     child: ElevatedButton.icon(
                       onPressed: busy
                           ? null
-                          : () =>
-                              ref.read(lensProvider.notifier).scan(ImageSource.gallery),
+                          : () => ref
+                              .read(lensProvider.notifier)
+                              .scan(ImageSource.gallery),
                       icon: const Icon(Icons.photo_library),
                       label: const Text('Galeri'),
                     ),
@@ -192,10 +194,12 @@ class _ResultView extends ConsumerWidget {
               style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
         ],
-        Text('Mata uang: ${result.currency}', style: theme.textTheme.titleSmall),
+        Text('Mata uang: ${result.currency}',
+            style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
         if (result.prices.isEmpty)
-          Text('Tidak ada nominal harga yang terbaca.', style: theme.textTheme.bodyMedium)
+          Text('Tidak ada nominal harga yang terbaca.',
+              style: theme.textTheme.bodyMedium)
         else
           for (final p in result.prices)
             Semantics(

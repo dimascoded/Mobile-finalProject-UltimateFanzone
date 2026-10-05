@@ -32,7 +32,8 @@ class _PenaltyScreenState extends ConsumerState<PenaltyScreen> {
         permissionKey: 'sensors',
         icon: Icons.vibration,
         title: 'Butuh sensor HP',
-        message: 'Game ini memakai accelerometer: kemiringan HP menentukan arah '
+        message:
+            'Game ini memakai accelerometer: kemiringan HP menentukan arah '
             'dan ayunan menentukan kekuatan tendangan. Jalankan di HP fisik.',
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -131,10 +132,13 @@ class _Goal extends StatelessWidget {
             // Kiper di tengah bawah
             Align(
               alignment: const Alignment(0, 0.75),
-              child: Container(width: 34, height: 34, decoration: BoxDecoration(
-                color: scheme.secondary,
-                shape: BoxShape.circle,
-              )),
+              child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: scheme.secondary,
+                    shape: BoxShape.circle,
+                  )),
             ),
             // Penanda arah tendangan
             Align(
@@ -180,7 +184,8 @@ class _Meters extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final power = penaltyRules.power(state.shake);
-    final tiltNorm = (state.tiltZ.abs() / penaltyRules.aimTolerance).clamp(0.0, 1.0);
+    final tiltNorm =
+        (state.tiltZ.abs() / penaltyRules.aimTolerance).clamp(0.0, 1.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,8 +292,8 @@ class _Controls extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: notifier.arm,
               icon: const Icon(Icons.sports_soccer),
-              label:
-                  Text('Siap & Ayun (${state.taken + 1}/${penaltyRules.attempts})'),
+              label: Text(
+                  'Siap & Ayun (${state.taken + 1}/${penaltyRules.attempts})'),
             ),
           ),
           const SizedBox(height: 8),

@@ -31,16 +31,24 @@ class AwayDayExpense {
         'clubKey': clubKey,
       };
 
+  /// Parse toleran (C2): item yang field hilang atau salah tipe tidak boleh
+  /// membuat seluruh daftar pengeluaran hilang.
+  ///
+  /// Aturannya: judul wajib (kalau kosong, pakai "Tanpa judul"), nominal
+  /// non-angka jadi 0, tanggal rusak jadi epoch supaya item tetap urut.
   factory AwayDayExpense.fromJson(Map<String, dynamic> j) => AwayDayExpense(
-        title: j['title'],
-        amountGbp: (j['amountGbp'] as num).toDouble(),
-        amountIdr: (j['amountIdr'] as num).toDouble(),
+        title: (j['title'] as String?)?.trim().isNotEmpty == true
+            ? (j['title'] as String).trim()
+            : 'Tanpa judul',
+        amountGbp: (j['amountGbp'] as num?)?.toDouble() ?? 0,
+        amountIdr: (j['amountIdr'] as num?)?.toDouble() ?? 0,
         category: AwayDayCategory.values.firstWhere(
           (e) => e.name == (j['category'] as String? ?? 'lainnya'),
           orElse: () => AwayDayCategory.lainnya,
         ),
-        date: DateTime.parse(j['date']),
-        clubKey: j['clubKey'],
+        date: DateTime.tryParse(j['date'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        clubKey: j['clubKey'] as String?,
       );
 }
 
@@ -51,13 +59,23 @@ class AwayDayRepository {
   List<AwayDayExpense> load() {
     final raw = HiveService.cache.get(_key);
     if (raw == null) return [];
+    Object? decoded;
     try {
-      return (jsonDecode(raw) as List)
-          .map((e) => AwayDayExpense.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      decoded = jsonDecode(raw);
     } catch (_) {
       return [];
     }
+    if (decoded is! List) return [];
+    final out = <AwayDayExpense>[];
+    for (final e in decoded) {
+      if (e is! Map) continue;
+      try {
+        out.add(AwayDayExpense.fromJson(Map<String, dynamic>.from(e)));
+      } catch (_) {
+        continue; // lewati item rusak, pertahankan sisanya
+      }
+    }
+    return out;
   }
 
   Future<void> save(List<AwayDayExpense> list) => HiveService.cache.put(
@@ -72,7 +90,8 @@ class AwayDayRepository {
     return double.tryParse(raw) ?? 0;
   }
 
-  Future<void> saveBudget(double idr) => HiveService.cache.put(_budgetKey, '$idr');
+  Future<void> saveBudget(double idr) =>
+      HiveService.cache.put(_budgetKey, '$idr');
 }
 
 final awayDayRepositoryProvider = Provider((ref) => AwayDayRepository());

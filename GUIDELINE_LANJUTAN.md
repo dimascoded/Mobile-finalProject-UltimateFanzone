@@ -67,7 +67,42 @@ Legenda: ✅ selesai di kode • ⚠️ sebagian • ❌ belum
 | 17 | Blockchain sederhana | ✅ | `gamification/data/blockchain.dart` (hash + PoW + validasi) + wallet Web3 |
 | 18 | Laporan | ❌ | **Langkah 7** (bagian 9) |
 
-**Status kompilasi:** langkah 1–5 lolos `flutter analyze` (dilaporkan pengguna). **Round A (Smart Football Fan) belum dianalisis** — jalankan `flutter analyze` lagi.
+**Status kompilasi:** `flutter analyze` bersih dan `flutter test` hijau (196 test). Rincian per butir ada di `DAFTAR_PERBAIKAN.md`.
+
+### Cara menjalankan (C6)
+
+Semua konfigurasi masuk lewat `--dart-define`, tidak ada secret yang di-hardcode:
+
+| Key | Wajib? | Fungsi |
+|---|---|---|
+| `GEMINI_API_KEY` | ya untuk Pundit AI | Kunci Gemini. Kosong → Pundit menampilkan pesan jelas, bukan data contoh |
+| `GEMINI_MODEL` | tidak | Default model Gemini; ganti bila model dihentikan Google |
+| `FOOTBALL_API_KEY` | tidak | Kunci football-data.org v4. Kosong → data contoh + banner merah, notifikasi dimatikan |
+| `BACKEND_URL` | tidak | URL server sinkronisasi. Kosong → login dan sinkronisasi mode lokal (mock) |
+
+```bash
+flutter pub get
+flutter run \
+  --dart-define=GEMINI_API_KEY=... \
+  --dart-define=FOOTBALL_API_KEY=... \
+  --dart-define=BACKEND_URL=https://server-anda   # opsional
+```
+
+Server sinkronisasi (butuh Node.js 22.5+):
+
+```bash
+cd server && npm install
+cp .env.example .env        # isi JWT_SECRET, wajib
+node --env-file=.env index.js
+```
+
+### Batasan yang diketahui (C6)
+
+- API key Gemini ada di sisi klien. Untuk produksi, arahkan lewat proxy backend (butir B8 belum dikerjakan).
+- Kurs dan data sepak bola bergantung API gratis: bisa terlambat atau dibatasi kuotanya.
+- Hash blok memakai SHA-256 tanpa salt; memenuhi rubrik, bukan praktik produksi.
+- Blockchain lokal tanpa jaringan atau konsensus; mode demo bisa melewati verifikasi GPS.
+- Zona waktu AS/Australia memakai satu kota acuan (New York / Sydney).
 
 ---
 
@@ -77,25 +112,18 @@ Legenda: ✅ selesai di kode • ⚠️ sebagian • ❌ belum
 (jadwal 4 zona waktu, klasemen, top skor), kartu tim favorit di Home, judul/ikon aplikasi diganti.
 Selama migrasi, fitur lama masih berjalan dengan **Trip default = Inggris (GB)** sebagai konteks "Away Day".
 
-**Round B (berikutnya) — ubah fitur lama menjadi fitur sepak bola**
-- [ ] Expense → **Away Day**: default GBP, kategori (tiket, hotel, transport, merchandise), anggaran.
-- [ ] Itinerary → **Pundit AI** (prompt berisi klasemen + 5 hasil terakhir) dan **Rencana Away Day** (kota/stadion tim favorit).
-- [ ] Kompas & Paspor: `landmarks` negara → **stadion 20 klub** dari `pl_clubs.json`; stamp = check-in stadion
-      (radius disarankan 800 m karena koordinat perkiraan); tambah `venues.json` untuk **Nobar Finder**.
-- [ ] Lens → OCR tiket/poster; cocokkan teks dengan `PlClub.isTeam` lalu buka jadwal; harga £ → Rp.
-- [ ] SOS: lepas ketergantungan `Trip`; nomor darurat UK tetap (999 / 112).
+**Round B ✅:** Expense → **Away Day** (default GBP, kategori, anggaran total); **Pundit AI** (klasemen + 5 hasil
+terakhir, tanpa data contoh, badge cache); kompas & paspor memakai **stadion 20 klub** dari `pl_clubs.json` dengan stamp
+check-in stadion; **Lens** OCR mencocokkan teks lewat `PlClub.isTeam` lalu membuka jadwal klub; harga £ → Rp memakai
+kurs yang di-cache Hive; SOS lepas dari `Trip` dan memakai nomor darurat UK (999 / 112).
 
-**Round C — fitur baru**
-- [ ] **Pengingat kickoff**: `flutter_local_notifications` `zonedSchedule` (butuh paket `timezone`); jadwal dari cache `matchesProvider`.
-- [ ] **Prediksi skor (commit–reveal)**: sebelum kickoff catat blok `prediction_commit` berisi
-      `sha256(matchId|home|away|salt)`; setelah laga `FINISHED` catat blok `prediction_result` (skor + salt terbuka + poin).
-      Validasi: hash terbuka harus sama dengan commit. Prediksi tidak bisa diubah setelah kickoff.
-- [ ] **Penalty Shootout**: arah = kemiringan (gyroscope), kekuatan = ayunan (accelerometer); 5 tendangan; skor → blok achievement.
-- [ ] Notifikasi hasil akhir.
+**Round C ✅:** pengingat kickoff (`zonedSchedule` + izin exact alarm yang diminta saat runtime), **prediksi skor
+commit–reveal** (hash commit sebelum kickoff, reveal diverifikasi setelah laga; salt tetap lokal), **Penalty Shootout**
+(arah = kemiringan, kekuatan = ayunan), notifikasi hasil akhir dengan batas usia 6 jam.
 
-**Round D — bersih-bersih & penutup**
-- [ ] Hapus `features/trip` dan `countries.json` setelah tidak ada yang memakai; ganti `HomeSummary` agar bebas Trip.
-- [ ] Backend + sinkronisasi (Langkah 6), unit test + laporan (Langkah 7), uji manual, perbarui tabel uji di bagian 7.
+**Round D ✅:** `features/trip` dan `countries.json` sudah dihapus; backend sinkronisasi (`server/`) dengan
+commit–reveal terverifikasi rantai; 196 test Flutter + 52 test server hijau. Sisa: uji manual di perangkat fisik
+(`T4` di `DAFTAR_PERBAIKAN.md`) dan penulisan laporan.
 
 **Aturan produk:** tidak ada odds/taruhan (ilegal di Indonesia). Logo klub opsional (hak cipta klub); tampilan utama
 memakai nama, singkatan, dan warna klub.
@@ -344,7 +372,7 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
    buat trip, cap stamp), class/ER diagram (Trip, Expense, Block, User), perancangan antarmuka.
 6. **Implementasi**: per fitur → tujuan, potongan kode inti, penjelasan baris penting, screenshot.
    File utama: `auth_repository.dart`, `time_utils.dart`, `price_parser.dart`, `blockchain.dart`,
-   `gamification_providers.dart`, `trip_providers.dart`.
+   `gamification_providers.dart`, `away_day_providers.dart`.
 7. **Lembar evaluasi pengujian**: tabel uji manual (bagian 7) + hasil unit test.
 8. Kesimpulan & saran (cantumkan keterbatasan: blockchain lokal, OCR Latin, backend sederhana).
 9. Daftar pustaka • Lampiran (tautan repositori, tangkapan layar tambahan).
@@ -353,8 +381,9 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 
 ## 10. Keterbatasan & Risiko (jujur di laporan)
 
-- Belum pernah dikompilasi oleh penulis kode → kemungkinan ada error kecil saat `flutter analyze`.
-- API key Gemini ada di aplikasi (dart-define) → produksi memakai proxy backend.
+- `flutter analyze` bersih dan test hijau; jalankan ulang setelah paket dinaikkan versinya karena bisa muncul
+  peringatan baru.
+- API key Gemini ada di aplikasi (dart-define) → produksi memakai proxy backend (B8 belum dikerjakan).
 - Nama model Gemini bisa dihentikan Google: ganti lewat `--dart-define=GEMINI_MODEL=...`.
 - API kurs `exchangerate-api.com` v4 gratis dan bisa berubah/dibatasi.
 - Hash SHA-256 tanpa salt hanya memenuhi rubrik; bukan praktik terbaik produksi.
@@ -372,7 +401,9 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 | Biometrik error `no_fragment_activity` | `MainActivity` harus `FlutterFragmentActivity` |
 | Kamera/galeri tidak terbuka | Izin `CAMERA` (Android) / `NSCameraUsageDescription` (iOS) belum ditambah |
 | Build Android gagal di ML Kit | `minSdkVersion 23`; iOS `platform :ios, '15.5'` |
-| Itinerary selalu error | `GEMINI_API_KEY` belum diberikan lewat `--dart-define`, atau model sudah usang |
+| Pundit AI selalu error | `GEMINI_API_KEY` belum diberikan lewat `--dart-define`, atau model sudah usang |
+| Pengingat kickoff terlambat | Izin exact alarm belum diberikan; aplikasi memintanya saat start, periksa Pengaturan aplikasi |
+| Notifikasi iOS tidak muncul saat aplikasi terbuka | `UNUserNotificationCenter.current().delegate` harus diset di `AppDelegate.swift` |
 | Panah kompas tidak bergerak | Emulator tidak punya magnetometer — uji di HP fisik |
 | Stamp selalu "terlalu jauh" | Wajar di luar negara tujuan; aktifkan **Mode demo** |
 | `widget_test.dart` error | Hapus file itu |
@@ -383,8 +414,10 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 
 Salin teks ini ke percakapan baru bersama zip/kode proyek:
 
-> Proyek Flutter "Smart Football Fan" (Premier League; Riverpod, Feature-Driven Clean Architecture; lihat GUIDELINE_LANJUTAN.md).
-> Round A migrasi selesai (data klub, API football-data.org + cache, tim favorit, Match Center). Fitur lama (itinerary,
-> expense, lens, kompas, paspor) masih berbasis Trip default Inggris dan akan diubah di Round B. Hasil `flutter analyze`: [tempel].
-> Tolong perbaiki error, lalu kerjakan Round B / C / D sesuai bagian 2b. Patuhi aturan di bagian 3 (widget tidak boleh
-> memanggil dio/Hive langsung, autoDispose untuk stream, cek `mounted` di notifier autoDispose). Tidak ada fitur taruhan.
+> Proyek Flutter "Smart Football Fan" (Liga Inggris; Riverpod, Feature-Driven Clean Architecture; lihat
+> GUIDELINE_LANJUTAN.md). Nama paket `smart_football_fan`, applicationId `com.smartfootballfan`.
+> Batch 1–7 di `DAFTAR_PERBAIKAN.md` sudah selesai: backend sinkronisasi, notifikasi, penalty, commit–reveal,
+> akun per pengguna, UI, dan kebersihan proyek. `flutter analyze` bersih, 196 test Flutter + 52 test server hijau.
+> Sisa: uji manual di perangkat fisik (T4) dan penulisan laporan.
+> Patuhi aturan di bagian 3 (widget tidak boleh memanggil dio/Hive langsung, autoDispose untuk stream, cek
+> `mounted` di notifier autoDispose). Tidak ada fitur betting.

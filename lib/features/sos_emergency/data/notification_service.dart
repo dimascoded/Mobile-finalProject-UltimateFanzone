@@ -29,13 +29,38 @@ class NotificationService {
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings();
-    await _plugin.initialize(const InitializationSettings(android: android, iOS: ios));
     await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .initialize(const InitializationSettings(android: android, iOS: ios));
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+    // C5: Android 12+ butuh izin "exact alarm" yang diminta terpisah dari
+    // SCHEDULE_EXACT_ALARM di manifest. Tanpa ini zonedSchedule exact gagal dan
+    // jatuh ke inexact, jadi pengingat bisa terlambat puluhan menit.
+    await requestExactAlarmPermission();
     await _plugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()
         ?.requestPermissions(alert: true, badge: true, sound: true);
+  }
+
+  /// Minta izin exact alarm bila belum diberikan. Mengembalikan true bila
+  /// aplikasi boleh menjadwalkan alarm tepat waktu, atau true juga di platform
+  /// yang tidak punya konsep itu (mis. iOS).
+  static Future<bool> requestExactAlarmPermission() async {
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return true; // bukan Android: tidak perlu izin
+    try {
+      final granted = await android.canScheduleExactNotifications();
+      if (granted == true) return true;
+      await android.requestExactAlarmsPermission();
+      return await android.canScheduleExactNotifications() ?? false;
+    } catch (e) {
+      debugPrint('Gagal meminta izin exact alarm: $e');
+      return false;
+    }
   }
 
   // ---------- Slot id notifikasi ----------

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "premiere_league_fan_assistant" "\0"
+            VALUE "CompanyName", "com.smartfootballfan" "\0"
+            VALUE "FileDescription", "Smart Football Fan" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "premiere_league_fan_assistant" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "premiere_league_fan_assistant.exe" "\0"
-            VALUE "ProductName", "premiere_league_fan_assistant" "\0"
+            VALUE "InternalName", "smart_football_fan" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.smartfootballfan. All rights reserved." "\0"
+            VALUE "OriginalFilename", "smart_football_fan.exe" "\0"
+            VALUE "ProductName", "Smart Football Fan" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

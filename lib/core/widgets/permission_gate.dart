@@ -18,7 +18,8 @@ class PermissionGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accepted = ref.watch(permissionRationaleProvider).contains(permissionKey);
+    final accepted =
+        ref.watch(permissionRationaleProvider).contains(permissionKey);
     if (accepted) return child;
     return Center(
       child: Padding(
@@ -26,12 +27,16 @@ class PermissionGate extends ConsumerWidget {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 64),
           const SizedBox(height: 12),
-          Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+          Text(title,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: () => ref.read(permissionRationaleProvider.notifier).accept(permissionKey),
+            onPressed: () => ref
+                .read(permissionRationaleProvider.notifier)
+                .accept(permissionKey),
             child: const Text('Lanjutkan'),
           ),
         ]),
@@ -48,15 +53,21 @@ Future<bool> confirmPermission(
   required String title,
   required String message,
 }) async {
-  if (ref.read(permissionRationaleProvider).contains(permissionKey)) return true;
+  if (ref.read(permissionRationaleProvider).contains(permissionKey)) {
+    return true;
+  }
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title),
       content: Text(message),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lanjutkan')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lanjutkan')),
       ],
     ),
   );

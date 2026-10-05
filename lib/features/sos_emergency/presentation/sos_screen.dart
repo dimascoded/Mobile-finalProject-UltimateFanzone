@@ -46,7 +46,8 @@ class SosScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(children: [
-                  Text('Nomor darurat UK (999/112)', style: Theme.of(context).textTheme.titleSmall),
+                  Text('Nomor darurat UK (999/112)',
+                      style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   const Text('Polisi: 999 / 112'),
                   const Text('Ambulans: 999 / 112'),

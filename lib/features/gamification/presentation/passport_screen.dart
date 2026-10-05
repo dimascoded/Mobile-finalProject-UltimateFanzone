@@ -72,8 +72,7 @@ class PassportScreen extends ConsumerWidget {
                       IconButton(
                         tooltip: 'Perbarui jarak',
                         icon: const Icon(Icons.refresh),
-                        onPressed:
-                            () => ref.invalidate(stampDistanceProvider),
+                        onPressed: () => ref.invalidate(stampDistanceProvider),
                       ),
                   ],
                 ),

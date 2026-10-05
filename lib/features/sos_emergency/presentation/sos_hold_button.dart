@@ -10,7 +10,8 @@ class SosHoldButton extends StatefulWidget {
   State<SosHoldButton> createState() => _SosHoldButtonState();
 }
 
-class _SosHoldButtonState extends State<SosHoldButton> with SingleTickerProviderStateMixin {
+class _SosHoldButtonState extends State<SosHoldButton>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 3),
@@ -48,7 +49,8 @@ class _SosHoldButtonState extends State<SosHoldButton> with SingleTickerProvider
             child: Stack(fit: StackFit.expand, children: [
               Container(
                 margin: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                    color: Colors.red, shape: BoxShape.circle),
                 alignment: Alignment.center,
                 child: Text('SOS',
                     style: TextStyle(

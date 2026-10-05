@@ -81,12 +81,14 @@ class _Picker extends ConsumerWidget {
               for (final c in clubs)
                 DropdownMenuItem<PlClub>(
                   value: c,
-                  child: Text('${c.name} - ${c.stadium}', overflow: TextOverflow.ellipsis),
+                  child: Text('${c.name} - ${c.stadium}',
+                      overflow: TextOverflow.ellipsis),
                 ),
             ],
             onChanged: (v) {
               if (v == null) return;
-              ref.read(selectedStadiumIndexProvider.notifier).state = clubs.indexOf(v);
+              ref.read(selectedStadiumIndexProvider.notifier).state =
+                  clubs.indexOf(v);
             },
           ),
         ),
@@ -174,7 +176,8 @@ class _Pointer extends StatelessWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.explore_outlined),
-                  title: Text('${info.bearing.toStringAsFixed(0)}\u00B0 azimut'),
+                  title:
+                      Text('${info.bearing.toStringAsFixed(0)}\u00B0 azimut'),
                   subtitle: Text('heading HP ${hdg.toStringAsFixed(0)}\u00B0'),
                 ),
                 ListTile(
@@ -182,10 +185,12 @@ class _Pointer extends StatelessWidget {
                     relative < 45 || relative > 315
                         ? Icons.check_circle
                         : Icons.turn_right,
-                    color: relative < 45 || relative > 315 ? Colors.green : null,
+                    color:
+                        relative < 45 || relative > 315 ? Colors.green : null,
                   ),
                   title: Text(_relativeLabel(relative)),
-                  subtitle: Text('selisih ${relative.toStringAsFixed(0)}\u00B0'),
+                  subtitle:
+                      Text('selisih ${relative.toStringAsFixed(0)}\u00B0'),
                 ),
               ],
             ),
@@ -274,7 +279,8 @@ class _DialPainter extends CustomPainter {
       final a = (deg - 90) * math.pi / 180;
       final outer = center + Offset(math.cos(a), math.sin(a)) * (radius - 2);
       final inner = center +
-          Offset(math.cos(a), math.sin(a)) * (radius - (deg % 90 == 0 ? 18 : 10));
+          Offset(math.cos(a), math.sin(a)) *
+              (radius - (deg % 90 == 0 ? 18 : 10));
       canvas.drawLine(
         inner,
         outer,

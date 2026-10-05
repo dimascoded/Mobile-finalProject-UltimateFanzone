@@ -28,11 +28,13 @@ class ProfileTab extends ConsumerWidget {
         ]),
       ),
     );
-    if (source != null) await ref.read(profilePhotoProvider.notifier).pick(source);
+    if (source != null) {
+      await ref.read(profilePhotoProvider.notifier).pick(source);
+    }
   }
 
   /// Ringkasan status sinkronisasi untuk kartu di Profil.
-static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
+  static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
     final teks = lastSync == null
         ? 'Belum pernah sinkron'
         : 'Terakhir: ${_two(lastSync.hour)}:${_two(lastSync.minute)}';
@@ -77,7 +79,8 @@ static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
       const SizedBox(height: 12),
       Center(
         child: email.when(
-          data: (e) => Text(e ?? '-', style: Theme.of(context).textTheme.titleMedium),
+          data: (e) =>
+              Text(e ?? '-', style: Theme.of(context).textTheme.titleMedium),
           loading: () => const CircularProgressIndicator(),
           error: (e, _) => Text('Gagal memuat: $e'),
         ),
@@ -107,12 +110,15 @@ static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
         child: ListTile(
           leading: sync.busy
               ? const SizedBox(
-                  width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.sync),
           title: const Text('Sinkronisasi Data'),
           subtitle: Text(_syncSubtitle(sync, lastSync)),
           trailing: TextButton(
-            onPressed: sync.busy ? null : () => ref.read(syncProvider.notifier).run(),
+            onPressed:
+                sync.busy ? null : () => ref.read(syncProvider.notifier).run(),
             child: const Text('Sinkron'),
           ),
         ),
@@ -122,7 +128,8 @@ static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
       if (stamps.isEmpty)
         const Padding(
           padding: EdgeInsets.all(16),
-          child: Text('Belum ada stamp. Kunjungi stadion lewat menu Paspor Digital.'),
+          child: Text(
+              'Belum ada stamp. Kunjungi stadion lewat menu Paspor Digital.'),
         ),
       for (final b in stamps)
         ListTile(

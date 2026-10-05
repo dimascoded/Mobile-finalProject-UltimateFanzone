@@ -36,7 +36,8 @@ class MatchCenterScreen extends ConsumerWidget {
             Tab(text: 'Top Skor'),
           ]),
         ),
-        body: const TabBarView(children: [_FixturesTab(), _StandingsTab(), _ScorersTab()]),
+        body: const TabBarView(
+            children: [_FixturesTab(), _StandingsTab(), _ScorersTab()]),
       ),
     );
   }
@@ -54,8 +55,8 @@ class MatchCenterScreen extends ConsumerWidget {
     final fav = ref.read(favoriteClubProvider);
     if (fav == null) {
       messenger.showSnackBar(const SnackBar(
-          content: Text(
-              'Pilih tim favorit dulu agar pengingat bisa dijadwalkan.')));
+          content:
+              Text('Pilih tim favorit dulu agar pengingat bisa dijadwalkan.')));
       return;
     }
     final n = await scheduleRemindersForUpcoming(ref);
@@ -102,7 +103,8 @@ class _FixturesTab extends ConsumerWidget {
               child: ChoiceChip(
                 label: Text(_labels[f]!),
                 selected: filter == f,
-                onSelected: (_) => ref.read(matchFilterProvider.notifier).state = f,
+                onSelected: (_) =>
+                    ref.read(matchFilterProvider.notifier).state = f,
               ),
             ),
         ]),
@@ -128,7 +130,8 @@ class _FixturesTab extends ConsumerWidget {
           error: (e, _) => Center(
               child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(e.toString().replaceFirst('Exception: ', ''), textAlign: TextAlign.center),
+            child: Text(e.toString().replaceFirst('Exception: ', ''),
+                textAlign: TextAlign.center),
           )),
         ),
       ),
@@ -155,8 +158,13 @@ class _MatchTile extends ConsumerWidget {
             Text(match.matchday == null ? '' : 'Pekan ${match.matchday}',
                 style: Theme.of(context).textTheme.bodySmall),
             const Spacer(),
-            if (match.isOngoing) const Chip(label: Text('Berlangsung'), visualDensity: VisualDensity.compact),
-            if (match.isFinished) const Chip(label: Text('Selesai'), visualDensity: VisualDensity.compact),
+            if (match.isOngoing)
+              const Chip(
+                  label: Text('Berlangsung'),
+                  visualDensity: VisualDensity.compact),
+            if (match.isFinished)
+              const Chip(
+                  label: Text('Selesai'), visualDensity: VisualDensity.compact),
             if (!match.isFinished && isDiniHari(match.kickoffUtc))
               const Chip(
                 avatar: Icon(Icons.nightlight, size: 14),
@@ -173,7 +181,9 @@ class _MatchTile extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                match.hasScore ? '${match.homeScore} - ${match.awayScore}' : 'vs',
+                match.hasScore
+                    ? '${match.homeScore} - ${match.awayScore}'
+                    : 'vs',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
@@ -199,12 +209,14 @@ class _StandingsTab extends ConsumerWidget {
     final state = ref.watch(standingsProvider);
     final fav = ref.watch(favoriteClubProvider);
 
-    Widget cell(String t, double w, {bool bold = false, TextAlign a = TextAlign.center}) =>
+    Widget cell(String t, double w,
+            {bool bold = false, TextAlign a = TextAlign.center}) =>
         SizedBox(
           width: w,
           child: Text(t,
               textAlign: a,
-              style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+              style: TextStyle(
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
         );
 
     return state.when(
@@ -226,18 +238,23 @@ class _StandingsTab extends ConsumerWidget {
         const Divider(height: 1),
         Expanded(
           child: r.data.isEmpty
-              ? const EmptyState(icon: Icons.table_rows, title: 'Klasemen belum tersedia')
+              ? const EmptyState(
+                  icon: Icons.table_rows, title: 'Klasemen belum tersedia')
               : ListView.builder(
                   itemCount: r.data.length,
                   itemBuilder: (_, i) {
                     final row = r.data[i];
-                    final mine = fav != null && fav.isTeam(row.teamName, row.tla);
+                    final mine =
+                        fav != null && fav.isTeam(row.teamName, row.tla);
                     return Container(
                       color: mine ? fav.colorValue.withAlpha(46) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       child: Row(children: [
                         cell('${row.position}', 28),
-                        Expanded(child: cell(row.teamShort, 0, a: TextAlign.left, bold: mine)),
+                        Expanded(
+                            child: cell(row.teamShort, 0,
+                                a: TextAlign.left, bold: mine)),
                         cell('${row.played}', 30),
                         cell('${row.won}', 30),
                         cell('${row.draw}', 30),
@@ -256,7 +273,8 @@ class _StandingsTab extends ConsumerWidget {
         ),
       ]),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.toString().replaceFirst('Exception: ', ''))),
+      error: (e, _) =>
+          Center(child: Text(e.toString().replaceFirst('Exception: ', ''))),
     );
   }
 }
@@ -273,7 +291,9 @@ class _ScorersTab extends ConsumerWidget {
         DataSourceBanner(source: r.source, fetchedAt: r.fetchedAt),
         Expanded(
           child: r.data.isEmpty
-              ? const EmptyState(icon: Icons.emoji_events, title: 'Belum ada data pencetak gol')
+              ? const EmptyState(
+                  icon: Icons.emoji_events,
+                  title: 'Belum ada data pencetak gol')
               : ListView.builder(
                   itemCount: r.data.length,
                   itemBuilder: (_, i) {
@@ -290,7 +310,8 @@ class _ScorersTab extends ConsumerWidget {
         ),
       ]),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.toString().replaceFirst('Exception: ', ''))),
+      error: (e, _) =>
+          Center(child: Text(e.toString().replaceFirst('Exception: ', ''))),
     );
   }
 }

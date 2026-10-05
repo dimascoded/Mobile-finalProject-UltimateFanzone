@@ -15,10 +15,12 @@ class GameScreen extends ConsumerWidget {
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+          child:
+              Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
             Text('Skor: ${g.score}/${GameState.winScore}',
                 style: Theme.of(context).textTheme.titleLarge),
-            Text('⏱ ${g.secondsLeft}s', style: Theme.of(context).textTheme.titleLarge),
+            Text('⏱ ${g.secondsLeft}s',
+                style: Theme.of(context).textTheme.titleLarge),
           ]),
         ),
         Expanded(
@@ -31,8 +33,10 @@ class GameScreen extends ConsumerWidget {
                 child: Container(
                   width: 72,
                   height: 72,
-                  decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-                  child: const Icon(Icons.flight, color: Colors.white, size: 36),
+                  decoration: const BoxDecoration(
+                      color: Colors.orange, shape: BoxShape.circle),
+                  child:
+                      const Icon(Icons.flight, color: Colors.white, size: 36),
                 ),
               ),
             ),
