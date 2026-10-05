@@ -67,7 +67,7 @@ Legenda: ✅ selesai di kode • ⚠️ sebagian • ❌ belum
 | 17 | Blockchain sederhana | ✅ | `gamification/data/blockchain.dart` (hash + PoW + validasi) + wallet Web3 |
 | 18 | Laporan | ❌ | **Langkah 7** (bagian 9) |
 
-**Status kompilasi:** `flutter analyze` bersih dan `flutter test` hijau (196 test). Rincian per butir ada di `DAFTAR_PERBAIKAN.md`.
+**Status kompilasi:** `flutter analyze` bersih dan `flutter test` hijau (245 test). Rincian per butir ada di `DAFTAR_PERBAIKAN.md`.
 
 ### Cara menjalankan (C6)
 
@@ -79,6 +79,7 @@ Semua konfigurasi masuk lewat `--dart-define`, tidak ada secret yang di-hardcode
 | `GEMINI_MODEL` | tidak | Default model Gemini; ganti bila model dihentikan Google |
 | `FOOTBALL_API_KEY` | tidak | Kunci football-data.org v4. Kosong → data contoh + banner merah, notifikasi dimatikan |
 | `BACKEND_URL` | tidak | URL server sinkronisasi. Kosong → login dan sinkronisasi mode lokal (mock) |
+| `KICKOFF_REMINDER_MINUTES` | tidak | Menit sebelum kickoff pengaiting dikirim. Produksi 30; isi `2` hanya untuk uji manual |
 
 ```bash
 flutter pub get
@@ -87,6 +88,19 @@ flutter run \
   --dart-define=FOOTBALL_API_KEY=... \
   --dart-define=BACKEND_URL=https://server-anda   # opsional
 ```
+
+Uji manual di perangkat fisik memakai lembar **LEMBAR_UJI_T4.md** (19 baris,
+kolom hasil dan bukti). Untuk mempercepat tunggu pengingat dan menguji sinkronisasi lewat jaringan lokal:
+
+```bash
+flutter run \
+  --dart-define=BACKEND_URL=http://192.168.1.5:3000 \
+  --dart-define=KICKOFF_REMINDER_MINUTES=2
+```
+
+HTTP ke IP lokal hanya diizinkan pada build debug
+(`android/app/src/debug/AndroidManifest.xml`); build rilis tetap menolak trafik
+cleartext.
 
 Server sinkronisasi (butuh Node.js 22.5+):
 
@@ -122,8 +136,8 @@ commit–reveal** (hash commit sebelum kickoff, reveal diverifikasi setelah laga
 (arah = kemiringan, kekuatan = ayunan), notifikasi hasil akhir dengan batas usia 6 jam.
 
 **Round D ✅:** `features/trip` dan `countries.json` sudah dihapus; backend sinkronisasi (`server/`) dengan
-commit–reveal terverifikasi rantai; 196 test Flutter + 52 test server hijau. Sisa: uji manual di perangkat fisik
-(`T4` di `DAFTAR_PERBAIKAN.md`) dan penulisan laporan.
+commit–reveal terverifikasi rantai; 245 test Flutter + 52 test server hijau. Sisa: mengisi `LEMBAR_UJI_T4.md` di
+perangkat fisik dan penulisan laporan.
 
 **Aturan produk:** tidak ada odds/taruhan (ilegal di Indonesia). Logo klub opsional (hak cipta klub); tampilan utama
 memakai nama, singkatan, dan warna klub.
@@ -283,37 +297,35 @@ Hosting gratis untuk uji: Render / Railway / VPS kampus; untuk demo lokal gunaka
 Android emulator mengakses laptop lewat `10.0.2.2`.
 
 ### Langkah 7 — Pengujian & Laporan
-**Unit test** (`test/`), semua logika murni sudah siap diuji tanpa emulator:
-```dart
-// test/time_utils_test.dart
-test('London BST aktif 1 Juli', () {
-  final t = TimeUtils.london(DateTime.utc(2026, 7, 1, 12));
-  expect(t.hour, 13);
-});
-test('London GMT 1 Januari', () => expect(TimeUtils.london(DateTime.utc(2026,1,1,12)).hour, 12));
-test('Sydney DST Januari = UTC+11', () => expect(TimeUtils.zoneTime(DateTime.utc(2026,1,15,0),10,'au').hour, 11));
 
-// test/blockchain_test.dart
-test('rantai valid lalu rusak jika data diubah', () {
-  var chain = [Blockchain.genesis()];
-  chain.add(Blockchain.next(chain, 'stamp', {'landmark': 'A'}, '0x1'));
-  expect(Blockchain.isValid(chain), true);
-  final b = chain[1];
-  chain[1] = Block(index: b.index, timestamp: b.timestamp, type: b.type, data: {'landmark': 'PALSU'},
-      owner: b.owner, prevHash: b.prevHash, nonce: b.nonce, hash: b.hash);
-  expect(Blockchain.isValid(chain), false);
-});
+`flutter analyze` bersih, `flutter test` **245 lulus**, dan `cd server && npm test` **52 lulus**.
 
-// test/price_parser_test.dart
-test('JPY', () => expect(PriceParser.parse('1,200', 'JPY'), 1200));
-test('EUR', () => expect(PriceParser.parse('1.234,56', 'EUR'), 1234.56));
-test('USD', () => expect(PriceParser.parse('12.50', 'USD'), 12.5));
-```
+| Berkas test | Yang dikunci |
+|---|---|
+| `test/blockchain_hash_test.dart` | hash dan proof-of-work, perubahan isi mengubah hash |
+| `test/commit_reveal_test.dart` | commit dicatat sebelum kickoff, reveal ditolak bila commit diubah, rantai server tak bisa ditimpa |
+| `test/sync_merge_test.dart` | merge dua arah tanpa duplikat, bentuk commit-only dan ter-reveal |
+| `test/sync_repository_test.dart` | 401 memicu logout, 500 memakai kalimat bawaan, respons rusak ditolak |
+| `test/notification_ids_test.dart` | id kickoff ≠ id hasil, hanya laga tim favorit, maksimal 20 |
+| `test/result_notification_test.dart` | laga lama tidak dinotifikasi ulang |
+| `test/penalty_rules_test.dart` | arah, kekuatan, kiper, skor sesi |
+| `test/lens_and_amount_test.dart` | `parseAmount` dan deteksi klub |
+| `test/time_utils_test.dart` | batas DST London/New York/Sydney + format tanggal |
+| `test/football_models_test.dart` | cuplikan respons football-data.org v4, `PlClub.isTeam` 20 klub |
+| `test/storage_tolerance_test.dart` | parsing JSON storage yang rusak tidak membuat crash |
+| `server/test/*.test.js` | JWT_SECRET wajib, rate limit 429, hash palsu 400, tidak ada tulis sebagian |
+
 Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp` berbeda).
 
 ---
 
 ## 7. Daftar Uji Manual (isi kolom "Hasil" → langsung jadi lembar evaluasi laporan)
+
+> **Tabel di bawah sudah usang.** Baris T09–T15 dan T29 masih menyebut fitur
+> perjalanan (negara, trip, itinerary, JPY) yang sudah dihapus saat migrasi ke
+> Smart Football Fan. **Lembar uji yang benar adalah `LEMBAR_UJI_T4.md`** —
+> isi kolom *Hasil aktual* dan *Bukti* di sana untuk laporan. Tabel ini
+> dipertahankan hanya sebagai contoh format.
 
 | ID | Skenario | Langkah | Hasil yang diharapkan | Hasil | ✔ |
 |---|---|---|---|---|---|
@@ -373,7 +385,8 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 6. **Implementasi**: per fitur → tujuan, potongan kode inti, penjelasan baris penting, screenshot.
    File utama: `auth_repository.dart`, `time_utils.dart`, `price_parser.dart`, `blockchain.dart`,
    `gamification_providers.dart`, `away_day_providers.dart`.
-7. **Lembar evaluasi pengujian**: tabel uji manual (bagian 7) + hasil unit test.
+7. **Lembar evaluasi pengujian**: `LEMBAR_UJI_T4.md` yang sudah terisi + hasil
+   `flutter test` (245) dan `npm test` (52).
 8. Kesimpulan & saran (cantumkan keterbatasan: blockchain lokal, OCR Latin, backend sederhana).
 9. Daftar pustaka • Lampiran (tautan repositori, tangkapan layar tambahan).
 
@@ -406,6 +419,9 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 | Notifikasi iOS tidak muncul saat aplikasi terbuka | `UNUserNotificationCenter.current().delegate` harus diset di `AppDelegate.swift` |
 | Panah kompas tidak bergerak | Emulator tidak punya magnetometer — uji di HP fisik |
 | Stamp selalu "terlalu jauh" | Wajar di luar negara tujuan; aktifkan **Mode demo** |
+| Sinkronisasi selalu gagal di HP | `BACKEND_URL` harus pakai IP LAN PC (`ipconfig`), HP dan PC satu Wi-Fi, dan `node.exe` diizinkan di Windows Firewall |
+| `Cleartext HTTP traffic not permitted` | Build rilis menolak HTTP. Jalankan `flutter run` (debug) atau pakai tunnel HTTPS untuk backend |
+| Pengingat kickoff tidak muncul padahal snackbar bilang sudah | Tanpa `FOOTBALL_API_KEY` pengingat sengaja dimatikan; pakai `--dart-define=KICKOFF_REMINDER_MINUTES=2` agar tidak perlu menunggu 30 menit |
 | `widget_test.dart` error | Hapus file itu |
 
 ---
@@ -417,7 +433,7 @@ Salin teks ini ke percakapan baru bersama zip/kode proyek:
 > Proyek Flutter "Smart Football Fan" (Liga Inggris; Riverpod, Feature-Driven Clean Architecture; lihat
 > GUIDELINE_LANJUTAN.md). Nama paket `smart_football_fan`, applicationId `com.smartfootballfan`.
 > Batch 1–7 di `DAFTAR_PERBAIKAN.md` sudah selesai: backend sinkronisasi, notifikasi, penalty, commit–reveal,
-> akun per pengguna, UI, dan kebersihan proyek. `flutter analyze` bersih, 196 test Flutter + 52 test server hijau.
-> Sisa: uji manual di perangkat fisik (T4) dan penulisan laporan.
+> akun per pengguna, UI, dan kebersihan proyek. `flutter analyze` bersih, 245 test Flutter + 52 test server hijau.
+> Sisa: mengisi `LEMBAR_UJI_T4.md` di perangkat fisik (T4) dan penulisan laporan.
 > Patuhi aturan di bagian 3 (widget tidak boleh memanggil dio/Hive langsung, autoDispose untuk stream, cek
 > `mounted` di notifier autoDispose). Tidak ada fitur betting.

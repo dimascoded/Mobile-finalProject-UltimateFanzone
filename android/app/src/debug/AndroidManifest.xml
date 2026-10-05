@@ -4,4 +4,10 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Hanya untuk build debug: server sinkronisasi lokal jalan di HTTP, sedangkan
+         Android 9+ memblokir cleartext secara default. Manifest utama dan build
+         rilis tidak punya atribut ini, jadi trafik HTTP ke backend produksi tetap
+         ditolak. Jangan dipindahkan ke src/main. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

@@ -320,7 +320,7 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
 
 ## Batch 8 — Pengujian
 
-- [ ] **T1 · Test logika yang belum ada** — P1 · M
+- [x] **T1 · Test logika yang belum ada** — P1 · M
   - `test/blockchain_test.dart`: rantai valid; data diubah/blok dihapus/hash dipalsukan terdeteksi.
   - `test/time_utils_test.dart`: batas DST London/AS/Sydney (mis. 29 Mar 2026 01:00 UTC, 25 Okt 2026 01:00 UTC).
   - `test/price_parser_test.dart`: `1,200` (JPY), `1.234,56`, `12.50`, nomor telepon diabaikan.
@@ -328,13 +328,13 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
     termasuk field kosong dan alias klub (`PlClub.isTeam` untuk 20 klub + 3 klub degradasi tidak cocok).
   - `test/notification_ids_test.dart`: `kickoffId` ≠ `resultId`; tidak ada tabrakan untuk rentang ID laga.
 
-- [ ] **T2 · Test perilaku (bukan hanya fungsi murni)** — P1 · L
+- [x] **T2 · Test perilaku (bukan hanya fungsi murni)** — P1 · L
   - Commit–reveal: reveal **ditolak** bila commit di Hive diubah tetapi blok rantai tidak (R1).
   - Sinkronisasi: hasil merge benar-benar diterapkan ke notifier (S1).
   - Notifikasi: daftar yang dijadwalkan hanya laga tim favorit dan ≤ 20 (N3); laga selesai lama tidak dinotifikasi (N2).
   - Penalty: pemetaan sensor → arah/kekuatan dengan nilai accelerometer sintetis (P1–P2).
 
-- [ ] **T3 · Test server yang mengunci perilaku benar** — P1 · M
+- [x] **T3 · Test server yang mengunci perilaku benar** — P1 · M
   - Ganti test yang mengunci perilaku keliru (blok ditimpa, salt tersimpan) dengan yang baru dari B4/B5.
   - Tambah: login tanpa `JWT_SECRET` gagal start (B1); percobaan ke-11 → 429 (B3); payload tidak valid → 400
     dan tidak ada tulis sebagian (B6); blok dengan hash palsu → 400 (B4).
@@ -342,6 +342,9 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
 - [ ] **T4 · Uji manual di perangkat fisik** — P0 · M
   - Stamp (GPS dan demo), kompas, penalty dengan sensor asli, pengingat kickoff (jadwalkan laga dalam 2 menit),
     biometrik, sinkronisasi dua perangkat/akun, SOS, mode offline (matikan internet), tema gelap.
+  - Lembar uji: **LEMBAR_UJI_T4.md** (19 baris, kolom hasil aktual dan bukti).
+  - Pending: `flutter run --dart-define=KICKOFF_REMINDER_MINUTES=2` supaya pengingat bisa
+    dibuktikan tanpa menunggu 30 menit, plus `usesCleartextTraffic` di manifest debug untuk sinkronisasi via LAN.
 
 ---
 
@@ -359,3 +362,6 @@ Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai b
 
 **Definisi selesai proyek:** `flutter analyze` bersih, `flutter test` dan `npm test` hijau, seluruh butir **P0** tercentang,
 dan checklist uji manual (T4) terisi hasilnya untuk lembar evaluasi laporan.
+
+**Status saat ini (2026-10-05):** Batch 1–7 selesai dan ter-commit; T1–T3 tercentang. T4 sudah punya lembar uji
+(`LEMBAR_UJI_T4.md`) tetapi **belum diisi** — masih butuh satu perangkat fisik, jadi T4 tetap terbuka.

@@ -20,6 +20,15 @@ class AppConfig {
   static const footballApiKey = String.fromEnvironment('FOOTBALL_API_KEY');
   static const footballBaseUrl = 'https://api.football-data.org/v4';
 
+  /// Berapa menit sebelum kickoff pengingat dikirim. Nilai produksi 30; saat
+  /// uji manual di perangkat bisa diturunkan supaya tidak perlu menunggu
+  /// setengah jam:
+  ///   flutter run --dart-define=KICKOFF_REMINDER_MINUTES=2
+  /// Perhatikan hanya nilai kecil dari 30 yang masuk akal untuk pengingat
+  /// "mulai dalam N menit" yang tampil di notifikasi.
+  static const kickoffReminderMinutes =
+      int.fromEnvironment('KICKOFF_REMINDER_MINUTES', defaultValue: 30);
+
   static const exchangeRateUrl =
       'https://api.exchangerate-api.com/v4/latest/IDR';
 }

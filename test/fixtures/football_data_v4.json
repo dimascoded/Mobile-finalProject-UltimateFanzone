@@ -1,0 +1,112 @@
+{
+  "_catatan": "Cuplikan respons football-data.org v4 (/competitions/PL/matches), dipangkas untuk unit test. Bentuk field mengikuti schema v4 yang dipakai lib/features/football/data/models.dart: id, utcDate, status, matchday, score.fullTime, homeTeam/awayTeam (name, shortName, tla), dan untuk standing playedGames/won/draw/lost/goalDifference/points.",
+  "matches": [
+    {
+      "id": 1,
+      "utcDate": "2026-08-15T14:00:00Z",
+      "status": "FINISHED",
+      "matchday": 1,
+      "score": {
+        "winner": "HOME",
+        "duration": "PT107M",
+        "fullTime": { "home": 2, "away": 1 }
+      },
+      "homeTeam": { "id": 7, "name": "Arsenal", "shortName": "Arsenal", "tla": "ARS" },
+      "awayTeam": { "id": 8, "name": "Chelsea", "shortName": "Chelsea", "tla": "CHE" }
+    },
+    {
+      "id": 2,
+      "utcDate": "2026-08-15T16:30:00Z",
+      "status": "SCHEDULED",
+      "matchday": 1,
+      "score": {
+        "winner": null,
+        "duration": "PT0M",
+        "fullTime": { "home": null, "away": null }
+      },
+      "homeTeam": { "id": 9, "name": "Manchester City FC", "shortName": "Man City", "tla": "MCI" },
+      "awayTeam": { "id": 10, "name": "Tottenham Hotspur FC", "shortName": "Tottenham", "tla": "TOT" }
+    },
+    {
+      "_catatan": "Data rusak: tidak ada utcDate. tryParse harus mengembalikan null, bukan melempar atau menebak.",
+      "id": 3,
+      "status": "SCHEDULED",
+      "homeTeam": { "id": 11, "name": "Everton", "shortName": "Everton", "tla": "EVE" },
+      "awayTeam": { "id": 12, "name": "Liverpool", "shortName": "Liverpool", "tla": "LIV" }
+    },
+    {
+      "_catatan": "Klub tanpa tla dan tanpa shortName: nama harus dipakai untuk kedua kolom, dan isTeam harus tetap bisa memetik lewat alias.",
+      "id": 4,
+      "utcDate": "2026-08-16T13:00:00Z",
+      "matchday": 2,
+      "score": { "fullTime": { "home": null, "away": null } },
+      "homeTeam": { "id": 13, "name": "Brighton & Hove Albion FC" },
+      "awayTeam": { "id": 14, "name": "Newcastle United FC" }
+    },
+    {
+      "_catatan": "LagaAliases yang tidak ada di 20 klub 2026-27, untuk memastikan isTeam tidak asal cocok.",
+      "id": 5,
+      "utcDate": "2026-08-16T15:00:00Z",
+      "status": "FINISHED",
+      "matchday": 2,
+      "score": { "fullTime": { "home": 0, "away": 0 } },
+      "homeTeam": { "id": 15, "name": "Wolverhampton Wanderers", "shortName": "Wolves", "tla": "WOL" },
+      "awayTeam": { "id": 16, "name": "West Ham United", "shortName": "West Ham", "tla": "WHU" }
+    }
+  ],
+  "standings": [
+    {
+      "position": 1,
+      "playedGames": 4,
+      "won": 4,
+      "draw": 0,
+      "lost": 0,
+      "goalDifference": 6,
+      "points": 12,
+      "team": { "id": 7, "name": "Arsenal", "shortName": "Arsenal", "tla": "ARS" }
+    },
+    {
+      "position": 2,
+      "playedGames": 4,
+      "won": 3,
+      "draw": 1,
+      "lost": 0,
+      "goalDifference": 4,
+      "points": 10,
+      "team": { "id": 9, "name": "Manchester City FC", "shortName": "Man City", "tla": "MCI" }
+    },
+    {
+      "position": 3,
+      "playedGames": 4,
+      "won": 2,
+      "draw": 1,
+      "lost": 1,
+      "goalDifference": 1,
+      "points": 7,
+      "team": { "id": 16, "name": "West Ham United", "shortName": "West Ham", "tla": "WHU" }
+    },
+    {
+      "_catatan": "Season baru: playedGames dan friends belum ada di respons, jadi parser harus memakai 0 dan tidak melempar.",
+      "position": 20,
+      "team": { "id": 19, "name": "Sunderland", "shortName": "Sunderland", "tla": "SUN" }
+    }
+  ],
+  "scorers": [
+    {
+      "player": { "id": 501, "name": "Bukayo Saka" },
+      "team": { "id": 7, "name": "Arsenal", "shortName": "Arsenal", "tla": "ARS" },
+      "goals": 5,
+      "assists": 2
+    },
+    {
+      "player": { "id": 502, "name": "Erling Haaland" },
+      "team": { "id": 9, "name": "Manchester City FC", "shortName": "Man City", "tla": "MCI" },
+      "goals": 6
+    },
+    {
+      "_catatan": "Pemain tanpa nama tim: tidak boleh menggagalkan seluruh daftar.",
+      "player": { "id": 503, "name": "Pemain Tanpa Tim" },
+      "goals": 1
+    }
+  ]
+}

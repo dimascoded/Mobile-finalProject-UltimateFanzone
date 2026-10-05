@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/app_config.dart';
 import '../../sos_emergency/data/notification_service.dart';
 import '../data/football_repository.dart';
 import '../data/models.dart';
 import 'football_providers.dart';
 
-/// Berapa menit sebelum kickoff pengingat ditampilkan.
-const kickoffReminderMinutes = 30;
+/// Berapa menit sebelum kickoff pengingat ditampilkan. Bisa diturunkan saat
+/// uji manual lewat `--dart-define=KICKOFF_REMINDER_MINUTES=2`.
+const kickoffReminderMinutes = AppConfig.kickoffReminderMinutes;
 
 /// Batas jumlah pengingat yang dijadwalkan. iOS hanya menerima 64 notifikasi
 /// terjadwal, jadi kita bertahan jauh di bawah batas itu.

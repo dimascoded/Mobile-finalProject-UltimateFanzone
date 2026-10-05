@@ -24,7 +24,33 @@ flutter run \
   --dart-define=GEMINI_API_KEY=ISI_KEY_ANDA \
   --dart-define=FOOTBALL_API_KEY=KEY_FOOTBALL_DATA
 # opsional: --dart-define=BACKEND_URL=https://backend-anda.com  (kosong = login mock)
+# opsional: --dart-define=KICKOFF_REMINDER_MINUTES=2  (hanya uji manual, produksi 30)
 ```
+
+## Uji manual di perangkat
+
+Lembar uji lengkap (19 baris, kolom hasil dan bukti) ada di
+**LEMBAR_UJI_T4.md**, termasuk cara menjalankan backend lokal dan mengambil
+alamat IP PC untuk sinkronisasi. Ringkasnya:
+
+```bash
+# terminal 1 - server sinkronisasi
+cd server && npm install && cp .env.example .env
+# isi JWT_SECRET di .env, lalu:
+node --env-file=.env index.js
+
+# terminal 2 - aplikasi (HP dan PC harus di Wi-Fi yang sama)
+ipconfig                       # ambil IPv4 Address, mis. 192.168.1.5
+flutter run \
+  --dart-define=BACKEND_URL=http://192.168.1.5:3000 \
+  --dart-define=KICKOFF_REMINDER_MINUTES=2
+```
+
+- `KICKOFF_REMINDER_MINUTES=2` hanya untuk uji, supaya pengingat kickoff bisa
+  dibuktikan dalam 2-5 menit tanpa menunggu 30 menit. Nilai produksi tetap 30.
+- HTTP ke IP lokal hanya diizinkan pada **build debug**
+  (`android/app/src/debug/AndroidManifest.xml`). Build rilis tetap menolak trafik
+  cleartext. Di iOS, HTTP diblokir ATS, jadi pakai tunnel HTTPS untuk pengujian.
 
 ## Izin Android — android/app/src/main/AndroidManifest.xml (di dalam <manifest>)
 ```xml
