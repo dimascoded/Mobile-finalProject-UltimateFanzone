@@ -31,6 +31,8 @@ Map<String, dynamic> expenseToJson(AwayDayExpense e) => {
       'title': e.title,
       'amountGbp': e.amountGbp,
       'amountIdr': e.amountIdr,
+      'currencyCode': e.currencyCode,
+      'amountForeign': e.amountForeign,
       'category': e.category.name,
       'clubKey': e.clubKey,
       'date': e.date.toIso8601String(),
@@ -84,6 +86,10 @@ AwayDayExpense expenseFromJson(Map<String, dynamic> j) => AwayDayExpense(
       title: (j['title'] ?? '').toString(),
       amountGbp: (j['amountGbp'] as num?)?.toDouble() ?? 0,
       amountIdr: (j['amountIdr'] as num?)?.toDouble() ?? 0,
+      currencyCode: j['currencyCode'] as String? ?? 'GBP',
+      amountForeign: (j['amountForeign'] as num?)?.toDouble() ??
+          (j['amountGbp'] as num?)?.toDouble() ??
+          0,
       category: AwayDayCategory.values.firstWhere(
         (c) => c.name == j['category'],
         orElse: () => AwayDayCategory.lainnya,

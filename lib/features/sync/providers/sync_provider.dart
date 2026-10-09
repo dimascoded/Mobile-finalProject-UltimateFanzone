@@ -1,6 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/hive_service.dart';
+import '../../../core/database/offline_sync_database.dart';
+import '../../../core/network/connectivity_provider.dart';
+import '../../../core/utils/app_config.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../away_day/providers/away_day_providers.dart';
 import '../../gamification/data/blockchain.dart';
@@ -70,19 +76,36 @@ class SyncNotifier extends StateNotifier<SyncState> {
     if (state.busy) return;
     state = const SyncState(busy: true);
     try {
+      final pendingRevisions = await OfflineSyncDatabase.pendingRevisions();
+      final pendingDeletions = await OfflineSyncDatabase.pendingDeletions();
       final result = await _ref.read(syncRepositoryProvider).sync(
             expenses: _ref.read(awayDayProvider),
+            deletions: pendingDeletions,
             // S1: pakai `read`, bukan `watch`, supaya tidak/langganan ulang
             // setiap build dan tidak memicu rebuild terus-menerus.
             chain: _ref.read(chainProvider).map((b) => b.toJson()).toList(),
             predictions: _ref.read(predictionsProvider),
           );
 
-      // S1: terapkan hasil merge ke Hive lewat notifier masing-masing.
-      await _ref.read(awayDayProvider.notifier).replaceAll(result.expenses);
-      await _ref
-          .read(predictionsProvider.notifier)
-          .replaceAll(result.predictions);
+      // Avoid notifying auto-sync listeners when the merged data is unchanged.
+      final localExpenses = _ref.read(awayDayProvider);
+      if (jsonEncode(localExpenses.map((e) => e.toJson()).toList()) !=
+          jsonEncode(result.expenses.map((e) => e.toJson()).toList())) {
+        await _ref.read(awayDayProvider.notifier).replaceAll(result.expenses);
+      }
+      final localPredictions = _ref.read(predictionsProvider);
+      if (jsonEncode(localPredictions.map((p) => p.toJson()).toList()) !=
+          jsonEncode(result.predictions.map((p) => p.toJson()).toList())) {
+        await _ref
+            .read(predictionsProvider.notifier)
+            .replaceAll(result.predictions);
+      }
+      if (!result.mock) {
+        await OfflineSyncDatabase.markSynced(pendingRevisions);
+        if (AppConfig.supabaseConfigured) {
+          await OfflineSyncDatabase.markDeletionsSynced(pendingDeletions);
+        }
+      }
 
       // S2: adopsi rantai server hanya bila valid, genesis sama, dan lebih
       // panjang dari rantai lokal.
@@ -91,8 +114,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
         final remote = SyncRepository.parseChain(result.remoteChain);
         final local = _ref.read(chainProvider);
         if (Blockchain.canAdoptRemote(local, remote)) {
-          await _ref.read(chainProvider.notifier).replaceAll(remote);
-          adopted = true;
+          if (jsonEncode(local.map((b) => b.toJson()).toList()) !=
+              jsonEncode(remote.map((b) => b.toJson()).toList())) {
+            await _ref.read(chainProvider.notifier).replaceAll(remote);
+            adopted = true;
+          }
         }
       }
 
@@ -132,3 +158,39 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
 final syncProvider =
     StateNotifierProvider<SyncNotifier, SyncState>((ref) => SyncNotifier(ref));
+
+final automaticSyncProvider = Provider<void>((ref) {
+  if (!AppConfig.supabaseConfigured && AppConfig.backendUrl.isEmpty) return;
+
+  Timer? debounce;
+  Timer? retry;
+  void scheduleSync() {
+    if (ref.read(onlineProvider).valueOrNull != true) return;
+    debounce?.cancel();
+    retry?.cancel();
+    debounce = Timer(const Duration(milliseconds: 900), () {
+      unawaited(ref.read(syncProvider.notifier).run());
+    });
+  }
+
+  ref.listen<AsyncValue<bool>>(onlineProvider, (previous, next) {
+    if (next.valueOrNull == true && previous?.valueOrNull != true) {
+      scheduleSync();
+    }
+  });
+  ref.listen(awayDayProvider, (_, __) => scheduleSync());
+  ref.listen(chainProvider, (_, __) => scheduleSync());
+  ref.listen(predictionsProvider, (_, __) => scheduleSync());
+  ref.listen<SyncState>(syncProvider, (_, next) {
+    if (next.error != null) {
+      retry?.cancel();
+      retry = Timer(const Duration(seconds: 30), scheduleSync);
+    } else if (next.ok) {
+      retry?.cancel();
+    }
+  });
+  ref.onDispose(() {
+    debounce?.cancel();
+    retry?.cancel();
+  });
+});

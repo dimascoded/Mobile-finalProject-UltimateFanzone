@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/permission_gate.dart';
@@ -160,6 +162,8 @@ class _Pointer extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
+          _LocationMap(position: position.requireValue, target: club),
+          const SizedBox(height: 16),
           _CompassDial(relativeBearing: relative, color: club.colorValue),
           const SizedBox(height: 20),
           Text(club.name, style: Theme.of(context).textTheme.titleLarge),
@@ -221,6 +225,154 @@ class _Pointer extends StatelessWidget {
     if (deg < 247.5) return 'Tajam ke kiri';
     if (deg < 292.5) return 'Ke kiri';
     return 'Sedikit ke kiri';
+  }
+}
+
+class _LocationMap extends StatefulWidget {
+  const _LocationMap({required this.position, required this.target});
+
+  final Position position;
+  final PlClub target;
+
+  @override
+  State<_LocationMap> createState() => _LocationMapState();
+}
+
+class _LocationMapState extends State<_LocationMap> {
+  final _mapController = MapController();
+
+  LatLng get _deviceLocation =>
+      LatLng(widget.position.latitude, widget.position.longitude);
+
+  LatLng get _stadiumLocation => LatLng(widget.target.lat, widget.target.lng);
+
+  void _showBothLocations() {
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints([_deviceLocation, _stadiumLocation]),
+        padding: const EdgeInsets.all(36),
+        maxZoom: 14,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clubColor = widget.target.colorValue;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        height: 280,
+        child: Stack(
+          children: [
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _deviceLocation,
+                initialZoom: 14,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'smart_football_fan',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _deviceLocation,
+                      width: 48,
+                      height: 48,
+                      child: const Icon(
+                        Icons.my_location,
+                        color: Colors.blue,
+                        size: 34,
+                      ),
+                    ),
+                    Marker(
+                      point: _stadiumLocation,
+                      width: 48,
+                      height: 48,
+                      child: Icon(
+                        Icons.stadium,
+                        color: clubColor,
+                        size: 36,
+                      ),
+                    ),
+                  ],
+                ),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('OpenStreetMap contributors'),
+                  ],
+                ),
+              ],
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Column(
+                children: [
+                  Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: 'Lokasi saya',
+                      onPressed: () => _mapController.move(_deviceLocation, 14),
+                      icon: const Icon(Icons.my_location),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: 'Tampilkan lokasi dan stadion',
+                      onPressed: _showBothLocations,
+                      icon: const Icon(Icons.zoom_out_map),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 10,
+              bottom: 10,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.my_location,
+                          color: Colors.blue, size: 16),
+                      const SizedBox(width: 4),
+                      const Text('Anda'),
+                      const SizedBox(width: 12),
+                      Icon(Icons.stadium, color: clubColor, size: 16),
+                      const SizedBox(width: 4),
+                      Text(widget.target.shortName),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

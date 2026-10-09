@@ -8,57 +8,80 @@ import '../../../core/database/hive_service.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../data/penalty_rules.dart';
 
-enum Phase { idle, ready, charging, resolved, finished }
+enum Phase { aiming, locked, swinging, resolved, finished }
 
-/// Jendela deteksi puncak ayunan setelah tombol "Siap" ditekan (P2).
 const swingWindow = Duration(milliseconds: 1500);
-
-/// Jeda sebelum tendangan otomatis ditebak, supaya puncak ayunan sempat
-/// tercatat.
 const peakSettleDelay = Duration(milliseconds: 350);
-
-/// Throttle status sensor agar layar tidak dibangun ulang 50x/detik (P3).
 const sensorThrottle = Duration(milliseconds: 66);
-
-/// Kunci Hive untuk menyimpan hari terakhir blok achievement dicetak (P3).
+const aimLockDelay = Duration(milliseconds: 500);
+const _sensorWatchdogDelay = Duration(seconds: 1);
+const _swingTickInterval = Duration(milliseconds: 50);
 const _mintDayKey = 'penalty_block_day';
+const _maximumFlickSpeed = 1.0;
+const _maximumFlickShake = 20.0;
 
 class PenaltyState {
   const PenaltyState({
-    this.phase = Phase.idle,
-    this.results = const [],
-    this.tiltZ = 0,
+    this.phase = Phase.aiming,
+    this.zone = KickZone.bottomMid,
+    this.lockedZone,
     this.shake = 0,
+    this.results = const [],
     this.last,
     this.score = 0,
     this.demo = false,
     this.minted = false,
+    this.suddenDeath = false,
+    this.swingSecondsLeft = 0,
   });
 
   final Phase phase;
-  final List<ShotResult> results;
-
-  /// Kemiringan HP (rad), positif = condong ke kanan. Diturunkan dari roll
-  /// accelerometer (`atan2(x, z)`), bukan laju putar gyroscope.
-  final double tiltZ;
-
-  /// Puncak ayunan (m/s^2 di atas gravitasi) pada jendela aktif.
+  final KickZone zone;
+  final KickZone? lockedZone;
   final double shake;
-  final ShotResult? last;
+  final List<KickResult> results;
+  final KickResult? last;
   final int score;
-
-  /// Sensor tidak tersedia, memakai tendangan acak.
   final bool demo;
-
-  /// Blok achievement sudah dicetak.
   final bool minted;
+  final bool suddenDeath;
+  final double swingSecondsLeft;
 
-  int get goals => results.where((r) => r.isGoal).length;
+  int get goals =>
+      results.where((result) => result.outcome == ShotOutcome.goal).length;
   int get taken => results.length;
-  int get remaining => penaltyRules.attempts - taken;
-  bool get isFinished =>
-      phase == Phase.finished || taken >= penaltyRules.attempts;
-  bool get isSwinging => phase == Phase.charging;
+  int get remaining => max(0, PenaltyRules.attempts - taken);
+  bool get isFinished => phase == Phase.finished;
+  bool get isSwinging => phase == Phase.swinging;
+
+  PenaltyState copyWith({
+    Phase? phase,
+    KickZone? zone,
+    KickZone? lockedZone,
+    bool clearLockedZone = false,
+    double? shake,
+    List<KickResult>? results,
+    KickResult? last,
+    bool clearLast = false,
+    int? score,
+    bool? demo,
+    bool? minted,
+    bool? suddenDeath,
+    double? swingSecondsLeft,
+  }) =>
+      PenaltyState(
+        phase: phase ?? this.phase,
+        zone: zone ?? this.zone,
+        lockedZone: clearLockedZone ? null : (lockedZone ?? this.lockedZone),
+        shake: shake ?? this.shake,
+        results: results ?? this.results,
+        last: clearLast ? null : (last ?? this.last),
+        score: score ?? this.score,
+        demo: demo ?? this.demo,
+        minted: minted ?? this.minted,
+        suddenDeath: suddenDeath ?? this.suddenDeath,
+        swingSecondsLeft: swingSecondsLeft ?? this.swingSecondsLeft,
+      );
 }
 
 final penaltyProvider =
@@ -73,136 +96,311 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     ).listen(
       _onAccel,
       onError: (Object _) {
-        if (mounted) state = state.copyWith(demo: true);
+        if (!mounted) return;
+        _sensorWatchdog?.cancel();
+        state = state.copyWith(demo: true);
       },
       cancelOnError: true,
     );
-
-    // P1/P3: jangan sandera mode demo pada nilai tilt. Cukup tunggu event
-    // accelerometer pertama; bila tidak pernah datang, sensor memang absen.
-    Future<void>.delayed(const Duration(seconds: 1), () {
+    _sensorWatchdog = Timer(_sensorWatchdogDelay, () {
       if (mounted && !_sensorSeen) state = state.copyWith(demo: true);
     });
   }
 
   final Ref _ref;
-  final _rnd = Random();
+  final Random _rnd = Random();
   StreamSubscription<AccelerometerEvent>? _accelSub;
 
-  /// True setelah event accelerometer pertama diterima.
-  bool _sensorSeen = false;
-
-  /// Puncak ayunan pada jendela aktif (tanpa peluruhan, P2).
-  double _peak = 0;
-
+  Timer? _sensorWatchdog;
+  Timer? _aimLockTimer;
   Timer? _peakTimer;
-  DateTime _lastEmit = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _swingTimer;
 
-  void _onAccel(AccelerometerEvent e) {
+  bool _sensorSeen = false;
+  bool _needsPitchBaseline = true;
+  bool _swingTriggered = false;
+  double? _pitchBaseline;
+  double _peak = 0;
+  KickZone? _candidateZone;
+  KickZone? _demoKickZone;
+  DateTime? _swingStartedAt;
+  DateTime _lastSensorEmit = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _onAccel(AccelerometerEvent event) {
     _sensorSeen = true;
+    _sensorWatchdog?.cancel();
     if (!mounted) return;
 
-    // Roll: sudut kemiringan kiri-kanan. HP datar -> 0, miring kanan -> positif.
-    final roll = rollFromAccel(e.x, e.z);
+    final roll = rollFromAccel(event.x, event.y, event.z);
+    final pitch = pitchFromAccel(event.y, event.z);
+    final shake = shakeFromAccel(event.x, event.y, event.z);
+    var changed = false;
+    var aimZone = state.zone;
 
-    // Magnitudo ayunan: komponen yang berubah cepat, gravitasi (~9.8) dieliminasi.
-    final m = shakeFromAccel(e.x, e.y, e.z);
-    if (state.isSwinging && m > _peak) _peak = m;
+    if (state.phase == Phase.aiming) {
+      if (_needsPitchBaseline) {
+        _pitchBaseline = pitch;
+        _needsPitchBaseline = false;
+      }
+      aimZone = zoneFromAim(
+        roll: roll,
+        pitchDelta: pitch - (_pitchBaseline ?? pitch),
+      );
+      changed = _trackAimZone(aimZone);
+    } else if (state.phase == Phase.swinging) {
+      if (shake > _peak) {
+        _peak = shake;
+        changed = true;
+      }
+      if (shake > 4 && !_swingTriggered) {
+        _swingTriggered = true;
+        _schedulePeakKick();
+      }
+    }
 
-    // P3: batasi emisi state ~15 Hz.
+    final demoChanged = state.demo;
     final now = DateTime.now();
-    if (now.difference(_lastEmit) < sensorThrottle) return;
-    _lastEmit = now;
-    state = state.copyWith(tiltZ: roll, shake: _peak, demo: false);
-
-    // P2: deteksi puncak di dalam jendela ayunan, lalu tendang otomatis.
-    if (state.isSwinging && m > penaltyRules.minShake && _peakTimer == null) {
-      _peakTimer = Timer(peakSettleDelay, () {
-        _peakTimer = null;
-        if (!mounted || !state.isSwinging) return;
-        shoot(manual: false);
-      });
+    if (now.difference(_lastSensorEmit) < sensorThrottle) return;
+    _lastSensorEmit = now;
+    if (changed || demoChanged) {
+      state = state.copyWith(
+        zone: aimZone,
+        shake: state.phase == Phase.swinging ? _peak : state.shake,
+        demo: false,
+      );
     }
   }
 
-  /// Mulai sesi baru.
-  void reset() {
-    _cancelTimers();
-    _peak = 0;
-    state = const PenaltyState(phase: Phase.ready);
+  bool _trackAimZone(KickZone zone) {
+    if (_candidateZone == zone) return false;
+    _candidateZone = zone;
+    _aimLockTimer?.cancel();
+    _aimLockTimer = Timer(aimLockDelay, () {
+      if (!mounted || state.phase != Phase.aiming || _candidateZone != zone) {
+        return;
+      }
+      _lock(zone);
+    });
+    return true;
   }
 
-  /// Siapkan tendangan: buka jendela ayunan dan tunggu puncak (P2).
-  void arm() {
-    if (state.isFinished) return;
-    _cancelTimers();
-    _peak = 0;
+  void _lock(KickZone zone) {
+    if (state.phase != Phase.aiming) return;
+    _aimLockTimer?.cancel();
+    _aimLockTimer = null;
     state = state.copyWith(
-      phase: Phase.charging,
+      phase: Phase.locked,
+      zone: zone,
+      lockedZone: zone,
       shake: 0,
-      clearLast: true,
+      swingSecondsLeft: 0,
     );
   }
 
-  /// Batalkan ayunan dan kembali ke posisi siap.
-  void cancelSwing() {
-    if (!state.isSwinging) return;
-    _cancelTimers();
-    _peak = 0;
-    state = state.copyWith(phase: Phase.ready, shake: 0, clearLast: true);
+  /// Lock the current crosshair zone when the player taps the screen.
+  void lockNow() {
+    if (state.phase != Phase.aiming) return;
+    _lock(_candidateZone ?? state.zone);
   }
 
-  /// Tendangkan bola. [manual] dipanggil dari tombol cadangan; ayunan otomatis
-  /// memakai puncak yang sudah terdeteksi.
-  Future<void> shoot({bool manual = true}) async {
-    if (state.isFinished) return;
-    // Tendangan manual tidak boleh menabrak ayunan yang sedang berjalan.
-    if (state.isSwinging && manual) return;
-    _cancelTimers();
+  /// Start the swing-detection window from a locked zone.
+  void startSwing() {
+    if (state.phase != Phase.locked || state.lockedZone == null) return;
+    _cancelSwingTimers();
+    _peak = 0;
+    _swingTriggered = false;
+    _demoKickZone = null;
+    _swingStartedAt = DateTime.now();
 
-    final double tiltZ;
-    final double shake;
     if (state.demo) {
-      final d = demoShot(_rnd);
-      tiltZ = d.tiltZ;
-      shake = d.shake;
-    } else if (manual && _peak <= penaltyRules.minShake) {
-      // Tombol cadangan tanpa ayunan: pakai kekuatan minimum yang sah.
-      tiltZ = state.tiltZ;
-      shake = penaltyRules.minShake + 0.5;
+      final shot = demoShot(_rnd);
+      _demoKickZone = zoneFromAim(
+        roll: shot.roll,
+        pitchDelta: shot.pitchDelta,
+      );
+      _peak = shot.shake;
+      _swingTriggered = true;
+      state = state.copyWith(
+        phase: Phase.swinging,
+        zone: _demoKickZone!,
+        lockedZone: _demoKickZone,
+        shake: _peak,
+        swingSecondsLeft: swingWindow.inMilliseconds / 1000,
+      );
+      _schedulePeakKick();
     } else {
-      tiltZ = state.tiltZ;
-      shake = _peak;
+      state = state.copyWith(
+        phase: Phase.swinging,
+        shake: 0,
+        swingSecondsLeft: swingWindow.inMilliseconds / 1000,
+      );
     }
-    _peak = 0;
 
-    final result = penaltyRules.evaluate(
-      tiltZ: tiltZ,
-      shake: shake,
-      keeperDive: keeperDive(_rnd),
+    _swingTimer = Timer.periodic(_swingTickInterval, (_) => _tickSwing());
+  }
+
+  void _tickSwing() {
+    if (!mounted || state.phase != Phase.swinging) {
+      _swingTimer?.cancel();
+      _swingTimer = null;
+      return;
+    }
+    final elapsed =
+        DateTime.now().difference(_swingStartedAt ?? DateTime.now());
+    final left = swingWindow - elapsed;
+    if (left <= Duration.zero) {
+      if (!_swingTriggered) {
+        cancelSwing();
+        return;
+      }
+      _swingTimer?.cancel();
+      _swingTimer = null;
+      state = state.copyWith(swingSecondsLeft: 0, shake: _peak);
+      return;
+    }
+    state = state.copyWith(
+      swingSecondsLeft: left.inMilliseconds / 1000,
+      shake: _peak,
     );
-    final results = [...state.results, result];
-    final finished = results.length >= penaltyRules.attempts;
+  }
 
+  void _schedulePeakKick() {
+    _peakTimer?.cancel();
+    _peakTimer = Timer(peakSettleDelay, () {
+      _peakTimer = null;
+      if (!mounted || state.phase != Phase.swinging) return;
+      final zone = _demoKickZone ?? state.lockedZone ?? state.zone;
+      unawaited(_kick(zone: zone, peak: _peak));
+    });
+  }
+
+  void _returnToAiming() {
+    _cancelSwingTimers();
+    _aimLockTimer?.cancel();
+    _aimLockTimer = null;
+    _needsPitchBaseline = true;
+    _pitchBaseline = null;
+    _candidateZone = null;
+    _peak = 0;
+    _swingTriggered = false;
+    _swingStartedAt = null;
+    state = state.copyWith(
+      phase: Phase.aiming,
+      clearLockedZone: true,
+      shake: 0,
+      swingSecondsLeft: 0,
+    );
+  }
+
+  /// Cancel the active swing and return to aiming without changing the session.
+  void cancelSwing() {
+    if (state.phase != Phase.swinging) return;
+    _returnToAiming();
+  }
+
+  /// Gesture fallback; `speed` is normalized from 0 (slow) to 1 (fast).
+  Future<void> flick({
+    required double dx,
+    required double dy,
+    required double speed,
+  }) async {
+    if (state.phase != Phase.aiming && state.phase != Phase.locked) return;
+    _cancelSwingTimers();
+    final zone = zoneFromAim(roll: dx, pitchDelta: dy);
+    final shake = speed.clamp(0.0, _maximumFlickSpeed) * _maximumFlickShake;
+    state = state.copyWith(
+      phase: Phase.swinging,
+      zone: zone,
+      lockedZone: zone,
+      shake: shake,
+    );
+    await _kick(zone: zone, peak: shake);
+  }
+
+  /// Continue to the next attempt. The last result is cleared only here.
+  void next() {
+    if (state.phase != Phase.resolved) return;
+    _cancelSwingTimers();
+    _needsPitchBaseline = true;
+    _pitchBaseline = null;
+    _candidateZone = null;
+    _peak = 0;
+    _swingTriggered = false;
+    _demoKickZone = null;
+    state = state.copyWith(
+      phase: Phase.aiming,
+      clearLockedZone: true,
+      clearLast: true,
+      shake: 0,
+      swingSecondsLeft: 0,
+    );
+  }
+
+  /// Start a fresh session. `last` remains visible until `next()` clears it.
+  void reset() {
+    _cancelAllTimers();
+    _needsPitchBaseline = true;
+    _pitchBaseline = null;
+    _candidateZone = null;
+    _peak = 0;
+    _swingTriggered = false;
+    _demoKickZone = null;
+    _swingStartedAt = null;
+    state = PenaltyState(
+      phase: Phase.aiming,
+      zone: KickZone.bottomMid,
+      last: state.last,
+      demo: !_sensorSeen,
+    );
+  }
+
+  Future<void> _kick({required KickZone zone, required double peak}) async {
+    if (state.phase == Phase.finished) return;
+    _cancelSwingTimers();
+    final band = bandFromShake(peak);
+    final keeperZone = chooseKeeperZone(
+      _rnd,
+      state.results.map((result) => result.zone).toList(),
+    );
+    final result = resolveKick(
+      zone: zone,
+      band: band,
+      keeperZone: keeperZone,
+    );
+    final results = List<KickResult>.unmodifiable([...state.results, result]);
+    final suddenDeath = inSuddenDeath(results, PenaltyRules.attempts);
+    final finished = results.length >= PenaltyRules.attempts && !suddenDeath;
     state = state.copyWith(
       phase: finished ? Phase.finished : Phase.resolved,
+      zone: zone,
+      lockedZone: zone,
       results: results,
       last: result,
-      shake: 0,
+      shake: peak,
       score: sessionScore(results),
+      suddenDeath: suddenDeath,
+      swingSecondsLeft: 0,
     );
-
     if (finished) await _mintAchievement();
   }
 
-  void _cancelTimers() {
+  void _cancelSwingTimers() {
     _peakTimer?.cancel();
     _peakTimer = null;
+    _swingTimer?.cancel();
+    _swingTimer = null;
+    _swingStartedAt = null;
+  }
+
+  void _cancelAllTimers() {
+    _cancelSwingTimers();
+    _aimLockTimer?.cancel();
+    _aimLockTimer = null;
+    _sensorWatchdog?.cancel();
+    _sensorWatchdog = null;
   }
 
   Future<void> _mintAchievement() async {
-    // P3: tidak ada blok achievement dari sesi tanpa gol, dan maksimal satu
-    // blok per hari agar rantai tidak tumbuh karena main berulang.
     if (state.minted || state.goals <= 0) return;
     final today = DateTime.now().toIso8601String().substring(0, 10);
     if (HiveService.cache.get(_mintDayKey) == today) {
@@ -215,55 +413,30 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     final hash = sessionHash(
       score: score,
       goals: goals,
-      attempts: penaltyRules.attempts,
+      attempts: PenaltyRules.attempts,
     );
-    // Ambil dependensi sebelum await.
     final walletFuture = _ref.read(walletAddressProvider.future);
     final chain = _ref.read(chainProvider.notifier);
     final owner = await walletFuture;
     await chain.mint(
-        'achievement',
-        {
-          'game': 'Penalty Shootout',
-          'score': score,
-          'goals': goals,
-          'attempts': penaltyRules.attempts,
-          'hash': hash,
-        },
-        owner);
+      'achievement',
+      {
+        'game': 'Penalty Shootout',
+        'score': score,
+        'goals': goals,
+        'attempts': PenaltyRules.attempts,
+        'hash': hash,
+      },
+      owner,
+    );
     await HiveService.cache.put(_mintDayKey, today);
     if (mounted) state = state.copyWith(minted: true);
   }
 
   @override
   void dispose() {
-    _cancelTimers();
+    _cancelAllTimers();
     _accelSub?.cancel();
     super.dispose();
   }
-}
-
-extension on PenaltyState {
-  PenaltyState copyWith({
-    Phase? phase,
-    List<ShotResult>? results,
-    double? tiltZ,
-    double? shake,
-    ShotResult? last,
-    bool clearLast = false,
-    int? score,
-    bool? demo,
-    bool? minted,
-  }) =>
-      PenaltyState(
-        phase: phase ?? this.phase,
-        results: results ?? this.results,
-        tiltZ: tiltZ ?? this.tiltZ,
-        shake: shake ?? this.shake,
-        // P3: `last` harus bisa dikosongkan; `??` biasa tidak bisa.
-        last: clearLast ? null : (last ?? this.last),
-        score: score ?? this.score,
-        demo: demo ?? this.demo,
-        minted: minted ?? this.minted,
-      );
 }

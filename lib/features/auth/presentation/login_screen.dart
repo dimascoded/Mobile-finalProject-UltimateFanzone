@@ -40,6 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     final loading = ref.watch(authProvider).isLoading;
+    final biometricEnabled = ref.watch(biometricEnabledProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -87,15 +88,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       : const Text('Masuk'),
                 ),
               ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: loading
-                    ? null
-                    : () =>
-                        ref.read(authProvider.notifier).loginWithBiometric(),
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('Masuk dengan Biometrik'),
-              ),
+              if (biometricEnabled) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: loading
+                      ? null
+                      : () =>
+                          ref.read(authProvider.notifier).loginWithBiometric(),
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text('Masuk dengan Biometrik'),
+                ),
+              ],
               const SizedBox(height: 4),
               // U1: tanpa ini tidak ada cara membuat akun dari aplikasi.
               TextButton(

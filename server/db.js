@@ -39,6 +39,21 @@ db.exec('PRAGMA foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+const expenseColumns = new Set(
+  db.prepare('PRAGMA table_info(expenses)').all().map((column) => column.name)
+);
+if (!expenseColumns.has('currency_code')) {
+  db.exec("ALTER TABLE expenses ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'GBP'");
+}
+if (!expenseColumns.has('amount_foreign')) {
+  db.exec('ALTER TABLE expenses ADD COLUMN amount_foreign REAL NOT NULL DEFAULT 0');
+}
+db.exec(`
+  UPDATE expenses
+  SET amount_foreign = amount_gbp
+  WHERE currency_code = 'GBP' AND amount_foreign = 0 AND amount_gbp > 0
+`);
+
 db.driverName = driverName;
 
 module.exports = db;

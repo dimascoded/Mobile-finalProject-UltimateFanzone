@@ -134,25 +134,25 @@ void main() {
 
   group('P1: arah dari roll accelerometer', () {
     test('HP datar menghasilkan roll 0', () {
-      expect(rollFromAccel(0, 9.81), closeTo(0, 1e-9));
+      expect(rollFromAccel(0, 0, 9.81), closeTo(0, 1e-9));
     });
 
     test('miring ke kanan positif, ke kiri negatif', () {
-      expect(rollFromAccel(4.9, 8.5), greaterThan(0));
-      expect(rollFromAccel(-4.9, 8.5), lessThan(0));
+      expect(rollFromAccel(4.9, 0, 8.5), greaterThan(0));
+      expect(rollFromAccel(-4.9, 0, 8.5), lessThan(0));
     });
 
-    test('roll menentukan hasil tendangan', () {
-      final onTarget = penaltyRules.evaluate(
-          tiltZ: rollFromAccel(1.0, 9.8),
-          shake: penaltyRules.maxShake,
-          keeperDive: 1.0);
-      final wide = penaltyRules.evaluate(
-          tiltZ: rollFromAccel(8.0, 3.0),
-          shake: penaltyRules.maxShake,
-          keeperDive: 1.0);
-      expect(onTarget.outcome, isNot(ShotOutcome.wide));
-      expect(wide.outcome, ShotOutcome.wide);
+    test('roll menentukan kolom zona tendangan', () {
+      final nearCenter = zoneFromAim(
+        roll: rollFromAccel(1.0, 0, 9.8),
+        pitchDelta: 0,
+      );
+      final farRight = zoneFromAim(
+        roll: rollFromAccel(8.0, 0, 3.0),
+        pitchDelta: 0,
+      );
+      expect(nearCenter, KickZone.bottomMid);
+      expect(farRight, KickZone.bottomRight);
     });
 
     test('shake dari accelerometer mendeteksi ayunan, bukan gravitasi', () {
@@ -164,12 +164,11 @@ void main() {
   });
 
   group('P2: kekuatan ayunan tidak selalu nol', () {
-    test('ayunan ringan di atas minShake menghasilkan power > 0', () {
+    test('ayunan ringan di atas ambang minimum masuk band weak', () {
       // Ayunan samping modest: komponen x besar, gravitasi masih di z.
       final light = shakeFromAccel(14.0, 0, 9.81);
-      final s = penaltyRules.evaluate(tiltZ: 0, shake: light, keeperDive: 1.0);
-      expect(light, greaterThan(penaltyRules.minShake));
-      expect(s.outcome, isNot(ShotOutcome.tooWeak));
+      expect(light, greaterThan(weakPowerThreshold));
+      expect(bandFromShake(light), PowerBand.weak);
     });
 
     test('ayunan tidak peluruh: puncak kedua tetap dipakai', () {

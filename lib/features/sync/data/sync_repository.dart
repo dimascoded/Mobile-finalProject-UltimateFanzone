@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 import '../../../core/network/dio_client.dart';
 import '../../../core/utils/app_config.dart';
@@ -85,8 +86,17 @@ class SyncRepository {
     required List<AwayDayExpense> expenses,
     required List<Map<String, dynamic>> chain,
     required List<Prediction> predictions,
+    List<({String collection, String itemId})> deletions = const [],
     Map<String, dynamic>? feedback,
   }) async {
+    if (AppConfig.supabaseConfigured) {
+      return _syncSupabase(
+        expenses: expenses,
+        chain: chain,
+        predictions: predictions,
+        deletions: deletions,
+      );
+    }
     if (isMock) {
       await Future<void>.delayed(const Duration(milliseconds: 700));
       // Kembalikan daftar lokal apa adanya: mode mock tidak boleh menyentuh
@@ -148,6 +158,213 @@ class SyncRepository {
       predictions: mergedPredictions,
       remoteChain: remoteChain,
     );
+  }
+
+  Future<SyncResult> _syncSupabase({
+    required List<AwayDayExpense> expenses,
+    required List<Map<String, dynamic>> chain,
+    required List<Prediction> predictions,
+    required List<({String collection, String itemId})> deletions,
+  }) async {
+    final client = supa.Supabase.instance.client;
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) {
+      throw SyncException('Masuk ke akun Supabase sebelum sinkronisasi.');
+    }
+
+    if (deletions.isNotEmpty) {
+      await client.from('sync_tombstones').upsert(
+        [
+          for (final deletion in deletions)
+            {
+              'user_id': userId,
+              'collection': deletion.collection,
+              'item_id': deletion.itemId,
+            },
+        ],
+        onConflict: 'user_id,collection,item_id',
+        ignoreDuplicates: true,
+      );
+    }
+    final remoteTombstones = await _selectAll(
+      client,
+      'sync_tombstones',
+      userId,
+    );
+    final deletedExpenseIds = remoteTombstones
+        .where((row) => row['collection'] == 'away_day_expenses')
+        .map((row) => row['item_id'] as String)
+        .toSet();
+    if (deletedExpenseIds.isNotEmpty) {
+      await client
+          .from('away_day_expenses')
+          .delete()
+          .eq('user_id', userId)
+          .inFilter('id', deletedExpenseIds.toList());
+    }
+
+    final remoteExpenseRows =
+        await _selectAll(client, 'away_day_expenses', userId);
+    final normalizedRemoteExpenses = <Map<String, dynamic>>[
+      for (final row in remoteExpenseRows)
+        if (!deletedExpenseIds.contains(row['id']))
+          {
+            'id': row['id'],
+            'title': row['title'],
+            'amountGbp': row['amount_gbp'],
+            'amountIdr': row['amount_idr'],
+            'currencyCode': row['currency_code'] ?? 'GBP',
+            'amountForeign': row['amount_foreign'] ?? row['amount_gbp'],
+            'category': row['category'],
+            'clubKey': row['club_key'],
+            'date': row['created_at'],
+          },
+    ];
+    final activeExpenses =
+        expenses.where((e) => !deletedExpenseIds.contains(e.id)).toList();
+    final mergedExpenses =
+        mergeExpenses(activeExpenses, normalizedRemoteExpenses);
+    if (mergedExpenses.isNotEmpty) {
+      await client.from('away_day_expenses').upsert(
+        [
+          for (final expense in mergedExpenses)
+            {
+              'user_id': userId,
+              'id': expense.id,
+              'title': expense.title,
+              'amount_gbp': expense.amountGbp,
+              'amount_idr': expense.amountIdr,
+              'currency_code': expense.currencyCode,
+              'amount_foreign': expense.amountForeign,
+              'category': expense.category.name,
+              'club_key': expense.clubKey,
+              'created_at': expense.date.toIso8601String(),
+            },
+        ],
+        onConflict: 'user_id,id',
+      );
+    }
+
+    final remotePredictionRows =
+        await _selectAll(client, 'score_predictions', userId);
+    final normalizedRemotePredictions = <Map<String, dynamic>>[
+      for (final row in remotePredictionRows)
+        {
+          'matchId': row['match_id'],
+          'homeScore': row['home_score'],
+          'awayScore': row['away_score'],
+          'salt': row['salt'],
+          'commit': row['commit_hash'],
+          'createdAt': row['created_at'],
+        },
+    ];
+    final mergedPredictions =
+        mergePredictions(predictions, normalizedRemotePredictions);
+    final predictionRows = predictionsToSync(mergedPredictions, chain);
+    final commitRows = <Map<String, dynamic>>[];
+    final revealedRows = <Map<String, dynamic>>[];
+    for (final prediction in predictionRows) {
+      final row = <String, dynamic>{
+        'user_id': userId,
+        'match_id': prediction['matchId'],
+        'commit_hash': prediction['commit'],
+        'created_at': prediction['createdAt'],
+      };
+      if (prediction.containsKey('salt')) {
+        row.addAll({
+          'home_score': prediction['homeScore'],
+          'away_score': prediction['awayScore'],
+          'salt': prediction['salt'],
+        });
+        revealedRows.add(row);
+      } else {
+        commitRows.add(row);
+      }
+    }
+    if (commitRows.isNotEmpty) {
+      await client.from('score_predictions').upsert(
+            commitRows,
+            onConflict: 'user_id,match_id',
+            ignoreDuplicates: true,
+          );
+    }
+    if (revealedRows.isNotEmpty) {
+      await client.from('score_predictions').upsert(
+            revealedRows,
+            onConflict: 'user_id,match_id',
+          );
+    }
+
+    final blocks = chain.map(Block.fromJson).toList();
+    if (!Blockchain.isValid(blocks)) {
+      throw SyncException('Rantai lokal tidak valid dan tidak dikirim.');
+    }
+    final remoteChainRows = await _selectAll(
+      client,
+      'passport_chain_blocks',
+      userId,
+      orderBy: 'idx',
+    );
+    final localBlocksByIndex = {
+      for (final block in chain) (block['index'] as num).toInt(): block,
+    };
+    for (final remote in remoteChainRows) {
+      final local = localBlocksByIndex[remote['idx'] as int];
+      if (local != null && local['hash'] != remote['hash']) {
+        throw SyncException(
+          'Blok paspor #${remote['idx']} berbeda dari salinan cloud.',
+        );
+      }
+    }
+    if (chain.isNotEmpty) {
+      await client.from('passport_chain_blocks').upsert(
+        [
+          for (final block in chain)
+            {
+              'user_id': userId,
+              'idx': block['index'],
+              'timestamp': block['timestamp'],
+              'type': block['type'],
+              'data': block['data'],
+              'owner': block['owner'],
+              'prev_hash': block['prevHash'],
+              'nonce': block['nonce'],
+              'hash': block['hash'],
+            },
+        ],
+        onConflict: 'user_id,idx',
+        ignoreDuplicates: true,
+      );
+    }
+
+    return SyncResult(
+      pushedExpenses: mergedExpenses.length,
+      pushedChain: chain.length,
+      pushedPredictions: predictionRows.length,
+      mergedExpenses: mergedExpenses.length,
+      mergedPredictions: mergedPredictions.length,
+      expenses: mergedExpenses,
+      predictions: mergedPredictions,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _selectAll(
+    supa.SupabaseClient client,
+    String table,
+    String userId, {
+    String? orderBy,
+  }) async {
+    const pageSize = 500;
+    final rows = <Map<String, dynamic>>[];
+    var start = 0;
+    while (true) {
+      dynamic query = client.from(table).select().eq('user_id', userId);
+      if (orderBy != null) query = query.order(orderBy);
+      final page = await query.range(start, start + pageSize - 1);
+      rows.addAll((page as List).cast<Map<String, dynamic>>());
+      if (page.length < pageSize) return rows;
+      start += pageSize;
+    }
   }
 
   /// Jalankan request dan ubah kegagalan jadi [SyncException] yang informatif

@@ -1,28 +1,41 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/offline_sync_database.dart';
 import '../../../core/network/rates_provider.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
 
-/// Mata uang utama Away Day: poundsterling (tiket & menginap di Inggris).
-const awayDayCurrency = 'GBP';
+const awayDayCurrencies = ['GBP', 'USD', 'EUR', 'IDR'];
 
-/// exchangerate-api.com v4 dipanggil dengan `latest/IDR`, jadi `rates['GBP']`
-/// berarti "GBP per 1 Rupiah". Maka GBP -> IDR itu MEMBAGI, bukan mengali.
-/// Fungsi murni agar mudah diuji (test/away_day_money_test.dart).
-double? gbpToIdr(double gbp, Map<String, double>? rates) {
-  final perIdr = rates?[awayDayCurrency];
-  if (perIdr == null || perIdr == 0) return null;
-  return gbp / perIdr;
+/// Rates API memakai IDR sebagai basis: `rates[code]` adalah unit asing per IDR.
+double? foreignToIdr(
+  double amount,
+  String currency,
+  Map<String, double>? rates,
+) {
+  if (currency == 'IDR') return amount;
+  final rate = rates?[currency];
+  if (rate == null || rate == 0) return null;
+  return amount / rate;
 }
 
-/// Kebalikan dari [gbpToIdr]: Rupiah -> pound, untuk input convert.
-double? idrToGbp(double idr, Map<String, double>? rates) {
-  final perIdr = rates?[awayDayCurrency];
-  if (perIdr == null || perIdr == 0) return null;
-  return idr * perIdr;
+double? idrToForeign(
+  double idr,
+  String currency,
+  Map<String, double>? rates,
+) {
+  if (currency == 'IDR') return idr;
+  final rate = rates?[currency];
+  if (rate == null) return null;
+  return idr * rate;
 }
+
+double? gbpToIdr(double gbp, Map<String, double>? rates) =>
+    foreignToIdr(gbp, 'GBP', rates);
+
+double? idrToGbp(double idr, Map<String, double>? rates) =>
+    idrToForeign(idr, 'GBP', rates);
 
 // ---------- Pengeluaran ----------
 
@@ -36,6 +49,8 @@ class AwayDayNotifier extends StateNotifier<List<AwayDayExpense>> {
     required double amountGbp,
     required double amountIdr,
     required AwayDayCategory category,
+    String currencyCode = 'GBP',
+    double? amountForeign,
     String? clubKey,
   }) async {
     state = [
@@ -43,6 +58,8 @@ class AwayDayNotifier extends StateNotifier<List<AwayDayExpense>> {
         title: title,
         amountGbp: amountGbp,
         amountIdr: amountIdr,
+        currencyCode: currencyCode,
+        amountForeign: amountForeign,
         category: category,
         date: DateTime.now(),
         clubKey: clubKey,
@@ -54,6 +71,7 @@ class AwayDayNotifier extends StateNotifier<List<AwayDayExpense>> {
 
   Future<void> remove(String id) async {
     state = state.where((e) => e.id != id).toList();
+    await OfflineSyncDatabase.queueDeletion('away_day_expenses', id);
     await _repo.save(state);
   }
 
@@ -139,6 +157,12 @@ final awayDayBudgetProvider = StateNotifierProvider<BudgetNotifier, double>(
 
 // ---------- Jam dunia (rubrik: WIB / WITA / WIT / London) ----------
 
+final awayDayClockZoneProvider =
+    StateProvider.autoDispose<String>((ref) => 'WIB');
+
+final awayDayClockCityProvider =
+    StateProvider.autoDispose<String?>((ref) => null);
+
 /// Semua klub Premier League basing di Inggris, jadi zona yang relevan adalah
 /// WIB, WITA, WIT, dan London (Europe/London, DST ikut dihitung oleh TimeUtils).
 final worldClockProvider =
@@ -155,7 +179,7 @@ final worldClockProvider =
   }
 });
 
-/// Kurs GBP per 1 Rupiah (null saat offline dan tidak ada cache).
+/// Kurs GBP per 1 Rupiah untuk ringkasan (null bila belum pernah ada cache).
 final gbpRateProvider = Provider<double?>((ref) {
   final snap = ref.watch(ratesProvider).valueOrNull;
   return snap?.gbpPerIdr;

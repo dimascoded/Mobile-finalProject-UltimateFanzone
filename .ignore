@@ -1,0 +1,9 @@
+# Dihormati ripgrep (termasuk tool Dart MCP rip_grep_packages) agar tidak
+# menelusuri direktori generated / dependency saat grep di dalam repo.
+build/
+.dart_tool/
+android/.gradle/
+server/node_modules/
+**/ephemeral/
+*.apk
+*.aab

@@ -3,11 +3,19 @@ import 'package:smart_football_fan/features/away_day/data/away_day_repository.da
 import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
 import 'package:smart_football_fan/features/sync/data/sync_models.dart';
 
-AwayDayExpense expense(String title, {double gbp = 10, DateTime? at}) =>
+AwayDayExpense expense(
+  String title, {
+  double gbp = 10,
+  String currencyCode = 'GBP',
+  double? amountForeign,
+  DateTime? at,
+}) =>
     AwayDayExpense(
       title: title,
       amountGbp: gbp,
       amountIdr: gbp * 20000,
+      currencyCode: currencyCode,
+      amountForeign: amountForeign ?? gbp,
       category: AwayDayCategory.tiket,
       date: at ?? DateTime.utc(2026, 8, 15, 14),
     );
@@ -34,7 +42,22 @@ void main() {
       final j = expenseToJson(expense('Tiket', gbp: 45));
       expect(j['amountGbp'], 45.0);
       expect(j['amountIdr'], 900000.0);
+      expect(j['currencyCode'], 'GBP');
+      expect(j['amountForeign'], 45.0);
       expect(j['category'], 'tiket');
+    });
+
+    test('mata uang dan nominal asal USD/EUR tidak hilang di payload', () {
+      final usd = expenseToJson(
+        expense('Tiket', gbp: 40, currencyCode: 'USD', amountForeign: 25),
+      );
+      final eur = expenseToJson(
+        expense('Hotel', gbp: 50, currencyCode: 'EUR', amountForeign: 30),
+      );
+      expect(usd['currencyCode'], 'USD');
+      expect(usd['amountForeign'], 25);
+      expect(eur['currencyCode'], 'EUR');
+      expect(eur['amountForeign'], 30);
     });
 
     test('round trip json tidak mengubah data', () {
@@ -42,8 +65,22 @@ void main() {
       final kembali = expenseFromJson(expenseToJson(asli));
       expect(kembali.title, 'Hotel');
       expect(kembali.amountGbp, 120.0);
+      expect(kembali.currencyCode, 'GBP');
+      expect(kembali.amountForeign, 120.0);
       expect(kembali.category, AwayDayCategory.tiket);
       expect(kembali.id, asli.id);
+    });
+
+    test('record lama tanpa kolom mata uang tetap dianggap GBP', () {
+      final legacy = AwayDayExpense.fromJson({
+        'title': 'Tiket lama',
+        'amountGbp': 25,
+        'amountIdr': 500000,
+        'category': 'tiket',
+        'date': '2026-08-15T14:00:00Z',
+      });
+      expect(legacy.currencyCode, 'GBP');
+      expect(legacy.amountForeign, 25);
     });
 
     test('kategori tidak dikenal jatuh ke lainnya', () {

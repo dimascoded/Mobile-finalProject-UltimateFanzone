@@ -3,6 +3,13 @@
 class AppConfig {
   static const geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
+  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static bool get supabaseConfigured =>
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+  static bool get hasPartialSupabaseConfig =>
+      supabaseUrl.isEmpty != supabaseAnonKey.isEmpty;
+
   /// Model Gemini. Default `gemini-3.8-flash` (GA, mulai 2026-09-02).
   ///
   /// Catatan: seluruh keluarga gemini-1.x dan gemini-2.5* sudah retired/deprecated

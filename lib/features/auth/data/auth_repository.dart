@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 import '../../../core/network/dio_client.dart';
 import '../../../core/utils/app_config.dart';
 import '../../../core/utils/crypto_utils.dart';
@@ -89,6 +90,8 @@ class AuthRepository {
   final String _baseUrl;
   final bool _allowMock;
 
+  bool get _usesSupabase => AppConfig.supabaseConfigured;
+
   /// U3: mode mock hanya untuk pengembangan. Di build rilis, login dan
   /// registrasi tanpa `BACKEND_URL` ditolak supaya tidak ada akun palsu yang
   /// berhasil masuk dan menyimpan data lokal yang tidak pernah sampai server.
@@ -109,6 +112,19 @@ class AuthRepository {
     final mail = email.trim();
     if (mail.isEmpty || password.isEmpty) {
       throw AuthException('Email dan password wajib diisi.');
+    }
+    if (_usesSupabase) {
+      try {
+        await supa.Supabase.instance.client.auth.signInWithPassword(
+          email: mail,
+          password: password,
+        );
+        return;
+      } on supa.AuthException catch (e) {
+        throw AuthException(e.message);
+      } catch (e) {
+        throw AuthException(describeAuthError(e));
+      }
     }
     ensureMockAllowed('Masuk');
 
@@ -144,6 +160,26 @@ class AuthRepository {
     }
     if (password.length < 8) {
       throw AuthException('Password minimal 8 karakter.');
+    }
+    if (_usesSupabase) {
+      try {
+        final response = await supa.Supabase.instance.client.auth.signUp(
+          email: mail,
+          password: password,
+        );
+        if (response.session == null) {
+          throw AuthException(
+            'Akun dibuat. Verifikasi email terlebih dahulu, lalu masuk.',
+          );
+        }
+        return;
+      } on supa.AuthException catch (e) {
+        throw AuthException(e.message);
+      } on AuthException {
+        rethrow;
+      } catch (e) {
+        throw AuthException(describeAuthError(e));
+      }
     }
     ensureMockAllowed('Daftar');
 
@@ -193,6 +229,10 @@ class AuthRepository {
 
   /// Sesi valid = token ada DAN belum kedaluwarsa. Sesi kedaluwarsa dihapus.
   Future<bool> hasSession() async {
+    if (_usesSupabase) {
+      final session = supa.Supabase.instance.client.auth.currentSession;
+      return session != null && !session.isExpired;
+    }
     final token = await _storage.read(key: _tokenKey);
     final stored = int.tryParse(await _storage.read(key: _expiryKey) ?? '');
     if (token == null) return false;
@@ -213,10 +253,20 @@ class AuthRepository {
       await _localAuth.isDeviceSupported() &&
       await _localAuth.canCheckBiometrics;
 
-  Future<String?> userEmail() => _storage.read(key: _emailKey);
+  Future<String?> userEmail() async {
+    if (_usesSupabase) {
+      return supa.Supabase.instance.client.auth.currentUser?.email;
+    }
+    return _storage.read(key: _emailKey);
+  }
 
   /// Token JWT untuk endpoint yang butuh Authorization header.
-  Future<String?> currentToken() => _storage.read(key: _tokenKey);
+  Future<String?> currentToken() async {
+    if (_usesSupabase) {
+      return supa.Supabase.instance.client.auth.currentSession?.accessToken;
+    }
+    return _storage.read(key: _tokenKey);
+  }
 
   /// Biometrik hanya valid jika sudah pernah login (token tersimpan).
   Future<bool> authenticateBiometric() async {
@@ -239,6 +289,13 @@ class AuthRepository {
   /// memakai dompet milik akun lama. Data pengguna di Hive dihapus oleh
   /// pemanggil lewat `clearUserData()`.
   Future<void> logout() async {
+    if (_usesSupabase) {
+      try {
+        await supa.Supabase.instance.client.auth.signOut();
+      } catch (_) {
+        // Supabase menghapus session lokal sebelum mencoba mencabutnya di server.
+      }
+    }
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _expiryKey);
     await _storage.delete(key: _emailKey);

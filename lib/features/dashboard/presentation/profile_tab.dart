@@ -2,13 +2,44 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../auth/presentation/login_screen.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../football/presentation/team_picker_screen.dart';
+import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../../sync/providers/sync_provider.dart';
 import '../providers/dashboard_provider.dart';
+import 'feedback_screen.dart';
 
 class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluar?'),
+        content: const Text('Sesi akan dihapus dari perangkat ini.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(logoutProvider)();
+    if (!context.mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
 
   Future<void> _choosePhoto(BuildContext context, WidgetRef ref) async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -59,30 +90,125 @@ class ProfileTab extends ConsumerWidget {
     final valid = ref.watch(chainValidProvider);
     final sync = ref.watch(syncProvider);
     final lastSync = ref.watch(lastSyncedAtProvider);
+    final favoriteClub = ref.watch(favoriteClubProvider);
+    final biometricEnabled = ref.watch(biometricEnabledProvider);
     final achievements = chain.where((b) => b.type == 'achievement').length;
+    final displayName = email.valueOrNull
+            ?.split('@')
+            .first
+            .replaceAll(RegExp(r'[._-]+'), ' ')
+            .trim() ??
+        '';
 
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Center(
-        child: GestureDetector(
-          onTap: () => _choosePhoto(context, ref),
-          child: Semantics(
-            button: true,
-            label: 'Ganti foto profil',
-            child: Stack(alignment: Alignment.bottomRight, children: [
-              // UI8: checks file existence once, not on every build.
-              _ProfileAvatar(path: photo),
-              const CircleAvatar(radius: 16, child: Icon(Icons.edit, size: 16)),
-            ]),
+      Card(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => _choosePhoto(context, ref),
+                    child: Semantics(
+                      button: true,
+                      label: 'Ganti foto profil',
+                      child: Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          _ProfileAvatar(path: photo),
+                          const CircleAvatar(
+                            radius: 16,
+                            child: Icon(Icons.edit, size: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName.isEmpty ? 'Profil saya' : displayName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        email.when(
+                          data: (value) => Text(
+                            value ?? '-',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          loading: () => const LinearProgressIndicator(),
+                          error: (e, _) => Text('Gagal memuat: $e'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const TeamPickerScreen(),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: favoriteClub?.colorValue ??
+                            Theme.of(context).colorScheme.surface,
+                        child: Icon(
+                          Icons.shield_outlined,
+                          color: favoriteClub == null ? null : Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Klub favorit',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                            Text(
+                              favoriteClub?.name ?? 'Pilih klub favorit',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            if (favoriteClub != null)
+                              Text(
+                                '${favoriteClub.stadium} • ${favoriteClub.city}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ),
-      const SizedBox(height: 12),
-      Center(
-        child: email.when(
-          data: (e) =>
-              Text(e ?? '-', style: Theme.of(context).textTheme.titleMedium),
-          loading: () => const CircularProgressIndicator(),
-          error: (e, _) => Text('Gagal memuat: $e'),
         ),
       ),
       const SizedBox(height: 16),
@@ -123,6 +249,29 @@ class ProfileTab extends ConsumerWidget {
           ),
         ),
       ),
+      Card(
+        child: SwitchListTile.adaptive(
+          secondary: const Icon(Icons.fingerprint),
+          title: const Text('Biometrik'),
+          subtitle: const Text(
+              'Gunakan sidik jari atau Face ID saat membuka aplikasi'),
+          value: biometricEnabled,
+          onChanged: (enabled) =>
+              ref.read(biometricEnabledProvider.notifier).setEnabled(enabled),
+        ),
+      ),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.menu_book_outlined),
+          title: const Text('Kesan & Pesan'),
+          subtitle: const Text('Mata Kuliah Pemrograman Aplikasi Mobile'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FeedbackScreen()),
+          ),
+        ),
+      ),
       const SizedBox(height: 8),
       Text('Stamp', style: Theme.of(context).textTheme.titleMedium),
       if (stamps.isEmpty)
@@ -138,6 +287,17 @@ class ProfileTab extends ConsumerWidget {
           subtitle: Text(
               'Blok #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
         ),
+      Card(
+        child: ListTile(
+          leading: Icon(
+            Icons.logout,
+            color: Theme.of(context).colorScheme.error,
+          ),
+          title: const Text('Keluar'),
+          subtitle: const Text('Hapus sesi dari perangkat ini'),
+          onTap: () => _logout(context, ref),
+        ),
+      ),
     ]);
   }
 }

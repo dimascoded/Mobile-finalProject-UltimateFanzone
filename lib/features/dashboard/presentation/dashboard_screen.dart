@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/widgets/offline_banner.dart';
-import '../../auth/presentation/login_screen.dart';
 import '../../sos_emergency/presentation/sos_actions.dart';
 import '../../sos_emergency/presentation/sos_hold_button.dart';
 import '../../sos_emergency/providers/shake_provider.dart';
 import '../../sos_emergency/providers/sos_provider.dart';
+import '../../sync/providers/sync_provider.dart';
 import '../providers/dashboard_provider.dart';
-import 'feedback_tab.dart';
 import 'home_tab.dart';
 import 'profile_tab.dart';
 
@@ -17,22 +16,25 @@ class DashboardScreen extends ConsumerWidget {
 
   static const _pages = <Widget>[
     HomeTab(),
+    FeatureMenuTab(section: FeatureSection.matches),
+    FeatureMenuTab(section: FeatureSection.activities),
+    FeatureMenuTab(section: FeatureSection.tools),
     ProfileTab(),
-    FeedbackTab(),
-    SizedBox.shrink(), // slot Logout (aksi, bukan halaman)
   ];
 
   static const _titles = <String>[
     'Smart Football Fan',
+    'Pertandingan',
+    'Seru-seruan',
+    'Alat Bantu',
     'Profil',
-    'Saran & Kesan',
-    '',
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(tabIndexProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    ref.watch(automaticSyncProvider);
 
     // Goyang HP 2x -> dialog konfirmasi SOS.
     ref.listen<AsyncValue<DateTime>>(shakeProvider, (prev, next) {
@@ -68,9 +70,6 @@ class DashboardScreen extends ConsumerWidget {
       ),
       body: Column(children: [
         const OfflineBanner(),
-        // UI2: IndexedStack menyimpan semua tab di tree yang sama. Dengan
-        // `_pages[index]` saja, pindah tab membuang state sehingga isian Saran
-        // dan Kesan yang diketik hilang begitu user berpindah tab.
         Expanded(
           child: IndexedStack(index: index, children: _pages),
         ),
@@ -79,40 +78,37 @@ class DashboardScreen extends ConsumerWidget {
         size: 64,
         onTriggered: () => ref.read(sosProvider.notifier).trigger(),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: index,
-        type: BottomNavigationBarType.fixed,
-        onTap: (i) async {
-          if (i == 3) {
-            final ok = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Keluar?'),
-                content: const Text('Sesi akan dihapus dari perangkat ini.'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Batal')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Keluar')),
-                ],
-              ),
-            );
-            if (ok != true) return;
-            await ref.read(logoutProvider)();
-            if (!context.mounted) return;
-            Navigator.pushReplacement(context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()));
-            return;
-          }
-          ref.read(tabIndexProvider.notifier).state = i;
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
-          BottomNavigationBarItem(icon: Icon(Icons.feedback), label: 'Saran'),
-          BottomNavigationBarItem(icon: Icon(Icons.logout), label: 'Logout'),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: index,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (i) =>
+            ref.read(tabIndexProvider.notifier).state = i,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_soccer_outlined),
+            selectedIcon: Icon(Icons.sports_soccer),
+            label: 'Laga',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_esports_outlined),
+            selectedIcon: Icon(Icons.sports_esports),
+            label: 'Seru',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.widgets_outlined),
+            selectedIcon: Icon(Icons.widgets),
+            label: 'Alat',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
         ],
       ),
     );

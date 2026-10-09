@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/hive_service.dart';
+import '../../../core/database/offline_sync_database.dart';
 import 'blockchain.dart';
 
 class ChainRepository {
@@ -31,8 +32,10 @@ class ChainRepository {
     return out.isEmpty ? [Blockchain.genesis()] : out;
   }
 
-  Future<void> save(List<Block> chain) => HiveService.cache
-      .put(_key, jsonEncode(chain.map((b) => b.toJson()).toList()));
+  Future<void> save(List<Block> chain) => OfflineSyncDatabase.persist(
+        _key,
+        jsonEncode(chain.map((b) => b.toJson()).toList()),
+      );
 }
 
 final chainRepositoryProvider = Provider((ref) => ChainRepository());

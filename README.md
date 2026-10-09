@@ -2,18 +2,19 @@
 
 Panduan lengkap ada di **GUIDELINE_LANJUTAN.md**.
 
-| Item | Nilai |
-|---|---|
-| Nama paket Dart | `smart_football_fan` |
-| Label aplikasi | Smart Football Fan |
+| Item                                | Nilai                  |
+| ----------------------------------- | ---------------------- |
+| Nama paket Dart                     | `smart_football_fan`   |
+| Label aplikasi                      | Smart Football Fan     |
 | `applicationId` / namespace Android | `com.smartfootballfan` |
-| Bundle ID iOS | `com.smartfootballfan` |
+| Bundle ID iOS                       | `com.smartfootballfan` |
 
 > Folder repositori masih bernama `smart_global_traveler` (nama lama tidak diubah
 > supaya riwayat Git tetap terhubung). Nama paket dan ID di dalam proyek sudah
 > memakai `smart_football_fan` / `com.smartfootballfan`.
 
 ## Setup
+
 ```bash
 cd smart_global_traveler
 # Proyek sudah lengkap; perintah di bawah hanya bila perlu meregenerasi
@@ -23,7 +24,9 @@ flutter analyze
 flutter run \
   --dart-define=GEMINI_API_KEY=ISI_KEY_ANDA \
   --dart-define=FOOTBALL_API_KEY=KEY_FOOTBALL_DATA
-# opsional: --dart-define=BACKEND_URL=https://backend-anda.com  (kosong = login mock)
+# opsional untuk Supabase: --dart-define=SUPABASE_URL=https://PROJECT.supabase.co
+#                         --dart-define=SUPABASE_ANON_KEY=KUNCI_PUBLISHABLE
+# opsional legacy Node API: --dart-define=BACKEND_URL=https://backend-anda.com
 # opsional: --dart-define=KICKOFF_REMINDER_MINUTES=2  (hanya uji manual, produksi 30)
 ```
 
@@ -53,6 +56,7 @@ flutter run \
   cleartext. Di iOS, HTTP diblokir ATS, jadi pakai tunnel HTTPS untuk pengujian.
 
 ## Izin Android — android/app/src/main/AndroidManifest.xml (di dalam <manifest>)
+
 ```xml
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -61,21 +65,27 @@ flutter run \
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 <uses-permission android:name="android.permission.CAMERA"/>
 ```
+
 - Ganti `MainActivity` menjadi `FlutterFragmentActivity` (syarat local_auth).
 - `android/app/build.gradle`: `minSdkVersion 23` (secure storage + ML Kit).
 
 ## Izin iOS — ios/Runner/Info.plist
+
 `NSLocationWhenInUseUsageDescription`, `NSFaceIDUsageDescription`,
 `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`.
 `ios/Podfile`: `platform :ios, '15.5'` (syarat ML Kit).
 
 ## Data pertandingan (football-data.org)
+
 1. Daftar gratis di https://www.football-data.org/client/register lalu ambil API key.
 2. Uji key Anda (satu perintah):
+
 ```bash
 curl -H "X-Auth-Token: KEY_ANDA" https://api.football-data.org/v4/competitions/PL/matches
 ```
+
 3. Jalankan app dengan `--dart-define=FOOTBALL_API_KEY=KEY_ANDA`.
+
 - Tanpa key, app memakai **DATA CONTOH** (ada banner merah) — bukan jadwal resmi.
 - Tier gratis: 10 request/menit, skor tertunda. Hasil di-cache 15 menit di Hive; jika gagal, data terakhir dipakai.
 - Jangan commit API key ke repositori publik.
@@ -106,6 +116,40 @@ node --env-file=.env index.js
 - Batasan yang diketahui: blok rantai yang sudah tersimpan tidak bisa diedit
   (ditolak dengan 400), salt dan skor prediksi hanya diterima bersama-sama
   sebagai bentuk ter-reveal, dan `POST /sync` dibatasi 5 MB per request.
+
+## Supabase langsung dan SQLite offline-first
+
+Mode ini tidak memerlukan server Node yang di-host. Flutter memakai Supabase
+Auth dan Data API langsung; `SUPABASE_URL` serta `SUPABASE_ANON_KEY` harus
+diisi bersama-sama. Gunakan anon/publishable key, **jangan pernah** memakai
+`service_role` key di aplikasi.
+
+1. Buat proyek Supabase dan aktifkan Email/Password pada Authentication.
+2. Buka SQL Editor lalu jalankan [`supabase/schema.sql`](supabase/schema.sql).
+   Tabel sudah memakai RLS dan setiap pengguna hanya dapat mengakses barisnya.
+3. Jalankan aplikasi dengan URL proyek dan anon key:
+
+```bash
+flutter run \
+  --dart-define=SUPABASE_URL=https://PROJECT_REF.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=ANON_OR_PUBLISHABLE_KEY
+```
+
+Aplikasi menyimpan pengeluaran, rantai paspor, dan prediksi lebih dulu ke
+SQLite lokal (`smart_football_fan.db` di folder application support), kemudian
+memperbarui salinan Hive yang dibaca UI. Data Hive lama diimpor saat startup.
+Saat online, perubahan dikirim otomatis; kegagalan jaringan mempertahankan
+revisi dan tombstone SQLite untuk dicoba lagi. Penghapusan Away Day ikut
+disinkronkan sehingga data yang dihapus tidak muncul kembali pada perangkat
+lain. Budget Away Day dan data lain yang belum termasuk skema sinkronisasi
+tetap lokal. Rantai blockchain di-cloud sebagai backup append-only dan tidak
+diambil kembali untuk mencegah rantai lokal yang berbeda digabung secara tidak
+valid.
+
+Akun dari backend Node lama tidak otomatis menjadi akun Supabase; pengguna
+perlu mendaftar di Supabase Auth. Jika konfirmasi email aktif, verifikasi email
+sebelum login. Tes koneksi cloud memerlukan URL, anon key, dan skema Supabase
+yang benar-benar dibuat; tanpa konfigurasi itu aplikasi tetap pada mode lokal.
 
 ## Build rilis Android (C5)
 

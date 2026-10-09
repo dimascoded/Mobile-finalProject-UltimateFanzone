@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   title       TEXT    NOT NULL,
   amount_gbp  REAL    NOT NULL,
   amount_idr  REAL    NOT NULL,
+  currency_code TEXT  NOT NULL DEFAULT 'GBP',
+  amount_foreign REAL NOT NULL DEFAULT 0,
   category    TEXT    NOT NULL,
   club_key    TEXT,
   created_at  TEXT    NOT NULL,

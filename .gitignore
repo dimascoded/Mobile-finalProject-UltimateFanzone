@@ -62,3 +62,4 @@ key.properties
 # tapi diulang di sini supaya zipped folder tidak ikut membawa node_modules.
 server/node_modules/
 server/data/
+env.json

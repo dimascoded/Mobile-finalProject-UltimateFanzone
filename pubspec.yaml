@@ -1,10 +1,10 @@
 name: smart_football_fan
 description: Smart Football Fan - pendamping menonton Liga Inggris (Flutter + Riverpod)
-publish_to: 'none'
+publish_to: "none"
 version: 1.1.0+2
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: ">=3.2.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -24,12 +24,12 @@ dependencies:
 
   # Hardware & Sensor
   geolocator: ^11.0.0
-  sensors_plus: ^4.0.2        # accelerometerEventStream() / gyroscopeEventStream()
-  flutter_compass: ^0.8.0     # magnetometer -> arah mata angin (sensor ke-3)
+  sensors_plus: ^4.0.2 # accelerometerEventStream() / gyroscopeEventStream()
+  flutter_compass: ^0.8.0 # magnetometer -> arah mata angin (sensor ke-3)
 
   # AI Image Processing (on-device)
   image_picker: ^1.0.7
-  google_mlkit_text_recognition: ^0.15.0   # OCR; iOS minimal 15.5, Android minSdk 21
+  google_mlkit_text_recognition: ^0.15.0 # OCR; iOS minimal 15.5, Android minSdk 21
 
   # Web3
   web3dart: ^2.6.1
@@ -41,8 +41,13 @@ dependencies:
 
   # Utilitas
   flutter_local_notifications: ^17.1.0
-  timezone: ^0.9.4                  # wajib untuk zonedSchedule (Pengingat kickoff)
+  timezone: ^0.9.4 # wajib untuk zonedSchedule (Pengingat kickoff)
   flutter_timezone: ^5.1.1
+  flutter_map: 7.0.2
+  latlong2: 0.9.1
+  supabase_flutter: ">=2.8.4 <2.9.0"
+  sqflite: ">=2.2.8+4 <2.3.0"
+  sqflite_common_ffi: ">=2.3.2 <2.3.3"
 
 dev_dependencies:
   flutter_test:

@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../../core/database/hive_service.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
+import '../../penalty_shootout/data/penalty_rules.dart';
 import '../data/blockchain.dart';
 import '../data/chain_repository.dart';
+import '../data/reflex_rules.dart';
 import '../data/wallet_repository.dart';
 
 final walletAddressProvider = FutureProvider<String>(
@@ -136,97 +139,224 @@ final stampProvider =
     StateNotifierProvider.autoDispose<StampNotifier, AsyncValue<String?>>(
         (ref) => StampNotifier(ref));
 
-// ---------- Mini game: tekan objek bergerak acak selama 15 detik ----------
-class GameState {
-  const GameState({
+// ---------- Refleks Kiper ----------
+class ReflexState {
+  const ReflexState({
     this.score = 0,
-    this.secondsLeft = 15,
+    this.lives = reflexLives,
+    this.combo = 0,
+    this.saves = 0,
+    this.level = 1,
+    this.zone,
     this.running = false,
-    this.finished = false,
-    this.dx = 0,
-    this.dy = 0,
+    this.gameOver = false,
+    this.timeLimitMs = initialReflexTimeLimitMs,
+    this.remainingMs = initialReflexTimeLimitMs,
+    this.bestScore = 0,
   });
-  final int score, secondsLeft;
-  final bool running, finished;
-  final double dx, dy; // Alignment -1..1
 
-  static const winScore = 10;
-  bool get won => finished && score >= winScore;
+  final int score;
+  final int lives;
+  final int combo;
+  final int saves;
+  final int level;
+  final KickZone? zone;
+  final bool running;
+  final bool gameOver;
+  final int timeLimitMs;
+  final int remainingMs;
+  final int bestScore;
 
-  GameState copyWith(
-          {int? score,
-          int? secondsLeft,
-          bool? running,
-          bool? finished,
-          double? dx,
-          double? dy}) =>
-      GameState(
+  double get ballProgress {
+    if (timeLimitMs <= 0) return 1;
+    return (1 - remainingMs / timeLimitMs).clamp(0.0, 1.0).toDouble();
+  }
+
+  ReflexState copyWith({
+    int? score,
+    int? lives,
+    int? combo,
+    int? saves,
+    int? level,
+    KickZone? zone,
+    bool clearZone = false,
+    bool? running,
+    bool? gameOver,
+    int? timeLimitMs,
+    int? remainingMs,
+    int? bestScore,
+  }) =>
+      ReflexState(
         score: score ?? this.score,
-        secondsLeft: secondsLeft ?? this.secondsLeft,
+        lives: lives ?? this.lives,
+        combo: combo ?? this.combo,
+        saves: saves ?? this.saves,
+        level: level ?? this.level,
+        zone: clearZone ? null : (zone ?? this.zone),
         running: running ?? this.running,
-        finished: finished ?? this.finished,
-        dx: dx ?? this.dx,
-        dy: dy ?? this.dy,
+        gameOver: gameOver ?? this.gameOver,
+        timeLimitMs: timeLimitMs ?? this.timeLimitMs,
+        remainingMs: remainingMs ?? this.remainingMs,
+        bestScore: bestScore ?? this.bestScore,
       );
 }
 
-class GameNotifier extends StateNotifier<GameState> {
-  GameNotifier(this._ref) : super(const GameState());
+class ReflexNotifier extends StateNotifier<ReflexState> {
+  ReflexNotifier(this._ref) : super(ReflexState(bestScore: _readBestScore()));
+
   final Ref _ref;
-  final _rnd = Random();
-  Timer? _countdown, _mover;
+  final Random _rnd = Random();
+  Timer? _ballTimer;
+  DateTime? _ballStartedAt;
 
-  void start() {
-    _cancel();
-    state = const GameState(running: true);
-    _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
-      final left = state.secondsLeft - 1;
-      if (left <= 0) {
-        _finish();
-      } else {
-        state = state.copyWith(secondsLeft: left);
-      }
-    });
-    _mover = Timer.periodic(const Duration(milliseconds: 900), (_) => _move());
-    _move();
-  }
-
-  void tap() {
-    if (!state.running) return;
-    state = state.copyWith(score: state.score + 1);
-    _move();
-  }
-
-  void _move() => state = state.copyWith(
-        dx: _rnd.nextDouble() * 1.8 - 0.9,
-        dy: _rnd.nextDouble() * 1.8 - 0.9,
-      );
-
-  Future<void> _finish() async {
-    _cancel();
-    final score = state.score;
-    state = state.copyWith(secondsLeft: 0, running: false, finished: true);
-    if (state.won) {
-      // Ambil dependensi SEBELUM await: ref tidak boleh dipakai setelah dispose.
-      final walletFuture = _ref.read(walletAddressProvider.future);
-      final chain = _ref.read(chainProvider.notifier);
-      final owner = await walletFuture;
-      await chain.mint(
-          'achievement', {'game': 'Speed Tapper', 'score': score}, owner);
+  static int _readBestScore() {
+    try {
+      return int.tryParse(HiveService.cache.get('reflex_best') ?? '') ?? 0;
+    } catch (_) {
+      return 0;
     }
   }
 
-  void _cancel() {
-    _countdown?.cancel();
-    _mover?.cancel();
+  void start() {
+    _cancelTimer();
+    final limit = timeLimitForLevel(1);
+    state = ReflexState(
+      running: true,
+      zone: pickZone(_rnd, null),
+      timeLimitMs: limit,
+      remainingMs: limit,
+      bestScore: state.bestScore,
+    );
+    _startBallTimer();
+  }
+
+  void tapZone(KickZone tappedZone) {
+    if (!state.running || state.zone == null) return;
+    if (tappedZone != state.zone) {
+      _miss();
+      return;
+    }
+    _save();
+  }
+
+  void _save() {
+    _cancelTimer();
+    final combo = comboAfterSave(state.combo);
+    final saves = state.saves + 1;
+    final level = levelForSaves(saves);
+    final limit = timeLimitForLevel(level);
+    final score = state.score + scoreForSave(combo);
+    state = state.copyWith(
+      score: score,
+      lives: state.lives,
+      combo: combo,
+      saves: saves,
+      level: level,
+      zone: pickZone(_rnd, state.zone),
+      running: true,
+      gameOver: false,
+      timeLimitMs: limit,
+      remainingMs: limit,
+      bestScore: score > state.bestScore ? score : state.bestScore,
+    );
+    _startBallTimer();
+  }
+
+  void _miss() {
+    if (!state.running) return;
+    _cancelTimer();
+    final lives = livesAfterMiss(state.lives);
+    if (lives == 0) {
+      final bestScore =
+          state.score > state.bestScore ? state.score : state.bestScore;
+      state = state.copyWith(
+        lives: 0,
+        combo: comboAfterMiss(state.combo),
+        running: false,
+        gameOver: true,
+        clearZone: true,
+        remainingMs: 0,
+        bestScore: bestScore,
+      );
+      _finishGame();
+      return;
+    }
+
+    state = state.copyWith(
+      lives: lives,
+      combo: comboAfterMiss(state.combo),
+      zone: pickZone(_rnd, state.zone),
+      running: true,
+      remainingMs: state.timeLimitMs,
+    );
+    _startBallTimer();
+  }
+
+  void _startBallTimer() {
+    _ballStartedAt = DateTime.now();
+    _ballTimer = Timer.periodic(const Duration(milliseconds: 40), (_) {
+      if (!mounted || !state.running) {
+        _cancelTimer();
+        return;
+      }
+      final elapsed = DateTime.now()
+          .difference(_ballStartedAt ?? DateTime.now())
+          .inMilliseconds;
+      final remaining = state.timeLimitMs - elapsed;
+      if (remaining <= 0) {
+        _miss();
+      } else {
+        state = state.copyWith(remainingMs: remaining);
+      }
+    });
+  }
+
+  Future<void> _finishGame() async {
+    final score = state.score;
+    final saves = state.saves;
+    final level = state.level;
+    final bestScore = state.bestScore;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final shouldMint =
+        score >= 100 && HiveService.cache.get('reflex_block_day') != today;
+
+    final Future<String>? walletFuture =
+        shouldMint ? _ref.read(walletAddressProvider.future) : null;
+    final chain = shouldMint ? _ref.read(chainProvider.notifier) : null;
+
+    await HiveService.cache.put('reflex_best', '$bestScore');
+    if (!mounted || !shouldMint) return;
+
+    final owner = await walletFuture!;
+    if (!mounted) return;
+    await chain!.mint(
+      'achievement',
+      {
+        'game': 'Refleks Kiper',
+        'score': score,
+        'saves': saves,
+        'level': level,
+      },
+      owner,
+    );
+    if (!mounted) return;
+    await HiveService.cache.put('reflex_block_day', today);
+  }
+
+  void _cancelTimer() {
+    _ballTimer?.cancel();
+    _ballTimer = null;
+    _ballStartedAt = null;
   }
 
   @override
   void dispose() {
-    _cancel();
+    _cancelTimer();
     super.dispose();
   }
 }
 
-final gameProvider = StateNotifierProvider.autoDispose<GameNotifier, GameState>(
-    (ref) => GameNotifier(ref));
+final reflexProvider =
+    StateNotifierProvider.autoDispose<ReflexNotifier, ReflexState>(
+  (ref) => ReflexNotifier(ref),
+);

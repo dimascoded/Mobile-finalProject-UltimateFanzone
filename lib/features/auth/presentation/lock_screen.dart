@@ -35,6 +35,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
       );
     });
     final loading = ref.watch(authProvider).isLoading;
+    final biometricEnabled = ref.watch(biometricEnabledProvider);
 
     return Scaffold(
       body: Center(
@@ -43,12 +44,14 @@ class _LockScreenState extends ConsumerState<LockScreen> {
           const SizedBox(height: 16),
           const Text('Aplikasi terkunci'),
           const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed:
-                loading ? null : () => ref.read(authProvider.notifier).unlock(),
-            icon: const Icon(Icons.fingerprint),
-            label: const Text('Buka dengan Biometrik'),
-          ),
+          if (biometricEnabled)
+            FilledButton.icon(
+              onPressed: loading
+                  ? null
+                  : () => ref.read(authProvider.notifier).unlock(),
+              icon: const Icon(Icons.fingerprint),
+              label: const Text('Buka dengan Biometrik'),
+            ),
           TextButton(
             onPressed: () async {
               await ref.read(authProvider.notifier).logout();

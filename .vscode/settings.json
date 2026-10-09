@@ -1,0 +1,21 @@
+{
+  "search.exclude": {
+    "**/build": true,
+    "**/.dart_tool": true,
+    "**/server/node_modules": true,
+    "**/android/.gradle": true,
+    "**/ephemeral": true
+  },
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/.dart_tool/**": true,
+    "**/server/node_modules/**": true,
+    "**/android/.gradle/**": true,
+    "**/ephemeral/**": true
+  },
+  "search.followSymlinks": false,
+  "files.exclude": {
+    "**/build": true,
+    "**/.dart_tool": true
+  }
+}

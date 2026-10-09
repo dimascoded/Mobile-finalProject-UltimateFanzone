@@ -68,6 +68,8 @@ function expense(overrides = {}) {
     title: 'Tiket',
     amountGbp: 45,
     amountIdr: 900000,
+    currencyCode: 'GBP',
+    amountForeign: 45,
     category: 'tiket',
     clubKey: 'arsenal',
     date: '2026-08-15T14:00:00Z',
@@ -96,7 +98,49 @@ test('push/pull expense bolak-balik konsisten', () => {
   assert.strictEqual(out.expenses.length, 1);
   assert.strictEqual(out.expenses[0].title, 'Tiket');
   assert.strictEqual(out.expenses[0].amountGbp, 45);
+  assert.strictEqual(out.expenses[0].currencyCode, 'GBP');
+  assert.strictEqual(out.expenses[0].amountForeign, 45);
   assert.strictEqual(out.expenses[0].clubKey, 'arsenal');
+});
+
+test('push/pull mempertahankan mata uang asal USD dan EUR', () => {
+  const uid = makeUser();
+  sync.push(uid, {
+    expenses: [
+      expense({ id: 'usd', currencyCode: 'USD', amountForeign: 25 }),
+      expense({ id: 'eur', currencyCode: 'EUR', amountForeign: 30 }),
+    ],
+  });
+  const out = sync.pull(uid).expenses;
+  assert.deepStrictEqual(
+    out.map(({ currencyCode, amountForeign }) => ({
+      currencyCode,
+      amountForeign,
+    })),
+    [
+      { currencyCode: 'USD', amountForeign: 25 },
+      { currencyCode: 'EUR', amountForeign: 30 },
+    ],
+  );
+});
+
+test('payload lama tanpa mata uang tetap dibaca sebagai GBP', () => {
+  const uid = makeUser();
+  const oldExpense = expense();
+  delete oldExpense.currencyCode;
+  delete oldExpense.amountForeign;
+  sync.push(uid, { expenses: [oldExpense] });
+  const [stored] = sync.pull(uid).expenses;
+  assert.strictEqual(stored.currencyCode, 'GBP');
+  assert.strictEqual(stored.amountForeign, 45);
+});
+
+test('kode mata uang yang tidak didukung ditolak', () => {
+  const uid = makeUser();
+  assertStatus(
+    () => sync.push(uid, { expenses: [expense({ currencyCode: 'CAD' })] }),
+    400,
+  );
 });
 
 test('push expense yang sama dua kali tidak duplikat', () => {

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/hive_service.dart';
+import '../../../core/database/offline_sync_database.dart';
 import '../../football/data/football_repository.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
@@ -40,7 +41,7 @@ class PredictionStore {
     return out;
   }
 
-  Future<void> save(List<Prediction> list) => HiveService.cache.put(
+  Future<void> save(List<Prediction> list) => OfflineSyncDatabase.persist(
         _key,
         jsonEncode(list.map((e) => e.toJson()).toList()),
       );

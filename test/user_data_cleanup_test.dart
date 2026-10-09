@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:smart_football_fan/core/database/hive_service.dart';
 import 'package:smart_football_fan/features/auth/data/auth_repository.dart';
+import 'package:smart_football_fan/features/auth/providers/auth_provider.dart';
 import 'package:smart_football_fan/features/auth/providers/user_data_cleanup.dart';
 
 /// U4: setelah logout, data pengguna tidak boleh tersisa di perangkat.
@@ -76,5 +78,20 @@ void main() {
     // Kunci yang ada di repository tapi tidak ada di userDataKeys akan bocor.
     expect(AuthRepository.userDataKeys, isNotEmpty);
     expect(AuthRepository.privateKeyKeys, contains('wallet_private_key'));
+  });
+
+  test(
+      'preferensi biometrik tersimpan dan tidak dihapus saat data akun dibersihkan',
+      () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    expect(container.read(biometricEnabledProvider), isTrue);
+    await container.read(biometricEnabledProvider.notifier).setEnabled(false);
+    expect(HiveService.cache.get('biometric_enabled'), 'false');
+
+    await clearUserData();
+
+    expect(HiveService.cache.get('biometric_enabled'), 'false');
   });
 }

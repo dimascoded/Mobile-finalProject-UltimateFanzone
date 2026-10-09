@@ -39,6 +39,18 @@ String _group(int v) {
 String _rp(double v) => 'Rp${_group(v.round())}';
 String _gbp(double v) => '\u00A3${v.toStringAsFixed(2)}';
 
+String _currencyPrefix(String currency) => switch (currency) {
+      'GBP' => '\u00A3 ',
+      'USD' => '\$ ',
+      'EUR' => '\u20AC ',
+      _ => 'Rp ',
+    };
+
+String _foreignAmount(double amount, String currency) {
+  final symbol = _currencyPrefix(currency).trimRight();
+  return '$symbol${amount.toStringAsFixed(currency == 'IDR' ? 0 : 2)}';
+}
+
 const _catLabel = {
   AwayDayCategory.tiket: 'Tiket',
   AwayDayCategory.hotel: 'Hotel',
@@ -162,13 +174,17 @@ class _Summary extends ConsumerWidget {
   }
 }
 
-class _WorldClock extends StatelessWidget {
+class _WorldClock extends ConsumerWidget {
   const _WorldClock({required this.clock});
 
   final AsyncValue<Map<String, DateTime>> clock;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedZone = ref.watch(awayDayClockZoneProvider);
+    final selectedCity = ref.watch(awayDayClockCityProvider);
+    final clubs = ref.watch(clubsProvider);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -188,23 +204,144 @@ class _WorldClock extends StatelessWidget {
               loading: () =>
                   const SizedBox(height: 40, child: LinearProgressIndicator()),
               error: (e, _) => Text('Gagal: $e'),
-              data: (m) => Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (final e in m.entries)
-                    Column(
-                      children: [
-                        Text(e.key,
-                            style: Theme.of(context).textTheme.labelSmall),
-                        const SizedBox(height: 2),
-                        Text(
-                          TimeUtils.formatHm(e.value),
-                          style: Theme.of(context).textTheme.titleMedium,
+              data: (times) => clubs.when(
+                loading: () => const LinearProgressIndicator(),
+                error: (e, _) => Text('Gagal memuat lokasi klub: $e'),
+                data: (clubList) {
+                  if (clubList.isEmpty) {
+                    return const Text('Daftar lokasi klub tidak tersedia.');
+                  }
+                  final cities = clubList
+                      .map((club) => club.city.trim())
+                      .where((city) => city.isNotEmpty)
+                      .toSet()
+                      .toList()
+                    ..sort();
+                  final favoriteCity = ref.watch(favoriteClubProvider)?.city;
+                  final city = cities.contains(selectedCity)
+                      ? selectedCity!
+                      : cities.contains(favoriteCity)
+                          ? favoriteCity!
+                          : cities.first;
+                  final indonesiaTime = times[selectedZone] ?? times['WIB']!;
+                  final clubTime = times['London']!;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('clock-zone-$selectedZone'),
+                        initialValue: selectedZone,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Zona waktu Indonesia',
+                          prefixIcon: Icon(Icons.schedule),
                         ),
-                      ],
-                    ),
-                ],
+                        items: const [
+                          DropdownMenuItem(value: 'WIB', child: Text('WIB')),
+                          DropdownMenuItem(value: 'WITA', child: Text('WITA')),
+                          DropdownMenuItem(value: 'WIT', child: Text('WIT')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            ref.read(awayDayClockZoneProvider.notifier).state =
+                                value;
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('clock-city-$city'),
+                        initialValue: city,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Lokasi tim Premier League',
+                          prefixIcon: Icon(Icons.location_city),
+                        ),
+                        items: [
+                          for (final location in cities)
+                            DropdownMenuItem(
+                              value: location,
+                              child: Text(location),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          ref.read(awayDayClockCityProvider.notifier).state =
+                              value;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ClockReadout(
+                              label: selectedZone,
+                              time: indonesiaTime,
+                              detail: 'Indonesia',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ClockReadout(
+                              label: city,
+                              time: clubTime,
+                              detail: 'Waktu lokal Inggris',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClockReadout extends StatelessWidget {
+  const _ClockReadout({
+    required this.label,
+    required this.time,
+    required this.detail,
+  });
+
+  final String label;
+  final DateTime time;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text(
+              TimeUtils.formatHm(time),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(TimeUtils.formatDate(time), style: theme.textTheme.bodySmall),
+            Text(
+              detail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall,
             ),
           ],
         ),
@@ -328,7 +465,7 @@ class _Tile extends ConsumerWidget {
             children: [
               Text(_rp(expense.amountIdr),
                   style: Theme.of(context).textTheme.titleSmall),
-              Text(_gbp(expense.amountGbp),
+              Text(_foreignAmount(expense.amountForeign, expense.currencyCode),
                   style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
@@ -400,52 +537,51 @@ class _AddForm extends ConsumerStatefulWidget {
 
 class _AddFormState extends ConsumerState<_AddForm> {
   final _title = TextEditingController();
-  final _gbp = TextEditingController();
+  final _foreign = TextEditingController();
   final _idr = TextEditingController();
   AwayDayCategory _cat = AwayDayCategory.tiket;
   String? _clubKey;
-  bool _useGbp = true;
+  String _currency = 'GBP';
 
   @override
   void initState() {
     super.initState();
     _clubKey = widget.favKey;
-    if ((widget.rates ?? const <String, double>{})[awayDayCurrency] == null) {
-      _useGbp = false;
-    }
-    _gbp.addListener(_syncFromGbp);
-    _idr.addListener(_syncFromIdr);
+    _foreign.addListener(_syncFromForeign);
   }
 
   @override
   void dispose() {
     _title.dispose();
-    _gbp.dispose();
+    _foreign.dispose();
     _idr.dispose();
     super.dispose();
   }
 
-  void _syncFromGbp() {
-    if (!_useGbp) return;
-    final v = parseAmount(_gbp.text);
-    final idr = v == null ? null : gbpToIdr(v, widget.rates);
-    _idr.text = idr == null ? '' : idr.round().toString();
-  }
-
-  void _syncFromIdr() {
-    if (_useGbp) return;
-    final v = parseAmount(_idr.text);
-    final g = v == null ? null : idrToGbp(v, widget.rates);
-    _gbp.text = g == null ? '' : g.toStringAsFixed(2);
+  void _syncFromForeign([Map<String, double>? rates]) {
+    if (_currency == 'IDR') return;
+    final amount = parseAmount(_foreign.text);
+    final availableRates =
+        rates ?? ref.read(ratesProvider).valueOrNull?.rates ?? widget.rates;
+    if (amount == null) {
+      if (availableRates?[_currency] != null) _idr.clear();
+      return;
+    }
+    final idr = foreignToIdr(amount, _currency, availableRates);
+    if (idr != null) _idr.text = idr.round().toString();
   }
 
   @override
   Widget build(BuildContext context) {
-    // C2: `valueOrNull` null berarti kurs belum pernah berhasil dimuat dan
-    // tidak ada cache; kalau cache ada, `fromCache` true tapi tetap bisa dipakai.
-    final snap = ref.watch(ratesProvider).valueOrNull;
-    final perIdr = snap?.gbpPerIdr;
-    final offline = perIdr == null;
+    final ratesState = ref.watch(ratesProvider);
+    final snap = ratesState.valueOrNull;
+    final rates = snap?.rates ?? widget.rates ?? const <String, double>{};
+    final perIdr = rates[_currency];
+    final rateMissing = _currency != 'IDR' && perIdr == null;
+    ref.listen(ratesProvider, (_, next) {
+      final latestRates = next.valueOrNull?.rates;
+      if (latestRates != null) _syncFromForeign(latestRates);
+    });
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -460,101 +596,91 @@ class _AddFormState extends ConsumerState<_AddForm> {
             controller: _title,
             autofocus: true,
             decoration: const InputDecoration(
-                labelText: 'Keterangan', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                  value: true,
-                  label: Text('GBP'),
-                  icon: Icon(Icons.attach_money)),
-              ButtonSegment(
-                  value: false,
-                  label: Text('IDR'),
-                  icon: Icon(Icons.payments_outlined)),
-            ],
-            selected: {_useGbp},
-            onSelectionChanged: offline
-                ? null
-                : (s) => setState(() {
-                      _useGbp = s.first;
-                      if (_useGbp) {
-                        _syncFromIdr();
-                      } else {
-                        _syncFromGbp();
-                      }
-                    }),
-          ),
-          const SizedBox(height: 12),
-          if (_useGbp)
-            TextField(
-              controller: _gbp,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                  labelText: 'Jumlah (GBP)',
-                  prefixText: '\u00A3',
-                  border: OutlineInputBorder()),
-            )
-          else
-            TextField(
-              controller: _idr,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                  labelText: 'Jumlah (IDR)',
-                  prefixText: 'Rp ',
-                  border: OutlineInputBorder()),
+              labelText: 'Keterangan',
+              border: OutlineInputBorder(),
             ),
-          if (offline) ...[
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _currency,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Mata uang',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final currency in awayDayCurrencies)
+                DropdownMenuItem(value: currency, child: Text(currency)),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _currency = value;
+                _foreign.clear();
+                _idr.clear();
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _foreign,
+            keyboardType: TextInputType.numberWithOptions(
+              decimal: _currency != 'IDR',
+            ),
+            decoration: InputDecoration(
+              labelText: 'Jumlah ($_currency)',
+              prefixText: _currencyPrefix(_currency),
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          if (_currency != 'IDR') ...[
             const SizedBox(height: 8),
-            // Tanpa kurs, input GBP tidak boleh disimpan sebagai Rp 0: itu
-            // akan membuat total pengeluaran terlihat jauh lebih murah dan
-            // merusak anggaran. User diminta mengetik Rupiah-nya sendiri.
             TextField(
               controller: _idr,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Nilai Rupiah (wajib diisi manual)',
+              readOnly: !rateMissing,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: rateMissing
+                    ? 'Nilai Rupiah (wajib diisi manual)'
+                    : 'Perkiraan nilai Rupiah',
                 prefixText: 'Rp ',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
+            if (rateMissing)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Kurs $_currency tidak tersedia. Isi nilai Rupiah secara manual.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              )
+            else if (snap?.fromCache == true)
+              Text(
+                'Kurs tersimpan \u2022 1 $_currency = ${_rp(1 / perIdr!)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              )
+            else if (perIdr != null)
+              Text(
+                'Kurs: 1 $_currency = ${_rp(1 / perIdr)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
           ],
-          const SizedBox(height: 8),
-          if (offline)
-            Text(
-              'Kurs tidak tersedia dan belum pernah tersimpan. '
-              'Isi nilai Rupiah secara manual.',
-              style: Theme.of(context).textTheme.bodySmall,
-            )
-          else if (snap!.fromCache)
-            // Kurs dari cache: tampilkan waktunya supaya pengguna tahu angka
-            // konversi bukan yang terbaru.
-            Text(
-              'Kurs tersimpan â€¢ ${TimeUtils.formatDate(
-                TimeUtils.wib(snap.fetchedAt ?? DateTime.now()),
-              )} ${TimeUtils.formatHm(TimeUtils.wib(snap.fetchedAt ?? DateTime.now()))} WIB'
-              ' â€¢ 1 GBP = ${_rp(1 / perIdr)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            )
-          else
-            Text(
-              'Kurs: 1 GBP = ${_rp(1 / perIdr)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
           const SizedBox(height: 12),
           DropdownButtonFormField<AwayDayCategory>(
             initialValue: _cat,
             decoration: const InputDecoration(
-                labelText: 'Kategori', border: OutlineInputBorder()),
+              labelText: 'Kategori',
+              border: OutlineInputBorder(),
+            ),
             items: [
               for (final c in AwayDayCategory.values)
                 DropdownMenuItem(value: c, child: Text(_catLabel[c]!)),
             ],
-            onChanged: (v) =>
-                setState(() => _cat = v ?? AwayDayCategory.lainnya),
+            onChanged: (value) =>
+                setState(() => _cat = value ?? AwayDayCategory.lainnya),
           ),
           const SizedBox(height: 12),
           if (widget.clubs.isNotEmpty)
@@ -585,32 +711,37 @@ class _AddFormState extends ConsumerState<_AddForm> {
   ///
   /// UI4: sebelumnya `_submit` langsung `return` diam-diam, jadi user menekan
   /// Simpan lalu tidak terjadi apa-apa tanpa penjelasan.
-  String? validate({required bool offline}) {
+  String? validate({required bool rateMissing}) {
     if (_title.text.trim().isEmpty) return 'Keterangan belum diisi.';
-    final g = parseAmount(_gbp.text) ?? 0;
-    final i = parseAmount(_idr.text) ?? 0;
-    if (g <= 0 && i <= 0) return 'Jumlah harus lebih besar dari nol.';
-    // Kurs hilang: Rupiah wajib ada, kalau tidak total jadi nol tanpa jejak.
-    if (offline && i <= 0) {
+    final foreign = parseAmount(_foreign.text) ?? 0;
+    final idr = _currency == 'IDR' ? foreign : parseAmount(_idr.text) ?? 0;
+    if (foreign <= 0) return 'Jumlah harus lebih besar dari nol.';
+    if (rateMissing && idr <= 0) {
       return 'Kurs tidak tersedia. Isi nilai Rupiah secara manual.';
     }
     return null;
   }
 
   void _submit() {
-    final offline = ref.read(ratesProvider).valueOrNull?.gbpPerIdr == null;
-    final problem = validate(offline: offline);
+    final rates = ref.read(ratesProvider).valueOrNull?.rates ?? widget.rates;
+    final rateMissing = _currency != 'IDR' && rates?[_currency] == null;
+    final problem = validate(rateMissing: rateMissing);
     if (problem != null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(problem)));
       return;
     }
+    final amountForeign = parseAmount(_foreign.text) ?? 0;
+    final amountIdr =
+        _currency == 'IDR' ? amountForeign : parseAmount(_idr.text) ?? 0;
     ref.read(awayDayProvider.notifier).add(
           title: _title.text.trim(),
-          amountGbp: parseAmount(_gbp.text) ?? 0,
-          amountIdr: parseAmount(_idr.text) ?? 0,
+          amountGbp: idrToForeign(amountIdr, 'GBP', rates) ?? 0,
+          amountIdr: amountIdr,
           category: _cat,
+          currencyCode: _currency,
+          amountForeign: amountForeign,
           clubKey: _clubKey,
         );
     Navigator.of(context).pop();

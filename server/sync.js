@@ -184,12 +184,14 @@ function storedChain(userId) {
 function upsertExpenses(userId, rawExpenses) {
   const expenses = asArray(rawExpenses, 'expenses', MAX_EXPENSES);
   const stmt = db.prepare(`
-    INSERT INTO expenses (user_id, local_id, title, amount_gbp, amount_idr, category, club_key, created_at)
-    VALUES (@user_id, @local_id, @title, @amount_gbp, @amount_idr, @category, @club_key, @created_at)
+    INSERT INTO expenses (user_id, local_id, title, amount_gbp, amount_idr, currency_code, amount_foreign, category, club_key, created_at)
+    VALUES (@user_id, @local_id, @title, @amount_gbp, @amount_idr, @currency_code, @amount_foreign, @category, @club_key, @created_at)
     ON CONFLICT(user_id, local_id) DO UPDATE SET
       title = excluded.title,
       amount_gbp = excluded.amount_gbp,
       amount_idr = excluded.amount_idr,
+      currency_code = excluded.currency_code,
+      amount_foreign = excluded.amount_foreign,
       category = excluded.category,
       club_key = excluded.club_key
   `);
@@ -201,6 +203,17 @@ function upsertExpenses(userId, rawExpenses) {
     const title = requireText(e.title, 'expenses[].title');
     const amountGbp = requireNumber(e.amountGbp, 'expenses[].amountGbp', { min: 0, max: 1e9 });
     const amountIdr = requireNumber(e.amountIdr, 'expenses[].amountIdr', { min: 0, max: 1e12 });
+    const currencyCode = e.currencyCode == null
+      ? 'GBP'
+      : requireText(e.currencyCode, 'expenses[].currencyCode', { max: 3 }).toUpperCase();
+    if (!['GBP', 'USD', 'EUR', 'IDR'].includes(currencyCode)) {
+      throw bad('expenses[].currencyCode harus GBP, USD, EUR, atau IDR');
+    }
+    const amountForeign = requireNumber(
+      e.amountForeign == null ? amountGbp : e.amountForeign,
+      'expenses[].amountForeign',
+      { min: 0, max: 1e9 }
+    );
     const category = requireText(e.category, 'expenses[].category', { max: 40 });
     const localId = requireText(e.id, 'expenses[].id', { max: 60 });
     const date = e.date == null ? new Date().toISOString() : requireIsoDate(e.date, 'expenses[].date');
@@ -210,6 +223,8 @@ function upsertExpenses(userId, rawExpenses) {
       title,
       amount_gbp: amountGbp,
       amount_idr: amountIdr,
+      currency_code: currencyCode,
+      amount_foreign: amountForeign,
       category,
       club_key: optionalText(e.clubKey, 'expenses[].clubKey', { max: 40 }),
       created_at: date,
@@ -371,7 +386,7 @@ function pull(userId) {
     // B7: urutkan berdasarkan waktu, bukan alias kolom, supaya urutannya
     // sama seperti di perangkat.
     expenses: db
-      .prepare('SELECT local_id AS id, title, amount_gbp AS amountGbp, amount_idr AS amountIdr, category, club_key AS clubKey, created_at AS date FROM expenses WHERE user_id = ? ORDER BY created_at')
+      .prepare('SELECT local_id AS id, title, amount_gbp AS amountGbp, amount_idr AS amountIdr, currency_code AS currencyCode, amount_foreign AS amountForeign, category, club_key AS clubKey, created_at AS date FROM expenses WHERE user_id = ? ORDER BY created_at')
       .all(userId),
     chain: db
       .prepare('SELECT idx AS "index", timestamp, type, data_json AS data, owner, prev_hash AS prevHash, nonce, hash FROM chain_blocks WHERE user_id = ? ORDER BY idx')

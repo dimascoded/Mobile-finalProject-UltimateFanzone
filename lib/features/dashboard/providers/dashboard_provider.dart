@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,13 +12,12 @@ final tabIndexProvider = StateProvider<int>((ref) => 0);
 /// Logout: hapus token, bersihkan data pengguna, reset state yang tersisa.
 ///
 /// [AuthNotifier.logout] sudah menghapus isi Hive; invalidate di sini membuang
-/// foto profil dan saran yang masih tertahan di memori notifier (U4).
+/// foto profil yang masih tertahan di memori notifier (U4).
 final logoutProvider = Provider<Future<void> Function()>((ref) {
   return () async {
     await ref.read(authProvider.notifier).logout();
     ref
       ..invalidate(profilePhotoProvider)
-      ..invalidate(feedbackProvider)
       ..invalidate(syncProvider)
       ..read(tabIndexProvider.notifier).state = 0;
   };
@@ -50,32 +48,3 @@ class ProfilePhotoNotifier extends StateNotifier<String?> {
 final profilePhotoProvider =
     StateNotifierProvider<ProfilePhotoNotifier, String?>(
         (ref) => ProfilePhotoNotifier());
-
-// ---------- Saran & Kesan mata kuliah PAM ----------
-class PamFeedback {
-  const PamFeedback({this.kesan = '', this.saran = ''});
-  final String kesan, saran;
-  Map<String, dynamic> toJson() => {'kesan': kesan, 'saran': saran};
-  factory PamFeedback.fromJson(Map<String, dynamic> j) =>
-      PamFeedback(kesan: j['kesan'] ?? '', saran: j['saran'] ?? '');
-}
-
-class FeedbackNotifier extends StateNotifier<PamFeedback> {
-  FeedbackNotifier() : super(_load());
-  static const _key = 'pam_feedback';
-
-  static PamFeedback _load() {
-    final raw = HiveService.cache.get(_key);
-    return raw == null
-        ? const PamFeedback()
-        : PamFeedback.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
-  }
-
-  Future<void> save(String kesan, String saran) async {
-    state = PamFeedback(kesan: kesan.trim(), saran: saran.trim());
-    await HiveService.cache.put(_key, jsonEncode(state.toJson()));
-  }
-}
-
-final feedbackProvider = StateNotifierProvider<FeedbackNotifier, PamFeedback>(
-    (ref) => FeedbackNotifier());

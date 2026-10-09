@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/hive_service.dart';
+import '../../../core/database/offline_sync_database.dart';
 
 enum AwayDayCategory { tiket, hotel, transport, merchandise, makanan, lainnya }
 
@@ -11,11 +12,15 @@ class AwayDayExpense {
     required this.amountIdr,
     required this.category,
     required this.date,
+    this.currencyCode = 'GBP',
+    double? amountForeign,
     this.clubKey,
-  });
+  }) : amountForeign = amountForeign ?? amountGbp;
   final String title;
   final double amountGbp;
   final double amountIdr;
+  final String currencyCode;
+  final double amountForeign;
   final AwayDayCategory category;
   final DateTime date;
   final String? clubKey;
@@ -26,6 +31,8 @@ class AwayDayExpense {
         'title': title,
         'amountGbp': amountGbp,
         'amountIdr': amountIdr,
+        'currencyCode': currencyCode,
+        'amountForeign': amountForeign,
         'category': category.name,
         'date': date.toIso8601String(),
         'clubKey': clubKey,
@@ -36,20 +43,25 @@ class AwayDayExpense {
   ///
   /// Aturannya: judul wajib (kalau kosong, pakai "Tanpa judul"), nominal
   /// non-angka jadi 0, tanggal rusak jadi epoch supaya item tetap urut.
-  factory AwayDayExpense.fromJson(Map<String, dynamic> j) => AwayDayExpense(
-        title: (j['title'] as String?)?.trim().isNotEmpty == true
-            ? (j['title'] as String).trim()
-            : 'Tanpa judul',
-        amountGbp: (j['amountGbp'] as num?)?.toDouble() ?? 0,
-        amountIdr: (j['amountIdr'] as num?)?.toDouble() ?? 0,
-        category: AwayDayCategory.values.firstWhere(
-          (e) => e.name == (j['category'] as String? ?? 'lainnya'),
-          orElse: () => AwayDayCategory.lainnya,
-        ),
-        date: DateTime.tryParse(j['date'] as String? ?? '') ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-        clubKey: j['clubKey'] as String?,
-      );
+  factory AwayDayExpense.fromJson(Map<String, dynamic> j) {
+    final amountGbp = (j['amountGbp'] as num?)?.toDouble() ?? 0;
+    return AwayDayExpense(
+      title: (j['title'] as String?)?.trim().isNotEmpty == true
+          ? (j['title'] as String).trim()
+          : 'Tanpa judul',
+      amountGbp: amountGbp,
+      amountIdr: (j['amountIdr'] as num?)?.toDouble() ?? 0,
+      currencyCode: j['currencyCode'] as String? ?? 'GBP',
+      amountForeign: (j['amountForeign'] as num?)?.toDouble() ?? amountGbp,
+      category: AwayDayCategory.values.firstWhere(
+        (e) => e.name == (j['category'] as String? ?? 'lainnya'),
+        orElse: () => AwayDayCategory.lainnya,
+      ),
+      date: DateTime.tryParse(j['date'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      clubKey: j['clubKey'] as String?,
+    );
+  }
 }
 
 class AwayDayRepository {
@@ -78,7 +90,7 @@ class AwayDayRepository {
     return out;
   }
 
-  Future<void> save(List<AwayDayExpense> list) => HiveService.cache.put(
+  Future<void> save(List<AwayDayExpense> list) => OfflineSyncDatabase.persist(
         _key,
         jsonEncode(list.map((e) => e.toJson()).toList()),
       );

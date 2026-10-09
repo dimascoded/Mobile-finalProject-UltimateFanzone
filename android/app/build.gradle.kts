@@ -24,6 +24,9 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications (zonedSchedule) memakai API java.time,
+        // jadi core library desugaring wajib diaktifkan untuk :app.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -77,7 +80,10 @@ flutter {
 }
 
 dependencies {
-    // Themed AppCompat dipakai styles.xml -> ThemeAppCompat.DayNight.NoActionBar.
+    // Themed AppCompat dipakai styles.xml -> Theme.AppCompat.DayNight.NoActionBar.
     // Wajib untuk FlutterFragmentActivity + local_auth (biometrik).
     implementation("androidx.appcompat:appcompat:1.7.0")
+
+    // Backport java.time untuk minSdk < 26 (dipakai flutter_local_notifications).
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

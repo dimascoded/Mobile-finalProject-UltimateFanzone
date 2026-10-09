@@ -6,15 +6,14 @@ import '../database/hive_service.dart';
 import '../utils/app_config.dart';
 import 'dio_client.dart';
 
-/// Kurs GBP -> IDR untuk Away Day dan Lens.
+/// Kurs mata uang asing -> IDR untuk Away Day dan Lens.
 ///
 /// exchangerate-api.com v4 dipanggil dengan basis `IDR`, jadi `rates['GBP']`
 /// berarti "GBP per 1 Rupiah" dan konversinya membagi, bukan mengali.
 ///
-/// C2: kurs disimpan di Hive dengan cap waktu supaya konversi GBP tetap bisa
-/// dipakai saat offline. Cache lama tetap dipakai walau kedaluwarsa — lebih
-/// baik menampilkan kurs dua hari lalu daripada menampilkan "Rp 0", yang dulu
-/// terjadi di Away Day saat offline.
+/// C2: kurs disimpan di Hive dengan cap waktu supaya konversi GBP, USD, dan EUR
+/// tetap bisa dipakai saat offline. Cache lama tetap dipakai walau kedaluwarsa
+/// — lebih baik menampilkan kurs tersimpan daripada menampilkan "Rp 0".
 class RatesSnapshot {
   const RatesSnapshot(this.rates, this.fetchedAt, {this.fromCache = false});
 
