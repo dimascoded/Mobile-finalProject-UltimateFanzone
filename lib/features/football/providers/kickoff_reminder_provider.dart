@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/hive_service.dart';
 import '../../../core/utils/app_config.dart';
 import '../../sos_emergency/data/notification_service.dart';
 import '../data/football_repository.dart';
@@ -30,13 +31,11 @@ List<FootballMatch> reminderTargets(
   if (favorite == null) return const <FootballMatch>[];
   final now = DateTime.now().toUtc();
   final pool = matches
-      .where((m) => !m.isFinished && m.involves(favorite))
+      .where((m) =>
+          !m.isFinished && m.involves(favorite) && m.kickoffUtc.isAfter(now))
       .toList()
     ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
-  return pool
-      .take(maxKickoffReminders)
-      .where((m) => m.kickoffUtc.isAfter(now))
-      .toList();
+  return pool.take(maxKickoffReminders).toList();
 }
 
 String _signature(List<FootballMatch> targets, int minutesBefore) {
@@ -81,7 +80,7 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
 /// Batalkan pengingat kickoff untuk daftar [matches] yang diberikan.
 Future<void> cancelReminders(List<FootballMatch> matches) async {
   for (final m in matches) {
-    await NotificationService.cancelMatch(m.id);
+    await NotificationService.cancelKickoff(m.id);
   }
 }
 
@@ -97,6 +96,12 @@ Future<int> scheduleRemindersForUpcoming(
   if (snapshot.source == DataSource.sample) {
     debugPrint('Data contoh: pengingat kickoff tidak dijadwalkan.');
     return 0;
+  }
+  // C5: izin exact alarm diminta sekali saja, saat pengguna menekan tombol
+  // pengingat, bukan tiap kali aplikasi dibuka.
+  if (HiveService.cache.get('exact_alarm_asked') != 'true') {
+    await NotificationService.requestExactAlarmPermission();
+    await HiveService.cache.put('exact_alarm_asked', 'true');
   }
   final targets =
       reminderTargets(snapshot.data, ref.read(favoriteClubProvider));

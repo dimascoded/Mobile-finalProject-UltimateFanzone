@@ -9,6 +9,7 @@ import '../../sos_emergency/data/notification_service.dart';
 import '../data/football_repository.dart';
 import '../data/models.dart';
 import 'football_providers.dart';
+import 'kickoff_reminder_provider.dart';
 
 /// Batas usia hasil laga agar notifikasi tidak membanjiri pengguna.
 /// Laga yang selesai lebih lama dari ini tidak dinotifikasi.
@@ -68,6 +69,11 @@ final notifiedStoreProvider = Provider((ref) => NotifiedStore());
 const resultNotifyAfterMinutes = 15;
 const assumedMatchMinutes = 105;
 
+/// Isi pengingat hasil yang terjadwal. Sengaja netral: skor belum tentu sudah
+/// tersedia saat notifikasi dibunyikan, jadi cukup arahkan ke Match Center.
+const resultReminderBody =
+    'Laga selesai. Buka Match Center untuk skor terbaru.';
+
 /// Kapan notifikasi hasil sebuah laga seharusnya dibunyikan (UTC).
 DateTime resultNotifyAt(FootballMatch m) => m.kickoffUtc.toUtc().add(
     const Duration(minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
@@ -82,7 +88,7 @@ Future<int> scheduleResultNotification(FootballMatch m) async {
     matchId: m.id,
     whenUtc: when,
     title: 'Hasil akhir ${m.homeShort} vs ${m.awayShort}',
-    body: 'Skor akhir sudah tersedia di Match Center.',
+    body: resultReminderBody,
   );
   if (ok) {
     debugPrint('Notifikasi hasil dijadwalkan untuk ${m.homeShort} vs '
@@ -96,7 +102,7 @@ Future<int> scheduleResultNotification(FootballMatch m) async {
 
 /// Dipanggil setiap cache pertandingan berubah, untuk mengnotifikasi hasil baru.
 final resultNotifierSyncProvider = Provider<void>((ref) {
-  ref.listen(matchesProvider, (_, next) {
+  void process(AsyncValue<FootballResult<List<FootballMatch>>> next) {
     final snapshot = next.valueOrNull;
     final data = snapshot?.data;
     if (data == null) return;
@@ -107,6 +113,10 @@ final resultNotifierSyncProvider = Provider<void>((ref) {
       debugPrint('Data contoh: penjadwalan notifikasi dilewati.');
       return;
     }
+
+    // Pengingat hasil hanya untuk laga tim favorit, dengan kuota yang sama
+    // seperti pengingat kickoff. Tanpa tim favorit tidak ada yang dijadwalkan.
+    final targetIds = reminderTargets(data, fav).map((m) => m.id).toSet();
 
     final store = ref.read(notifiedStoreProvider);
     final done = store.load();
@@ -119,8 +129,8 @@ final resultNotifierSyncProvider = Provider<void>((ref) {
 
       if (!m.isFinished || !m.hasScore) {
         // Laga belum selesai: pastikan pengingat hasil terjadwal satu kali saja
-        // lewat signature (N5), bukan tiap perubahan data.
-        if (!scheduled.containsKey(sig)) {
+        // lewat signature (N5), dan hanya bila laga termasuk target.
+        if (targetIds.contains(m.id) && !scheduled.containsKey(sig)) {
           scheduled[sig] = resultNotifyAt(m);
           scheduleResultNotification(m);
         }
@@ -155,7 +165,26 @@ final resultNotifierSyncProvider = Provider<void>((ref) {
       ref.read(notifiedMatchIdsProvider.notifier).state = done;
     }
     ref.read(_scheduledResultsProvider.notifier).state = scheduled;
-  }, fireImmediately: true);
+  }
+
+  ref.listen(matchesProvider, (_, next) => process(next),
+      fireImmediately: true);
+
+  // Tim favorit diganti -> batalkan pengingat hasil yang bukan target lagi,
+  // lalu susun ulang untuk tim favorit baru. Pembatalan di-await berurutan
+  // sebelum penjadwalan agar tidak ada balapan dengan jadwal baru.
+  ref.listen(favoriteClubProvider, (prev, next) async {
+    final data = ref.read(matchesProvider).valueOrNull?.data;
+    if (data == null) return;
+    final targetIds = reminderTargets(data, next).map((m) => m.id).toSet();
+    for (final sig in ref.read(_scheduledResultsProvider).keys) {
+      final id = int.tryParse(sig.split('@').first);
+      if (id == null || targetIds.contains(id)) continue;
+      await NotificationService.cancelResult(id);
+    }
+    ref.read(_scheduledResultsProvider.notifier).state = const {};
+    process(ref.read(matchesProvider));
+  });
 });
 
 /// Bersihkan daftar notifikasi dari laga yang sudah tidak ada di jadwal.

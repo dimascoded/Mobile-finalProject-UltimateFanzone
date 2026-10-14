@@ -112,6 +112,12 @@ void main() {
     });
   });
 
+  test('teks pengingat hasil terjadwal bersifat netral', () {
+    expect(resultReminderBody,
+        'Laga selesai. Buka Match Center untuk skor terbaru.');
+    expect(resultReminderBody, isNot(contains('Skor akhir')));
+  });
+
   test('laga yang belum selesai tidak punya skor notifikasi', () {
     final m = FootballMatch(
       id: 9,

@@ -25,6 +25,15 @@ void main() {
       expect(kickoff.intersection(result), isEmpty);
     });
 
+    test('kickoffId dan resultId unik untuk rentang id laga', () {
+      final ids = <int>{};
+      for (var id = 1; id <= 50; id++) {
+        ids.add(NotificationService.kickoffId(id));
+        ids.add(NotificationService.resultId(id));
+      }
+      expect(ids.length, 100);
+    });
+
     test('id SOS tidak dipakai pengingat laga', () {
       final used = <int>{
         for (final id in [1, 7, 12]) ...[
@@ -129,6 +138,30 @@ void main() {
     test('laga yang sudah lewat tidak dijadwalkan', () {
       final data = [match(1, true, const Duration(hours: -1))];
       expect(reminderTargets(data, fav), isEmpty);
+    });
+
+    test('laga lewat dibuang sebelum batas kuota 20', () {
+      // 5 laga lewat (paling awal) + 20 laga mendatang. Bila kuota diterapkan
+      // sebelum menyaring, slot terpakai laga lewat dan sisanya cuma 15.
+      final data = [
+        for (var i = 1; i <= 5; i++) match(i, true, Duration(hours: -i)),
+        for (var i = 6; i <= 25; i++) match(i, true, Duration(days: i - 5)),
+      ];
+      final targets = reminderTargets(data, fav);
+      expect(targets.length, maxKickoffReminders);
+      expect(
+        targets.every((m) => m.kickoffUtc.isAfter(DateTime.now().toUtc())),
+        isTrue,
+      );
+      expect(targets.first.id, 6);
+      expect(targets.last.id, 25);
+    });
+
+    test('tanpa tim favorit kosong walau banyak laga mendatang', () {
+      final data = [
+        for (var i = 1; i <= 5; i++) match(i, true, Duration(days: i)),
+      ];
+      expect(reminderTargets(data, null), isEmpty);
     });
   });
 

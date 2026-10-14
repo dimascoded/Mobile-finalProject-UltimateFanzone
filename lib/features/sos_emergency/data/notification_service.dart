@@ -35,10 +35,6 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
-    // C5: Android 12+ butuh izin "exact alarm" yang diminta terpisah dari
-    // SCHEDULE_EXACT_ALARM di manifest. Tanpa ini zonedSchedule exact gagal dan
-    // jatuh ke inexact, jadi pengingat bisa terlambat puluhan menit.
-    await requestExactAlarmPermission();
     await _plugin
         .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin>()
@@ -151,10 +147,18 @@ class NotificationService {
   }) =>
       _scheduleAt(resultId(matchId), whenUtc.toUtc(), title, body);
 
+  /// Batalkan hanya notifikasi pengingat kickoff milik sebuah laga.
+  static Future<void> cancelKickoff(int matchId) =>
+      _plugin.cancel(kickoffId(matchId));
+
+  /// Batalkan hanya notifikasi pengingat hasil milik sebuah laga.
+  static Future<void> cancelResult(int matchId) =>
+      _plugin.cancel(resultId(matchId));
+
   /// Batalkan kedua notifikasi milik sebuah laga.
   static Future<void> cancelMatch(int matchId) async {
-    await _plugin.cancel(kickoffId(matchId));
-    await _plugin.cancel(resultId(matchId));
+    await cancelKickoff(matchId);
+    await cancelResult(matchId);
   }
 
   /// Notifikasi hasil akhir langsung tampil (bukan terjadwal), mis. karena
