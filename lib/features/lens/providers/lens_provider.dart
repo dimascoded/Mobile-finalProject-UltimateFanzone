@@ -4,36 +4,26 @@ import '../../../core/network/rates_provider.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/lens_repository.dart';
-import '../data/price_parser.dart';
 import '../data/receipt_parser.dart';
 
-// detectClubs dipindah ke receipt_parser.dart; di-reexport supaya import lama
+// detectClubs tinggal di receipt_parser.dart; di-reexport supaya import lama
 // (mis. test) tetap bekerja.
 export '../data/receipt_parser.dart' show detectClubs;
-
-class LensPrice {
-  const LensPrice(this.line, this.amount, this.idr);
-  final String line;
-  final double amount;
-  final double? idr; // null jika kurs gagal dimuat (offline)
-}
 
 class LensResult {
   const LensResult({
     required this.imagePath,
     required this.text,
-    required this.currency,
-    required this.prices,
-    this.mentionedClubs = const [],
+    required this.draft,
     this.ratesFromCache = false,
   });
-  final String imagePath, text, currency;
-  final List<LensPrice> prices;
 
-  /// Klub Premier League yang namanya terbaca di teks OCR. UI7: sebelumnya
-  /// hasil scan tidak pernah dicocokkan ke klub mana pun, jadi pengguna
-  /// tidak tahu foto struk/karcis itu milik tim yang mana.
-  final List<PlClub> mentionedClubs;
+  final String imagePath;
+  final String text;
+
+  /// Hasil parsing struk/karcis: jenis, nominal, kategori, klub, tanggal, dan
+  /// laga yang cocok. UI membangun kartu pengeluaran dari data ini.
+  final ReceiptDraft draft;
 
   /// true bila konversi Rupiah memakai kurs dari cache Hive, bukan request baru.
   final bool ratesFromCache;
@@ -44,14 +34,9 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
   final Ref _ref;
   final _picker = ImagePicker();
 
-  Future<void> scan(ImageSource source) async {
-    final club = _ref.read(favoriteClubProvider);
-    const currency = 'GBP';
-    if (club == null) {
-      state =
-          AsyncError(Exception('Pilih tim favorit dulu'), StackTrace.current);
-      return;
-    }
+  /// Pindai foto, lalu parse jadi [ReceiptDraft]. Pemindaian tetap jalan tanpa
+  /// tim favorit; [clubs] dan [matches] hanya dipakai untuk mengenali klub/laga.
+  Future<void> scan(ImageSource source, {DocKind? forceKind}) async {
     final x = await _picker.pickImage(
         source: source, maxWidth: 1600, imageQuality: 90);
     if (x == null) return;
@@ -59,29 +44,29 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
     state = const AsyncLoading();
     final result = await AsyncValue.guard(() async {
       final text = await _ref.read(lensRepositoryProvider).recognize(x.path);
-      final found = PriceParser.extract(text, currency);
+      final clubs = _ref.read(clubsProvider).valueOrNull ?? const <PlClub>[];
+      final matches = _ref.read(matchesProvider).valueOrNull?.data ??
+          const <FootballMatch>[];
 
-      // C2: `ratesProvider` sudah mengembalikan cache Hive saat offline,
-      // jadi `null` di sini berarti benar-benar tidak ada kurs sama sekali.
+      // C2: `ratesProvider` sudah mengembalikan cache Hive saat offline, jadi
+      // `null` di sini berarti benar-benar tidak ada kurs sama sekali.
       RatesSnapshot? snap;
       try {
         snap = await _ref.read(ratesProvider.future);
       } catch (_) {
-        snap = null; // tetap tampilkan harga mentah
+        snap = null; // kartu tetap tampil, konversi diisi manual
       }
-      final rate = snap?.gbpPerIdr;
-      final clubs = _ref.read(clubsProvider).valueOrNull ?? const <PlClub>[];
+
       return LensResult(
         imagePath: x.path,
         text: text,
-        currency: currency,
-        mentionedClubs: detectClubs(text, clubs),
+        draft: parseReceipt(
+          text,
+          clubs: clubs,
+          matches: matches,
+          forceKind: forceKind,
+        ),
         ratesFromCache: snap?.fromCache ?? false,
-        prices: [
-          for (final p in found)
-            LensPrice(p.line, p.amount,
-                rate == null || rate == 0 ? null : p.amount / rate),
-        ],
       );
     });
     if (!mounted) return;

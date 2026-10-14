@@ -92,7 +92,7 @@ const _menuGroups = <FeatureSection, _MenuGroup>{
         page: PunditScreen(),
       ),
       (
-        label: 'Lens (OCR Harga)',
+        label: 'Scan Struk & Tiket',
         description: 'Pindai harga dari foto',
         icon: Icons.document_scanner,
         page: LensScreen(),
