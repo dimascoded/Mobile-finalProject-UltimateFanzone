@@ -20,6 +20,14 @@ class AppConfig {
   static const geminiModel =
       String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-3.8-flash');
 
+  /// Kandidat cadangan bila [geminiModel] tidak tersedia (HTTP 404). Dicoba
+  /// berurutan setelah model yang dikonfigurasi dan model yang terakhir berhasil.
+  static const geminiFallbackModels = [
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+  ];
+
   /// Kosong = mode mock (login diterima tanpa backend, untuk development).
   static const backendUrl = String.fromEnvironment('BACKEND_URL');
 
