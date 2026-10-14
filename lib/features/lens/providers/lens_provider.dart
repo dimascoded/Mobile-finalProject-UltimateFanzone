@@ -5,6 +5,11 @@ import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/lens_repository.dart';
 import '../data/price_parser.dart';
+import '../data/receipt_parser.dart';
+
+// detectClubs dipindah ke receipt_parser.dart; di-reexport supaya import lama
+// (mis. test) tetap bekerja.
+export '../data/receipt_parser.dart' show detectClubs;
 
 class LensPrice {
   const LensPrice(this.line, this.amount, this.idr);
@@ -32,31 +37,6 @@ class LensResult {
 
   /// true bila konversi Rupiah memakai kurs dari cache Hive, bukan request baru.
   final bool ratesFromCache;
-}
-
-/// Cocokkan teks OCR dengan daftar klub lewat [PlClub.isTeam].
-///
-/// Kode tim ("ARS", "MCI") sering berdiri sendiri di struk, jadi TLA dicocokkan
-/// per token. Pencocokan token memakai batas kata supaya "ARS" tidak ikut
-/// cocok di dalam kata lain; alias nama tetap pakai [PlClub.isTeam] yang sudah
-/// menoleransi akhiran "FC"/"AFC".
-List<PlClub> detectClubs(String text, List<PlClub> clubs) {
-  final found = <PlClub>[];
-  for (final line in text.split('\n')) {
-    final clean = line.trim();
-    if (clean.isEmpty) continue;
-    final tokens = clean
-        .split(RegExp(r'[^A-Za-z0-9]+'))
-        .where((t) => t.isNotEmpty)
-        .map((t) => t.toUpperCase())
-        .toSet();
-    for (final c in clubs) {
-      if (found.contains(c)) continue;
-      final byTla = tokens.contains(c.tla.toUpperCase());
-      if (byTla || c.isTeam(clean, null)) found.add(c);
-    }
-  }
-  return found;
 }
 
 class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
