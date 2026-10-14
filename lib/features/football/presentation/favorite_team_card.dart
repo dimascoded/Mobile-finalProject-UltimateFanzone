@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/time_utils.dart';
 import '../providers/football_providers.dart';
+import 'club_crest.dart';
 import 'kickoff_times.dart';
 import 'team_picker_screen.dart';
 
@@ -40,6 +41,18 @@ class FavoriteTeamCard extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                  color: Colors.white, shape: BoxShape.circle),
+              child: ClubCrest(
+                crestUrl: ref.watch(clubCrestProvider)[club.tla.toUpperCase()],
+                tla: club.tla,
+                color: bg,
+                size: 40,
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

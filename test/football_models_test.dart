@@ -133,6 +133,56 @@ void main() {
     });
   });
 
+  group('crest klub', () {
+    test('laga menyimpan crest tiap tim, absen jadi null', () {
+      final m = FootballMatch.tryParse({
+        'id': 1,
+        'utcDate': '2026-08-15T14:00:00Z',
+        'status': 'SCHEDULED',
+        'homeTeam': {
+          'name': 'Arsenal',
+          'shortName': 'Arsenal',
+          'tla': 'ARS',
+          'crest': 'https://crests.football-data.org/57.png',
+        },
+        'awayTeam': {'name': 'Chelsea', 'shortName': 'Chelsea', 'tla': 'CHE'},
+      })!;
+      expect(m.homeCrest, 'https://crests.football-data.org/57.png');
+      expect(m.awayCrest, isNull);
+    });
+
+    test('klasemen dan top skor ikut membawa crest', () {
+      final r = StandingRow.tryParse({
+        'position': 1,
+        'playedGames': 4,
+        'won': 4,
+        'draw': 0,
+        'lost': 0,
+        'goalDifference': 6,
+        'points': 12,
+        'team': {
+          'name': 'Arsenal',
+          'shortName': 'Arsenal',
+          'tla': 'ARS',
+          'crest': 'crest-ars',
+        },
+      })!;
+      expect(r.crest, 'crest-ars');
+
+      final s = ScorerRow.tryParse({
+        'player': {'name': 'Bukayo Saka'},
+        'team': {
+          'name': 'Arsenal',
+          'shortName': 'Arsenal',
+          'tla': 'ARS',
+          'crest': 'crest-ars',
+        },
+        'goals': 5,
+      })!;
+      expect(s.crest, 'crest-ars');
+    });
+  });
+
   group('klasemen', () {
     test('baris lengkap terbaca apa adanya', () {
       final r = StandingRow.tryParse(

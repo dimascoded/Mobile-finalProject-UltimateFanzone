@@ -40,6 +40,28 @@ final standingsProvider = FutureProvider<FootballResult<List<StandingRow>>>(
 final scorersProvider = FutureProvider<FootballResult<List<ScorerRow>>>(
     (ref) => ref.watch(footballRepositoryProvider).scorers());
 
+/// Peta TLA tim -> URL crest, dibangun dari laga terakhir (football-data.org).
+///
+/// Klub di `pl_clubs.json` tidak menyimpan crest, jadi tampilan berbasis
+/// `PlClub` memakai peta ini. Bila kosong (data contoh/offline) pemanggil
+/// otomatis jatuh ke badge warna + TLA.
+final clubCrestProvider = Provider<Map<String, String>>((ref) {
+  final map = <String, String>{};
+  final matches =
+      ref.watch(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
+  for (final m in matches) {
+    final home = m.homeCrest;
+    if (home != null && home.isNotEmpty && m.homeTla != null) {
+      map[m.homeTla!.toUpperCase()] = home;
+    }
+    final away = m.awayCrest;
+    if (away != null && away.isNotEmpty && m.awayTla != null) {
+      map[m.awayTla!.toUpperCase()] = away;
+    }
+  }
+  return map;
+});
+
 /// Muat ulang paksa (cache dikosongkan lalu provider di-invalidate).
 final footballRefreshProvider = Provider<Future<void> Function()>((ref) {
   return () async {

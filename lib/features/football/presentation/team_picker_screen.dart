@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/football_providers.dart';
+import 'club_crest.dart';
 
 class TeamPickerScreen extends ConsumerWidget {
   const TeamPickerScreen({super.key});
@@ -9,6 +10,7 @@ class TeamPickerScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final clubs = ref.watch(clubsProvider);
     final selected = ref.watch(favoriteKeyProvider);
+    final crests = ref.watch(clubCrestProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pilih Tim Favorit')),
@@ -18,19 +20,11 @@ class TeamPickerScreen extends ConsumerWidget {
           itemBuilder: (_, i) {
             final c = list[i];
             return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: c.colorValue,
-                child: Text(
-                  c.tla,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: ThemeData.estimateBrightnessForColor(c.colorValue) ==
-                            Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                  ),
-                ),
+              leading: ClubCrest(
+                crestUrl: crests[c.tla.toUpperCase()],
+                tla: c.tla,
+                color: c.colorValue,
+                size: 40,
               ),
               title: Text(c.name),
               subtitle: Text('${c.stadium} • ${c.city}'),

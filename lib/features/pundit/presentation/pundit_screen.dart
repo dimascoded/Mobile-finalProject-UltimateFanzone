@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/time_utils.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../providers/pundit_provider.dart';
 
@@ -11,6 +12,7 @@ class PunditScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(punditProvider);
     final club = ref.watch(favoriteClubProvider);
+    final crests = ref.watch(clubCrestProvider);
     final loading = state.isLoading;
     final scheme = Theme.of(context).colorScheme;
 
@@ -19,7 +21,17 @@ class PunditScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (club != null) Text('Tim favorit: ${club.name}'),
+          if (club != null)
+            Row(children: [
+              ClubCrest(
+                crestUrl: crests[club.tla.toUpperCase()],
+                tla: club.tla,
+                color: club.colorValue,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Tim favorit: ${club.name}')),
+            ]),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: loading

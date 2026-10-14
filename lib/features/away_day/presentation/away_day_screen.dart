@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/rates_provider.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
 import '../providers/away_day_providers.dart';
@@ -424,6 +425,7 @@ class _Tile extends ConsumerWidget {
         .valueOrNull
         ?.where((c) => c.key == expense.clubKey)
         .firstOrNull;
+    final crests = ref.watch(clubCrestProvider);
 
     return Dismissible(
       key: ValueKey(expense.id),
@@ -441,15 +443,18 @@ class _Tile extends ConsumerWidget {
       child: Card(
         margin: const EdgeInsets.only(bottom: 8),
         child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: club?.colorValue ??
-                Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              _catIcon[expense.category],
-              size: 20,
-              color: club == null ? null : Colors.white,
-            ),
-          ),
+          leading: club != null
+              ? ClubCrest(
+                  crestUrl: crests[club.tla.toUpperCase()],
+                  tla: club.tla,
+                  color: club.colorValue,
+                  size: 40,
+                )
+              : CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Icon(_catIcon[expense.category], size: 20),
+                ),
           title:
               Text(expense.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
@@ -574,6 +579,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
   @override
   Widget build(BuildContext context) {
     final ratesState = ref.watch(ratesProvider);
+    final crests = ref.watch(clubCrestProvider);
     final snap = ratesState.valueOrNull;
     final rates = snap?.rates ?? widget.rates ?? const <String, double>{};
     final perIdr = rates[_currency];
@@ -692,7 +698,19 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 const DropdownMenuItem<String>(
                     value: null, child: Text('Umum')),
                 for (final c in widget.clubs)
-                  DropdownMenuItem<String>(value: c.key, child: Text(c.name)),
+                  DropdownMenuItem<String>(
+                    value: c.key,
+                    child: Row(children: [
+                      ClubCrest(
+                        crestUrl: crests[c.tla.toUpperCase()],
+                        tla: c.tla,
+                        color: c.colorValue,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(c.name)),
+                    ]),
+                  ),
               ],
               onChanged: (v) => setState(() => _clubKey = v),
             ),

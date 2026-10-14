@@ -11,6 +11,7 @@ import '../../away_day/data/away_day_repository.dart';
 import '../../away_day/presentation/away_day_screen.dart';
 import '../../away_day/providers/away_day_providers.dart';
 import '../../football/data/models.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/presentation/match_center_screen.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/expense_mapper.dart';
@@ -298,6 +299,7 @@ class _ExpenseCardState extends ConsumerState<_ExpenseCard> {
     final rateMissing = _currency != 'IDR' && rates?[_currency] == null;
 
     final matches = ref.watch(matchesProvider).valueOrNull?.data ?? const [];
+    final crests = ref.watch(clubCrestProvider);
     FootballMatch? linked;
     if (draft.matchId != null) {
       for (final m in matches) {
@@ -451,13 +453,11 @@ class _ExpenseCardState extends ConsumerState<_ExpenseCard> {
                   children: [
                     for (final c in draft.clubs)
                       Chip(
-                        avatar: CircleAvatar(
-                          backgroundColor: c.colorValue,
-                          child: Text(
-                            c.tla,
-                            style: const TextStyle(
-                                fontSize: 10, color: Colors.white),
-                          ),
+                        avatar: ClubCrest(
+                          crestUrl: crests[c.tla.toUpperCase()],
+                          tla: c.tla,
+                          color: c.colorValue,
+                          size: 24,
                         ),
                         label: Text(c.name),
                       ),

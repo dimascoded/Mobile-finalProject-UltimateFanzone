@@ -5,6 +5,7 @@ import '../../../core/utils/time_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../football/data/football_repository.dart';
 import '../../football/data/models.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../data/prediction_repository.dart';
@@ -156,7 +157,16 @@ class _SettleTileState extends ConsumerState<_SettleTile> {
       color: Theme.of(context).colorScheme.secondaryContainer,
       child: ListTile(
         leading: const Icon(Icons.verified_outlined),
-        title: Text('${m.homeShort} vs ${m.awayShort} selesai'),
+        title: Row(children: [
+          ClubCrest(crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text('${m.homeShort} vs ${m.awayShort} selesai',
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 6),
+          ClubCrest(crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
+        ]),
         subtitle: Text(
             'Skor resmi ${m.homeScore}-${m.awayScore} - cek hasil untuk dapat poin'),
         trailing: FilledButton(
@@ -212,7 +222,20 @@ class _HistoryTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Icon(
           entry.points != null ? Icons.workspace_premium : Icons.lock_outline),
-      title: Text('$title  ${p.homeScore}-${p.awayScore}'),
+      title: Row(children: [
+        if (m != null) ...[
+          ClubCrest(crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
+          const SizedBox(width: 6),
+        ],
+        Expanded(
+          child: Text('$title  ${p.homeScore}-${p.awayScore}',
+              overflow: TextOverflow.ellipsis),
+        ),
+        if (m != null) ...[
+          const SizedBox(width: 6),
+          ClubCrest(crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
+        ],
+      ]),
       subtitle: Text(
           '${TimeUtils.formatDate(wib)}, ${TimeUtils.formatHm(wib)} WIB • $status'),
     );
@@ -286,10 +309,20 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
             for (final m in selectable)
               DropdownMenuItem<int>(
                 value: m.id,
-                child: Text(
-                  '${m.homeShort} vs ${m.awayShort} • ${_wibLabel(m.kickoffUtc)}',
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Row(children: [
+                  ClubCrest(
+                      crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      '${m.homeShort} vs ${m.awayShort} • ${_wibLabel(m.kickoffUtc)}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ClubCrest(
+                      crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
+                ]),
               ),
           ],
           onChanged: (v) => setState(() => _selectedMatchId = v),
@@ -300,12 +333,16 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
           children: [
             _Stepper(
               label: selected.homeShort,
+              crestUrl: selected.homeCrest,
+              tla: selected.homeTla ?? '',
               value: _home,
               onChanged: (v) => setState(() => _home = v),
             ),
             Text('vs', style: Theme.of(context).textTheme.titleMedium),
             _Stepper(
               label: selected.awayShort,
+              crestUrl: selected.awayCrest,
+              tla: selected.awayTla ?? '',
               value: _away,
               onChanged: (v) => setState(() => _away = v),
             ),
@@ -349,9 +386,15 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
 
 class _Stepper extends StatelessWidget {
   const _Stepper(
-      {required this.label, required this.value, required this.onChanged});
+      {required this.label,
+      required this.value,
+      required this.onChanged,
+      this.crestUrl,
+      this.tla = ''});
 
   final String label;
+  final String? crestUrl;
+  final String tla;
   final int value;
   final ValueChanged<int> onChanged;
 
@@ -359,6 +402,10 @@ class _Stepper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        if (crestUrl != null) ...[
+          ClubCrest(crestUrl: crestUrl, tla: tla, size: 32),
+          const SizedBox(height: 4),
+        ],
         Text(label, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Row(

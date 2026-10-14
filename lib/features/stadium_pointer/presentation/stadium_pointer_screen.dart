@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/permission_gate.dart';
 import '../../football/data/models.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../providers/ar_providers.dart';
 
@@ -65,6 +66,7 @@ class _Picker extends ConsumerWidget {
     final target = ref.watch(selectedStadiumProvider);
     final position = ref.watch(positionProvider);
     final heading = ref.watch(compassProvider);
+    final crests = ref.watch(clubCrestProvider);
 
     return Column(
       children: [
@@ -83,8 +85,19 @@ class _Picker extends ConsumerWidget {
               for (final c in clubs)
                 DropdownMenuItem<PlClub>(
                   value: c,
-                  child: Text('${c.name} - ${c.stadium}',
-                      overflow: TextOverflow.ellipsis),
+                  child: Row(children: [
+                    ClubCrest(
+                      crestUrl: crests[c.tla.toUpperCase()],
+                      tla: c.tla,
+                      color: c.colorValue,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text('${c.name} - ${c.stadium}',
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ]),
                 ),
             ],
             onChanged: (v) {
@@ -97,6 +110,7 @@ class _Picker extends ConsumerWidget {
         Expanded(
           child: _Pointer(
             target: target,
+            crestUrl: target == null ? null : crests[target.tla.toUpperCase()],
             position: position,
             heading: heading,
             onRefresh: () {
@@ -113,12 +127,14 @@ class _Picker extends ConsumerWidget {
 class _Pointer extends StatelessWidget {
   const _Pointer({
     required this.target,
+    required this.crestUrl,
     required this.position,
     required this.heading,
     required this.onRefresh,
   });
 
   final PlClub? target;
+  final String? crestUrl;
   final AsyncValue<Position> position;
   final AsyncValue<double> heading;
   final VoidCallback onRefresh;
@@ -166,7 +182,16 @@ class _Pointer extends StatelessWidget {
           const SizedBox(height: 16),
           _CompassDial(relativeBearing: relative, color: club.colorValue),
           const SizedBox(height: 20),
-          Text(club.name, style: Theme.of(context).textTheme.titleLarge),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            ClubCrest(
+              crestUrl: crestUrl,
+              tla: club.tla,
+              color: club.colorValue,
+              size: 28,
+            ),
+            const SizedBox(width: 8),
+            Text(club.name, style: Theme.of(context).textTheme.titleLarge),
+          ]),
           Text(club.stadium, style: Theme.of(context).textTheme.bodyMedium),
           Text(club.city, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 20),

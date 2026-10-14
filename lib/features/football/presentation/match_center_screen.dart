@@ -5,6 +5,7 @@ import '../data/football_repository.dart';
 import '../data/models.dart';
 import '../providers/football_providers.dart';
 import '../providers/kickoff_reminder_provider.dart';
+import 'club_crest.dart';
 import 'data_source_banner.dart';
 import 'kickoff_times.dart';
 
@@ -174,9 +175,24 @@ class _MatchTile extends ConsumerWidget {
           ]),
           Row(children: [
             Expanded(
-              child: Text(match.homeShort,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(fontWeight: w(homeFav), fontSize: 16)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(match.homeShort,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontWeight: w(homeFav), fontSize: 16)),
+                  ),
+                  const SizedBox(width: 6),
+                  ClubCrest(
+                    crestUrl: match.homeCrest,
+                    tla: match.homeTla ?? '',
+                    color: homeFav ? fav.colorValue : null,
+                    size: 28,
+                  ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -188,8 +204,22 @@ class _MatchTile extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: Text(match.awayShort,
-                  style: TextStyle(fontWeight: w(awayFav), fontSize: 16)),
+              child: Row(
+                children: [
+                  ClubCrest(
+                    crestUrl: match.awayCrest,
+                    tla: match.awayTla ?? '',
+                    color: awayFav ? fav.colorValue : null,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(match.awayShort,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontWeight: w(awayFav), fontSize: 16)),
+                  ),
+                ],
+              ),
             ),
           ]),
           const SizedBox(height: 8),
@@ -252,6 +282,13 @@ class _StandingsTab extends ConsumerWidget {
                           horizontal: 16, vertical: 8),
                       child: Row(children: [
                         cell('${row.position}', 28),
+                        ClubCrest(
+                          crestUrl: row.crest,
+                          tla: row.tla ?? '',
+                          color: mine ? fav.colorValue : null,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 6),
                         Expanded(
                             child: cell(row.teamShort, 0,
                                 a: TextAlign.left, bold: mine)),
@@ -301,7 +338,15 @@ class _ScorersTab extends ConsumerWidget {
                     return ListTile(
                       leading: CircleAvatar(child: Text('${i + 1}')),
                       title: Text(s.player),
-                      subtitle: Text(s.teamShort),
+                      subtitle: Row(children: [
+                        ClubCrest(
+                          crestUrl: s.crest,
+                          tla: s.tla ?? '',
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(s.teamShort),
+                      ]),
                       trailing: Text('${s.goals} gol',
                           style: Theme.of(context).textTheme.titleMedium),
                     );

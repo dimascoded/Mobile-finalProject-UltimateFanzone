@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/presentation/team_picker_screen.dart';
 import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
@@ -91,6 +92,7 @@ class ProfileTab extends ConsumerWidget {
     final sync = ref.watch(syncProvider);
     final lastSync = ref.watch(lastSyncedAtProvider);
     final favoriteClub = ref.watch(favoriteClubProvider);
+    final crests = ref.watch(clubCrestProvider);
     final biometricEnabled = ref.watch(biometricEnabledProvider);
     final achievements = chain.where((b) => b.type == 'achievement').length;
     final displayName = email.valueOrNull
@@ -169,14 +171,18 @@ class ProfileTab extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        backgroundColor: favoriteClub?.colorValue ??
-                            Theme.of(context).colorScheme.surface,
-                        child: Icon(
-                          Icons.shield_outlined,
-                          color: favoriteClub == null ? null : Colors.white,
-                        ),
-                      ),
+                      favoriteClub == null
+                          ? CircleAvatar(
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.surface,
+                              child: const Icon(Icons.shield_outlined),
+                            )
+                          : ClubCrest(
+                              crestUrl: crests[favoriteClub.tla.toUpperCase()],
+                              tla: favoriteClub.tla,
+                              color: favoriteClub.colorValue,
+                              size: 40,
+                            ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -253,8 +259,7 @@ class ProfileTab extends ConsumerWidget {
         child: SwitchListTile.adaptive(
           secondary: const Icon(Icons.fingerprint),
           title: const Text('Biometrik'),
-          subtitle: const Text(
-              'Gunakan sidik jari atau Face ID saat membuka aplikasi'),
+          subtitle: const Text('Gunakan sidik jari saat membuka aplikasi'),
           value: biometricEnabled,
           onChanged: (enabled) =>
               ref.read(biometricEnabledProvider.notifier).setEnabled(enabled),

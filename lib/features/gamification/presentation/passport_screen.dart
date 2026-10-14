@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/permission_gate.dart';
+import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../providers/gamification_providers.dart';
 
@@ -30,6 +31,7 @@ class PassportScreen extends ConsumerWidget {
       );
     });
     final club = ref.watch(favoriteClubProvider);
+    final crests = ref.watch(clubCrestProvider);
     final stamps = ref.watch(stampsProvider);
     final valid = ref.watch(chainValidProvider);
     final chain = ref.watch(chainProvider);
@@ -53,7 +55,19 @@ class PassportScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(club.name, style: Theme.of(context).textTheme.titleMedium),
+                Row(children: [
+                  ClubCrest(
+                    crestUrl: crests[club.tla.toUpperCase()],
+                    tla: club.tla,
+                    color: club.colorValue,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(club.name,
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                ]),
                 const SizedBox(height: 4),
                 Text('${club.stadium} • ${club.city}'),
                 const SizedBox(height: 8),
@@ -143,8 +157,19 @@ class PassportScreen extends ConsumerWidget {
             subtitle: Text('${chain.length} blok'),
           ),
         ),
-        Text('Stamp stadion ${club.name}',
-            style: Theme.of(context).textTheme.titleMedium),
+        Row(children: [
+          ClubCrest(
+            crestUrl: crests[club.tla.toUpperCase()],
+            tla: club.tla,
+            color: club.colorValue,
+            size: 22,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('Stamp stadion ${club.name}',
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+        ]),
         for (final b in stamps)
           ListTile(
             leading: const Icon(Icons.approval, color: Colors.teal),

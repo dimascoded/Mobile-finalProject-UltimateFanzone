@@ -55,6 +55,8 @@ class FootballMatch {
     required this.awayShort,
     this.homeTla,
     this.awayTla,
+    this.homeCrest,
+    this.awayCrest,
     this.homeScore,
     this.awayScore,
   });
@@ -63,6 +65,9 @@ class FootballMatch {
   final String status, homeName, awayName, homeShort, awayShort;
   final int? matchday, homeScore, awayScore;
   final String? homeTla, awayTla;
+
+  /// URL crest dari football-data.org; null pada data contoh / cache lama.
+  final String? homeCrest, awayCrest;
 
   bool get isFinished => status == 'FINISHED';
   bool get isOngoing =>
@@ -92,6 +97,8 @@ class FootballMatch {
         awayShort: shortOf(away),
         homeTla: home['tla'] as String?,
         awayTla: away['tla'] as String?,
+        homeCrest: home['crest'] as String?,
+        awayCrest: away['crest'] as String?,
         homeScore: (ft?['home'] as num?)?.toInt(),
         awayScore: (ft?['away'] as num?)?.toInt(),
       );
@@ -107,6 +114,7 @@ class StandingRow {
     required this.teamName,
     required this.teamShort,
     this.tla,
+    this.crest,
     required this.played,
     required this.won,
     required this.draw,
@@ -118,6 +126,9 @@ class StandingRow {
   final String teamName, teamShort;
   final String? tla;
 
+  /// URL crest dari football-data.org; null pada data contoh / cache lama.
+  final String? crest;
+
   static StandingRow? tryParse(Map<String, dynamic> j) {
     try {
       final t = Map<String, dynamic>.from(j['team'] as Map);
@@ -126,6 +137,7 @@ class StandingRow {
         teamName: '${t['name'] ?? t['shortName'] ?? '?'}',
         teamShort: '${t['shortName'] ?? t['name'] ?? '?'}',
         tla: t['tla'] as String?,
+        crest: t['crest'] as String?,
         played: (j['playedGames'] as num?)?.toInt() ?? 0,
         won: (j['won'] as num?)?.toInt() ?? 0,
         draw: (j['draw'] as num?)?.toInt() ?? 0,
@@ -145,6 +157,7 @@ class ScorerRow {
     required this.teamName,
     required this.teamShort,
     this.tla,
+    this.crest,
     required this.goals,
     this.assists,
   });
@@ -152,6 +165,9 @@ class ScorerRow {
   final String? tla;
   final int goals;
   final int? assists;
+
+  /// URL crest dari football-data.org; null pada data contoh / cache lama.
+  final String? crest;
 
   static ScorerRow? tryParse(Map<String, dynamic> j) {
     try {
@@ -162,6 +178,7 @@ class ScorerRow {
         teamName: '${t['name'] ?? t['shortName'] ?? '?'}',
         teamShort: '${t['shortName'] ?? t['name'] ?? '?'}',
         tla: t['tla'] as String?,
+        crest: t['crest'] as String?,
         goals: (j['goals'] as num?)?.toInt() ?? 0,
         assists: (j['assists'] as num?)?.toInt(),
       );
