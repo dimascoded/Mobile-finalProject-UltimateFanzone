@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/database/hive_service.dart';
@@ -10,6 +11,7 @@ import '../data/blockchain.dart';
 import '../data/chain_repository.dart';
 import '../data/reflex_rules.dart';
 import '../data/wallet_repository.dart';
+import '../domain/club_card.dart';
 
 final walletAddressProvider = FutureProvider<String>(
     (ref) => ref.watch(walletRepositoryProvider).getOrCreateAddress());
@@ -42,6 +44,55 @@ final chainValidProvider =
 
 final stampsProvider = Provider<List<Block>>(
     (ref) => ref.watch(chainProvider).where((b) => b.type == 'stamp').toList());
+
+// ---------- Kartu klub: satu blok 'card' per milestone ----------
+
+/// Kartu terakhir yang berhasil di-mint, untuk dikonsumsi UI (Fase 3).
+final lastEarnedCardProvider = StateProvider<ClubCard?>((ref) => null);
+
+final cardMinterProvider = Provider<CardMinter>((ref) => CardMinter(ref));
+
+/// Mencetak satu blok `card` per milestone.
+///
+/// Dedup membaca rantai itu sendiri (blok tipe `card` dengan `data['ref']` yang
+/// sama), bukan flag terpisah, sehingga tetap berlaku setelah reinstall atau
+/// pemulihan dari cloud. Mint memakai jalur yang sama dengan blok lain
+/// (PoW + persist + sinkronisasi) lewat [ChainNotifier.mint]; tidak ada logika
+/// mining yang diduplikasi.
+class CardMinter {
+  CardMinter(this._ref);
+  final Ref _ref;
+
+  /// Kembalikan kartu yang baru dicetak, atau null bila [ref] sudah pernah
+  /// dicetak / blok gagal dibuat. Kegagalan tidak boleh mengganggu alur game,
+  /// prediksi, atau stamp: semua error ditelan, di-log, dan jadi null.
+  Future<ClubCard?> mintCard({
+    required String source,
+    required String ref,
+  }) async {
+    try {
+      final already = _ref
+          .read(chainProvider)
+          .any((b) => b.type == 'card' && b.data['ref']?.toString() == ref);
+      if (already) return null;
+
+      final owner = await _ref.read(walletAddressProvider.future);
+      final block = await _ref
+          .read(chainProvider.notifier)
+          .mint('card', {'source': source, 'ref': ref}, owner);
+
+      final clubs = await _ref.read(clubsProvider.future);
+      final card = cardFromBlock(block, [for (final c in clubs) c.key]);
+      if (card != null) {
+        _ref.read(lastEarnedCardProvider.notifier).state = card;
+      }
+      return card;
+    } catch (e) {
+      debugPrint('mintCard gagal (source=$source, ref=$ref): $e');
+      return null;
+    }
+  }
+}
 
 // ---------- Cap stamp: wajib dekat stadion (atau mode demo) ----------
 // Radius ini disepakati di rubrik: 800 m.
@@ -127,7 +178,12 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
             'distance_m': distance,
           },
           owner);
-      return 'Stamp ${club.stadium} tercetak (blok #${block.index})';
+      if (!demo) {
+        await _ref
+            .read(cardMinterProvider)
+            .mintCard(source: 'stamp', ref: 'stamp:${club.key}');
+      }
+      return 'Stamp ${club.stadium} tercetak (catatan #${block.index})';
     });
     if (!mounted) return; // layar sudah ditutup
     state = result;
@@ -339,6 +395,10 @@ class ReflexNotifier extends StateNotifier<ReflexState> {
       },
       owner,
     );
+    if (!mounted) return;
+    await _ref
+        .read(cardMinterProvider)
+        .mintCard(source: 'reflex', ref: 'reflex:$today');
     if (!mounted) return;
     await HiveService.cache.put('reflex_block_day', today);
   }

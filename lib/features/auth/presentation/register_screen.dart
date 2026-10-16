@@ -63,7 +63,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     autocorrect: false,
                     decoration: const InputDecoration(
                       labelText: 'Email',
-                      helperText: 'Dipakai untuk masuk dan sinkronisasi data',
+                      helperText: 'Dipakai untuk masuk dan mencadangkan data',
                     ),
                   ),
                   const SizedBox(height: 16),

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/football/data/models.dart';
+import 'package:ultimate_fanzone/features/football/data/models.dart';
 
 /// Fixture mengikuti respons football-data.org v4 yang dipangkas. Tujuannya
 /// mengunci parser terhadap bentuk data nyata, termasuk data yang tidak lengkap

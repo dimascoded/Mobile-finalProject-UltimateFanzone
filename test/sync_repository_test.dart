@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:smart_football_fan/features/auth/data/auth_repository.dart';
-import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
-import 'package:smart_football_fan/features/sync/data/sync_repository.dart';
+import 'package:ultimate_fanzone/features/auth/data/auth_repository.dart';
+import 'package:ultimate_fanzone/features/prediction/data/prediction_repository.dart';
+import 'package:ultimate_fanzone/features/sync/data/sync_repository.dart';
 
 /// Adapter yang menjawab dari dalam memory, tanpa jaringan.
 ///
@@ -70,7 +70,7 @@ SyncRepository buildRepo(
   final dio = Dio(BaseOptions(validateStatus: (s) => s != null && s < 500))
     ..httpClientAdapter = adapter;
   final auth = AuthRepository(
-      Dio(), const FlutterSecureStorage(), LocalAuthentication());
+      const FlutterSecureStorage(), LocalAuthentication());
   return SyncRepository(
     dio,
     auth,
@@ -100,27 +100,26 @@ Map<String, dynamic> resultBlock(int matchId) => {
     };
 
 void main() {
-  group('mode mock', () {
+  group('cloud belum dikonfigurasi', () {
     test('mengembalikan daftar lokal, jadi Hive tidak dikosongkan', () async {
       final lokal = [prediction(7001, 2, 1)];
       final repo = buildRepo(
         FakeAdapter(),
-        baseUrl: '', // kosong = mock
+        baseUrl: '', // tanpa server = sinkronisasi dilewati
       );
       final hasil = await repo.sync(
         expenses: const [],
         chain: const [],
         predictions: lokal,
       );
-      expect(hasil.mock, isTrue);
       expect(hasil.predictions.length, 1);
       expect(hasil.predictions.first.matchId, 7001);
       expect(hasil.mergedPredictions, 1);
     });
   });
 
-  group('S4: isi payload push', () {
-    test('tanpa blok result hanya commit yang dikirim', () async {
+  group('isi payload push prediksi', () {
+    test('tanpa blok result tetap bentuk penuh (skor + salt)', () async {
       final adapter = FakeAdapter(
           onPost: (b) => json200({
                 'expenses': (b['expenses'] as List).length,
@@ -134,11 +133,14 @@ void main() {
         predictions: [prediction(7001, 2, 1)],
       );
       final sent = (adapter.lastBody!['predictions'] as List).single as Map;
-      expect(sent.keys.toSet(), {'matchId', 'commit', 'createdAt'});
-      expect(jsonEncode(sent).contains('salt7001'), isFalse);
+      expect(sent['matchId'], 7001);
+      expect(sent['homeScore'], 2);
+      expect(sent['awayScore'], 1);
+      expect(sent['salt'], 'salt7001');
+      expect(sent['commit'], 'commit7001');
     });
 
-    test('ada blok result, bentuk penuh yang dikirim', () async {
+    test('ada blok result, tetap bentuk penuh', () async {
       final adapter = FakeAdapter(
           onPost: (b) =>
               json200({'predictions': (b['predictions'] as List).length}));
@@ -214,7 +216,7 @@ void main() {
         throwsA(isA<SyncException>()
             .having((e) => e.unauthorized, 'unauthorized', isFalse)
             .having((e) => e.message, 'message',
-                contains('Server menolak sinkronisasi (500)'))),
+                contains('Server menolak pencadangan (500)'))),
       );
     });
 

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/football/data/models.dart';
-import 'package:smart_football_fan/features/football/providers/result_notification_provider.dart';
+import 'package:ultimate_fanzone/features/football/data/models.dart';
+import 'package:ultimate_fanzone/features/football/providers/result_notification_provider.dart';
 
 void main() {
   FootballMatch mk({

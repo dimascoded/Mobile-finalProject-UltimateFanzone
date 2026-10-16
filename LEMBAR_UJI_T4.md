@@ -1,4 +1,4 @@
-# Lembar Uji Manual (T4) - Smart Football Fan
+# Lembar Uji Manual (T4) - Ultimate Fanzone
 
 Lembar ini adalah bukti pengujian untuk laporan. Isi kolom **Hasil aktual** dan
 **Bukti** setelah menjalankan setiap skenario di perangkat fisik. Emulator tidak

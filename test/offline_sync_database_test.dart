@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:smart_football_fan/core/database/hive_service.dart';
-import 'package:smart_football_fan/core/database/offline_sync_database.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ultimate_fanzone/core/database/hive_service.dart';
+import 'package:ultimate_fanzone/core/database/offline_sync_database.dart';
 
 void main() {
   late Directory directory;

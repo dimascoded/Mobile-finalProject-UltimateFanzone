@@ -73,7 +73,7 @@ class MyApp extends ConsumerWidget {
     ref.watch(resultNotifierSyncProvider);
     ref.watch(pruneNotifiedProvider);
     return MaterialApp(
-      title: 'Smart Football Fan',
+      title: 'Ultimate Fanzone',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

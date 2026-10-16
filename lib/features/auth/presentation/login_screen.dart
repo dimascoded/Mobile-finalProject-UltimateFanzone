@@ -50,7 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(children: [
               const Icon(Icons.sports_soccer, size: 80),
               const SizedBox(height: 8),
-              Text('Smart Football Fan',
+              Text('Ultimate Fanzone',
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 32),
               TextField(

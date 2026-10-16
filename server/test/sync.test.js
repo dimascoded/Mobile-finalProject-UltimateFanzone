@@ -23,14 +23,29 @@ function makeUser() {
 
 /**
  * Hash blok dihitung ulang di sini, independen dari sync.js, supaya test benar
- *-benar menguji formula yang sama dengan `Block.computeHash` di sisi Flutter:
- *   sha256('index|timestamp|type|JSON.stringify(data)|owner|prevHash|nonce')
+ * -benar menguji formula yang sama dengan `Block.computeHash` di sisi Flutter:
+ *   sha256('index|timestamp|type|canonicalJson(data)|owner|prevHash|nonce')
+ *
+ * canonicalJson = JSON.stringify dengan key diurutkan menaik (ordinal,
+ * recursif), sama seperti `Block.canonicalDataJson` di Dart.
  */
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value !== null && typeof value === 'object') {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      out[key] = canonicalJson(value[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
 function hashOf(b) {
   return crypto
     .createHash('sha256')
     .update(
-      `${b.index}|${b.timestamp}|${b.type}|${JSON.stringify(b.data ?? {})}|${b.owner}|${b.prevHash}|${b.nonce}`
+      `${b.index}|${b.timestamp}|${b.type}|${JSON.stringify(canonicalJson(b.data ?? {}))}|${b.owner}|${b.prevHash}|${b.nonce}`
     )
     .digest('hex');
 }
@@ -198,7 +213,7 @@ test('B4: computeBlockHash server sama dengan formula Block.computeHash', () => 
       index: block.index,
       timestamp: block.timestamp,
       type: block.type,
-      dataJson: JSON.stringify(block.data),
+      dataJson: JSON.stringify(canonicalJson(block.data)),
       owner: block.owner,
       prevHash: block.prevHash,
       nonce: block.nonce,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../data/football_repository.dart';
 import '../data/models.dart';
+import '../data/reminder_leads.dart';
 import '../providers/football_providers.dart';
 import '../providers/kickoff_reminder_provider.dart';
 import 'club_crest.dart';
@@ -61,9 +62,10 @@ class MatchCenterScreen extends ConsumerWidget {
       return;
     }
     final n = await scheduleRemindersForUpcoming(ref);
+    final leads = ref.read(kickoffLeadsProvider);
+    final labels = leads.map(formatLead).join(', ');
     final message = n > 0
-        ? '$n pengingat kickoff untuk ${fav.name} dijadwalkan '
-            '(30 menit sebelum main, maks $maxKickoffReminders laga)'
+        ? 'Pengingat terjadwal: $n notifikasi • $labels'
         : 'Tidak ada laga ${fav.name} mendatang untuk dijadwalkan';
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }

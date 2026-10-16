@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/gamification/data/blockchain.dart';
+import 'package:ultimate_fanzone/features/gamification/data/blockchain.dart';
 
 /// B4: server menghitung ulang hash blok dengan `JSON.stringify` atas data yang
 /// diterimanya. Bentuk JSON harus sama di kedua sisi, termasuk untuk angka.
@@ -16,9 +16,11 @@ void main() {
           '{"distance_m":1500.5}');
     });
 
-    test('int tidak berubah dan urutan key dipertahankan', () {
+    test('int tidak berubah dan key diurutkan menaik', () {
+      // Urutan key di-normalisasi (ordinal ascending) supaya sama dengan jsonb
+      // Supabase dan JSON.stringify dengan key terurut di sisi server.
       expect(Block.canonicalDataJson({'score': 3, 'goals': 2}),
-          '{"score":3,"goals":2}');
+          '{"goals":2,"score":3}');
     });
 
     test('data bersarang ikut dinormalkan', () {
@@ -82,6 +84,98 @@ void main() {
             nonce: 7,
           );
       expect(hashFor({'club': 'arsenal'}), isNot(hashFor({'club': 'chelsea'})));
+    });
+  });
+
+  group('canonicalDataJson tidak bergantung urutan key', () {
+    test('map dua key sama walau urutan insert berbeda', () {
+      expect(Block.canonicalDataJson({'b': 1, 'a': 2}),
+          Block.canonicalDataJson({'a': 2, 'b': 1}));
+      expect(Block.canonicalDataJson({'b': 1, 'a': 2}), '{"a":2,"b":1}');
+    });
+
+    test('map bersarang dan map di dalam list ikut diurutkan', () {
+      expect(
+        Block.canonicalDataJson({
+          'b': {
+            'z': 1,
+            'a': {'n': 2, 'm': 3},
+          },
+          'a': [
+            {'y': 4, 'x': 5},
+            6.0,
+          ],
+        }),
+        '{"a":[{"x":5,"y":4},6],"b":{"a":{"m":3,"n":2},"z":1}}',
+      );
+      // Nilai identik, urutan insert dibalik -> teks kanonik sama.
+      expect(
+        Block.canonicalDataJson({
+          'a': [
+            {'x': 5, 'y': 4},
+            6,
+          ],
+          'b': {
+            'a': {
+              'm': 3,
+              'n': 2,
+            },
+            'z': 1,
+          },
+        }),
+        '{"a":[{"x":5,"y":4},6],"b":{"a":{"m":3,"n":2},"z":1}}',
+      );
+    });
+  });
+
+  group('putaran jsonb (blok tetap valid setelah key diurutkan ulang)', () {
+    Block withData(Block b, Map<String, dynamic> data) => Block(
+          index: b.index,
+          timestamp: b.timestamp,
+          type: b.type,
+          data: data,
+          owner: b.owner,
+          prevHash: b.prevHash,
+          nonce: b.nonce,
+          hash: b.hash,
+        );
+
+    test('blok mined dengan multi-key data tetap valid setelah round-trip', () {
+      final mined = Blockchain.mine(
+        index: 0,
+        timestamp: 1,
+        type: 'stamp',
+        data: const {
+          'stadium': 'X',
+          'distance_m': 1500.0,
+          'gps_verified': true,
+          'club': 'arsenal',
+        },
+        owner: 'me',
+        prevHash: Blockchain.genesisPrevHash,
+      );
+      // Simulasi jsonb: key terurut balik (urutan jsonb), double bulat jadi int.
+      final roundTripped = withData(mined, const {
+        'club': 'arsenal',
+        'gps_verified': true,
+        'distance_m': 1500,
+        'stadium': 'X',
+      });
+      expect(Blockchain.isValid([roundTripped]), isTrue);
+    });
+
+    test('rantai 3 blok dengan semua data diurutkan ulang tetap valid', () {
+      final g = Blockchain.genesis();
+      final b1 = Blockchain.next([g], 'stamp', {'b': 2, 'a': 1.0}, 'me');
+      final b2 = Blockchain.next([g, b1], 'stamp', {'z': 9, 'y': 8.5}, 'me');
+      final reordered = [
+        withData(g, const {}),
+        withData(b1, const {'a': 1, 'b': 2}),
+        withData(b2, const {'y': 8.5, 'z': 9}),
+      ];
+      expect(Blockchain.isValid(reordered), isTrue);
+      // Remote yang lebih panjang (data diurutkan ulang) masih boleh diadopsi.
+      expect(Blockchain.canAdoptRemote([g, b1], reordered), isTrue);
     });
   });
 }

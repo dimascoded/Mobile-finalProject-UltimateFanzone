@@ -8,6 +8,8 @@ import '../../../core/widgets/empty_state.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
+import '../data/city_time.dart';
+import '../data/currency_convert.dart';
 import '../providers/away_day_providers.dart';
 
 /// Parse angka yang diketik pengguna.
@@ -47,10 +49,8 @@ String _currencyPrefix(String currency) => switch (currency) {
       _ => 'Rp ',
     };
 
-String _foreignAmount(double amount, String currency) {
-  final symbol = _currencyPrefix(currency).trimRight();
-  return '$symbol${amount.toStringAsFixed(currency == 'IDR' ? 0 : 2)}';
-}
+String _foreignAmount(double amount, String currency) =>
+    formatMoney(amount, currency);
 
 const _catLabel = {
   AwayDayCategory.tiket: 'Tiket',
@@ -119,9 +119,12 @@ class _Summary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final pct =
-        budget > 0 ? (totals.idr / budget * 100).clamp(0.0, 100.0) : 0.0;
-    final over = budget > 0 && totals.idr > budget;
+    final summary = ref.watch(awayDaySummaryProvider);
+    final selectedCurrency = ref.watch(awayDaySummaryCurrencyProvider);
+    final snap = ref.watch(ratesProvider).valueOrNull;
+    final totalIdr = summary.totalIdr;
+    final pct = budget > 0 ? (totalIdr / budget * 100).clamp(0.0, 100.0) : 0.0;
+    final over = budget > 0 && totalIdr > budget;
 
     return Card(
       child: Padding(
@@ -133,13 +136,60 @@ class _Summary extends ConsumerWidget {
                 style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 4),
             Text(
-              _rp(totals.idr),
+              formatMoney(summary.total, selectedCurrency),
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: over ? scheme.error : scheme.primary,
                   ),
             ),
-            Text(_gbp(totals.gbp),
-                style: Theme.of(context).textTheme.bodyMedium),
+            if (selectedCurrency != 'IDR')
+              Text('\u2248 ${_rp(totalIdr)}',
+                  style: Theme.of(context).textTheme.bodyMedium)
+            else
+              Text(_gbp(totals.gbp),
+                  style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            Text('Tampilkan dalam',
+                style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final info in supportedCurrencies.values)
+                  ChoiceChip(
+                    label: Text(info.code),
+                    selected: selectedCurrency == info.code,
+                    onSelected: (v) {
+                      if (v) {
+                        ref
+                            .read(awayDaySummaryCurrencyProvider.notifier)
+                            .set(info.code);
+                      }
+                    },
+                  ),
+              ],
+            ),
+            if (snap?.fetchedAt != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Kurs per ${TimeUtils.formatDate(TimeUtils.wib(snap!.fetchedAt!))} WIB'
+                '${snap.fromCache ? ' (tersimpan)' : ''}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (summary.fallbackCount > 0)
+              Text(
+                '${summary.fallbackCount} pengeluaran memakai kurs saat dicatat',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.tertiary,
+                    ),
+              ),
+            if (summary.skippedCount > 0)
+              Text(
+                '${summary.skippedCount} pengeluaran tidak bisa dikonversi, kurs belum tersedia',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.error,
+                    ),
+              ),
             const SizedBox(height: 12),
             if (budget > 0) ...[
               LinearProgressIndicator(
@@ -150,8 +200,8 @@ class _Summary extends ConsumerWidget {
               const SizedBox(height: 6),
               Text(
                 over
-                    ? 'Melebihi anggaran ${_rp(totals.idr - budget)}'
-                    : 'Sisa anggaran ${_rp(budget - totals.idr)}',
+                    ? 'Melebihi anggaran ${_rp(totalIdr - budget)}'
+                    : 'Sisa anggaran ${_rp(budget - totalIdr)}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: over ? scheme.error : null,
                     ),
@@ -184,7 +234,9 @@ class _WorldClock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedZone = ref.watch(awayDayClockZoneProvider);
     final selectedCity = ref.watch(awayDayClockCityProvider);
+    final selectedIndoCity = ref.watch(awayDayClockIndoCityProvider);
     final clubs = ref.watch(clubsProvider);
+    final theme = Theme.of(context);
 
     return Card(
       child: Padding(
@@ -224,8 +276,25 @@ class _WorldClock extends ConsumerWidget {
                       : cities.contains(favoriteCity)
                           ? favoriteCity!
                           : cities.first;
+
+                  final longitudes = cityLongitudes(clubList);
+                  final indoCity = indonesianCities.firstWhere(
+                    (c) => c.name == selectedIndoCity,
+                    orElse: () => indonesianCities.first,
+                  );
+
+                  final utc = times['UTC'] ?? TimeUtils.nowUtc();
                   final indonesiaTime = times[selectedZone] ?? times['WIB']!;
-                  final clubTime = times['London']!;
+                  final londonTime = times['London']!;
+
+                  final indoSolar = solarTime(utc, indoCity.lng);
+                  final englishLng = longitudes[city];
+                  final englishSolar =
+                      englishLng == null ? null : solarTime(utc, englishLng);
+                  final englishDiff = englishSolar?.difference(londonTime);
+
+                  final westToEast = longitudes.entries.toList()
+                    ..sort((a, b) => a.value.compareTo(b.value));
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -249,6 +318,33 @@ class _WorldClock extends ConsumerWidget {
                             ref.read(awayDayClockZoneProvider.notifier).state =
                                 value;
                           }
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('clock-indo-$selectedIndoCity'),
+                        initialValue:
+                            selectedIndoCity ?? indonesianCities.first.name,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Kota di Indonesia',
+                          prefixIcon: Icon(Icons.location_on),
+                        ),
+                        items: [
+                          for (final c in indonesianCities)
+                            DropdownMenuItem(
+                                value: c.name, child: Text(c.name)),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          final picked = indonesianCities
+                              .firstWhere((c) => c.name == value);
+                          ref
+                              .read(awayDayClockIndoCityProvider.notifier)
+                              .state = value;
+                          ref.read(awayDayClockZoneProvider.notifier).state =
+                              picked.zone;
                         },
                       ),
                       const SizedBox(height: 10),
@@ -280,17 +376,63 @@ class _WorldClock extends ConsumerWidget {
                             child: _ClockReadout(
                               label: selectedZone,
                               time: indonesiaTime,
-                              detail: 'Indonesia',
+                              detail: 'Waktu sipil Indonesia',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ClockReadout(
+                              label: 'London',
+                              time: londonTime,
+                              detail: 'Jam resmi London',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ClockReadout(
+                              label: indoCity.name,
+                              time: indoSolar,
+                              detail: 'Waktu surya lokal',
+                              showSeconds: true,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _ClockReadout(
                               label: city,
-                              time: clubTime,
-                              detail: 'Waktu lokal Inggris',
+                              time: englishSolar ?? londonTime,
+                              detail: englishDiff == null
+                                  ? 'Waktu surya lokal'
+                                  : 'Surya ${formatOffset(englishDiff)} dari London',
+                              showSeconds: true,
                             ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Waktu surya lokal dihitung dari bujur kota, hanya untuk '
+                        'perbandingan. Jadwal laga memakai jam resmi.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 4),
+                      ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: EdgeInsets.zero,
+                        title: Text('Semua kota klub',
+                            style: Theme.of(context).textTheme.labelMedium),
+                        children: [
+                          for (final entry in westToEast)
+                            _CitySolarRow(
+                              city: entry.key,
+                              solar: solarTime(utc, entry.value),
+                              offset: solarTime(utc, entry.value)
+                                  .difference(londonTime),
+                            ),
                         ],
                       ),
                     ],
@@ -310,11 +452,13 @@ class _ClockReadout extends StatelessWidget {
     required this.label,
     required this.time,
     required this.detail,
+    this.showSeconds = false,
   });
 
   final String label;
   final DateTime time;
   final String detail;
+  final bool showSeconds;
 
   @override
   Widget build(BuildContext context) {
@@ -332,7 +476,7 @@ class _ClockReadout extends StatelessWidget {
             Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
             Text(
-              TimeUtils.formatHm(time),
+              showSeconds ? TimeUtils.format(time) : TimeUtils.formatHm(time),
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -340,11 +484,41 @@ class _ClockReadout extends StatelessWidget {
             Text(TimeUtils.formatDate(time), style: theme.textTheme.bodySmall),
             Text(
               detail,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CitySolarRow extends StatelessWidget {
+  const _CitySolarRow({
+    required this.city,
+    required this.solar,
+    required this.offset,
+  });
+
+  final String city;
+  final DateTime solar;
+  final Duration offset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(city, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text('Selisih dari London: ${formatOffset(offset)}',
+          style: theme.textTheme.labelSmall),
+      trailing: Text(
+        TimeUtils.format(solar),
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -521,6 +695,7 @@ Future<void> _showAddSheet(BuildContext context, WidgetRef ref) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     builder: (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
       child: _AddForm(rates: snap?.rates, favKey: favKey, clubs: clubs),
@@ -551,7 +726,9 @@ class _AddFormState extends ConsumerState<_AddForm> {
   @override
   void initState() {
     super.initState();
-    _clubKey = widget.favKey;
+    _clubKey = widget.clubs.any((c) => c.key == widget.favKey)
+        ? widget.favKey
+        : null;
     _foreign.addListener(_syncFromForeign);
   }
 
@@ -580,6 +757,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
   Widget build(BuildContext context) {
     final ratesState = ref.watch(ratesProvider);
     final crests = ref.watch(clubCrestProvider);
+    final outCurrency = ref.watch(awayDaySummaryCurrencyProvider);
     final snap = ratesState.valueOrNull;
     final rates = snap?.rates ?? widget.rates ?? const <String, double>{};
     final perIdr = rates[_currency];
@@ -589,7 +767,8 @@ class _AddFormState extends ConsumerState<_AddForm> {
       if (latestRates != null) _syncFromForeign(latestRates);
     });
 
-    return Padding(
+    return SingleChildScrollView(
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -615,8 +794,11 @@ class _AddFormState extends ConsumerState<_AddForm> {
               border: OutlineInputBorder(),
             ),
             items: [
-              for (final currency in awayDayCurrencies)
-                DropdownMenuItem(value: currency, child: Text(currency)),
+              for (final info in supportedCurrencies.values)
+                DropdownMenuItem(
+                  value: info.code,
+                  child: Text('${info.code} \u00B7 ${info.name}'),
+                ),
             ],
             onChanged: (value) {
               if (value == null) return;
@@ -674,6 +856,23 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
           ],
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _foreign,
+            builder: (context, value, _) {
+              final amt = parseAmount(value.text);
+              if (amt == null || amt <= 0) return const SizedBox.shrink();
+              final converted =
+                  convertCurrency(amt, _currency, outCurrency, rates);
+              if (converted == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '\u2248 ${formatMoney(converted, outCurrency)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              );
+            },
+          ),
           const SizedBox(height: 12),
           DropdownButtonFormField<AwayDayCategory>(
             initialValue: _cat,
@@ -692,6 +891,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
           if (widget.clubs.isNotEmpty)
             DropdownButtonFormField<String>(
               initialValue: _clubKey,
+              isExpanded: true,
               decoration: const InputDecoration(
                   labelText: 'Klub', border: OutlineInputBorder()),
               items: [
@@ -721,6 +921,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
             label: const Text('Simpan'),
           ),
         ],
+      ),
       ),
     );
   }

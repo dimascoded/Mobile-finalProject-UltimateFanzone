@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
 import '../../../core/network/rates_provider.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
+import '../data/currency_convert.dart';
 
-const awayDayCurrencies = ['GBP', 'USD', 'EUR', 'IDR'];
+final awayDayCurrencies = supportedCurrencies.keys.toList();
 
 /// Rates API memakai IDR sebagai basis: `rates[code]` adalah unit asing per IDR.
 double? foreignToIdr(
@@ -155,6 +157,39 @@ class BudgetNotifier extends StateNotifier<double> {
 final awayDayBudgetProvider = StateNotifierProvider<BudgetNotifier, double>(
     (ref) => BudgetNotifier(ref.watch(awayDayRepositoryProvider)));
 
+// ---------- Mata uang ringkasan ----------
+
+const _summaryCurrencyKey = 'away_day_summary_currency';
+
+class AwayDaySummaryCurrencyNotifier extends StateNotifier<String> {
+  AwayDaySummaryCurrencyNotifier() : super(_load());
+
+  static String _load() {
+    final raw = HiveService.cache.get(_summaryCurrencyKey);
+    if (raw == null || raw.isEmpty) return 'IDR';
+    if (supportedCurrencies.containsKey(raw)) return raw;
+    return 'IDR'; // ignore unknown
+  }
+
+  Future<void> set(String code) async {
+    if (!supportedCurrencies.containsKey(code)) return;
+    state = code;
+    await HiveService.cache.put(_summaryCurrencyKey, code);
+  }
+}
+
+final awayDaySummaryCurrencyProvider =
+    StateNotifierProvider<AwayDaySummaryCurrencyNotifier, String>(
+  (ref) => AwayDaySummaryCurrencyNotifier(),
+);
+
+final awayDaySummaryProvider = Provider<AwayDaySummary>((ref) {
+  final items = ref.watch(awayDayProvider);
+  final selected = ref.watch(awayDaySummaryCurrencyProvider);
+  final rates = ref.watch(ratesProvider).valueOrNull?.rates;
+  return summarizeExpenses(items, selected, rates);
+});
+
 // ---------- Jam dunia (rubrik: WIB / WITA / WIT / London) ----------
 
 final awayDayClockZoneProvider =
@@ -163,13 +198,21 @@ final awayDayClockZoneProvider =
 final awayDayClockCityProvider =
     StateProvider.autoDispose<String?>((ref) => null);
 
+/// Kota Indonesia yang dipilih untuk menampilkan waktu surya lokalnya.
+final awayDayClockIndoCityProvider =
+    StateProvider.autoDispose<String?>((ref) => null);
+
 /// Semua klub Premier League basing di Inggris, jadi zona yang relevan adalah
 /// WIB, WITA, WIT, dan London (Europe/London, DST ikut dihitung oleh TimeUtils).
+///
+/// Kunci 'UTC' menyimpan momen UTC mentah supaya perhitungan waktu surya lokal
+/// (berbasis bujur) bisa memakai acuan yang sama.
 final worldClockProvider =
     StreamProvider.autoDispose<Map<String, DateTime>>((ref) async* {
   while (true) {
     final utc = TimeUtils.nowUtc();
     yield {
+      'UTC': utc,
       'WIB': TimeUtils.wib(utc),
       'WITA': TimeUtils.wita(utc),
       'WIT': TimeUtils.wit(utc),

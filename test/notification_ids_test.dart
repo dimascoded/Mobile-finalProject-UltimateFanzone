@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/football/data/models.dart';
-import 'package:smart_football_fan/features/football/providers/kickoff_reminder_provider.dart';
-import 'package:smart_football_fan/features/penalty_shootout/data/penalty_rules.dart';
-import 'package:smart_football_fan/features/sos_emergency/data/notification_service.dart';
+import 'package:ultimate_fanzone/features/football/data/models.dart';
+import 'package:ultimate_fanzone/features/football/providers/kickoff_reminder_provider.dart';
+import 'package:ultimate_fanzone/features/penalty_shootout/data/penalty_rules.dart';
+import 'package:ultimate_fanzone/features/sos_emergency/data/notification_service.dart';
 
 void main() {
   group('N1: id notifikasi kickoff dan hasil tidak bentrok', () {
@@ -45,7 +45,61 @@ void main() {
     });
   });
 
-  group('N3: hanya laga tim favorit, maksimal 20', () {
+  group('N1b: slot kickoff tidak bentrok dengan id lain', () {
+    const matchIds = [1, 2, 537000];
+
+    test('kickoffIdForSlot memberi tiga id berbeda per laga', () {
+      for (final id in matchIds) {
+        final slots = {
+          for (var slot = 0; slot < NotificationService.kickoffSlotCount; slot++)
+            NotificationService.kickoffIdForSlot(id, slot),
+        };
+        expect(slots.length, NotificationService.kickoffSlotCount);
+      }
+    });
+
+    test('slot 0 identik dengan kickoffId lama', () {
+      for (final id in matchIds) {
+        expect(NotificationService.kickoffIdForSlot(id, 0),
+            NotificationService.kickoffId(id));
+      }
+    });
+
+    test('slot kickoff tidak pernah sama dengan resultId', () {
+      for (final id in matchIds) {
+        final result = NotificationService.resultId(id);
+        for (var slot = 0; slot < NotificationService.kickoffSlotCount; slot++) {
+          expect(NotificationService.kickoffIdForSlot(id, slot), isNot(result));
+        }
+      }
+    });
+
+    test('slot kickoff antar laga (1, 2, 537000) tidak saling menimpa', () {
+      final used = <int>{};
+      for (final id in matchIds) {
+        for (var slot = 0; slot < NotificationService.kickoffSlotCount; slot++) {
+          used.add(NotificationService.kickoffIdForSlot(id, slot));
+        }
+        used.add(NotificationService.resultId(id));
+      }
+      // 3 laga x (3 slot kickoff + 1 hasil) = 12 id unik.
+      expect(used.length, matchIds.length * 4);
+      expect(used, isNot(contains(NotificationService.sosId)));
+    });
+
+    test('seluruh slot + hasil unik untuk rentang id laga', () {
+      final used = <int>{};
+      for (var id = 1; id <= 50; id++) {
+        for (var slot = 0; slot < NotificationService.kickoffSlotCount; slot++) {
+          used.add(NotificationService.kickoffIdForSlot(id, slot));
+        }
+        used.add(NotificationService.resultId(id));
+      }
+      expect(used.length, 50 * 4);
+    });
+  });
+
+  group('N3: hanya laga tim favorit, maksimal 10', () {
     const fav = PlClub(
       key: 'ars',
       name: 'Arsenal FC',
@@ -120,14 +174,14 @@ void main() {
       expect(targets.map((m) => m.id), [2]);
     });
 
-    test('dibatasi 20 laga terdekat', () {
+    test('dibatasi 10 laga terdekat', () {
       final data = [
         for (var i = 1; i <= 30; i++) match(i, true, Duration(days: i)),
       ];
       final targets = reminderTargets(data, fav);
       expect(targets.length, maxKickoffReminders);
       expect(targets.first.id, 1);
-      expect(targets.last.id, 20);
+      expect(targets.last.id, 10);
     });
 
     test('tanpa tim favorit tidak ada pengingat sama sekali', () {
@@ -140,9 +194,9 @@ void main() {
       expect(reminderTargets(data, fav), isEmpty);
     });
 
-    test('laga lewat dibuang sebelum batas kuota 20', () {
+    test('laga lewat dibuang sebelum batas kuota 10', () {
       // 5 laga lewat (paling awal) + 20 laga mendatang. Bila kuota diterapkan
-      // sebelum menyaring, slot terpakai laga lewat dan sisanya cuma 15.
+      // sebelum menyaring, slot terpakai laga lewat dan sisanya cuma 5.
       final data = [
         for (var i = 1; i <= 5; i++) match(i, true, Duration(hours: -i)),
         for (var i = 6; i <= 25; i++) match(i, true, Duration(days: i - 5)),
@@ -154,7 +208,7 @@ void main() {
         isTrue,
       );
       expect(targets.first.id, 6);
-      expect(targets.last.id, 25);
+      expect(targets.last.id, 15);
     });
 
     test('tanpa tim favorit kosong walau banyak laga mendatang', () {

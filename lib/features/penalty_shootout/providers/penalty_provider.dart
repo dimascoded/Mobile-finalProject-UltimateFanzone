@@ -429,6 +429,9 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
       },
       owner,
     );
+    await _ref
+        .read(cardMinterProvider)
+        .mintCard(source: 'penalty', ref: 'penalty:$today');
     await HiveService.cache.put(_mintDayKey, today);
     if (mounted) state = state.copyWith(minted: true);
   }

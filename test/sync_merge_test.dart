@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/away_day/data/away_day_repository.dart';
-import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
-import 'package:smart_football_fan/features/sync/data/sync_models.dart';
+import 'package:ultimate_fanzone/features/away_day/data/away_day_repository.dart';
+import 'package:ultimate_fanzone/features/prediction/data/prediction_repository.dart';
+import 'package:ultimate_fanzone/features/sync/data/sync_models.dart';
 
 AwayDayExpense expense(
   String title, {
@@ -90,14 +90,15 @@ void main() {
   });
 
   group('payload prediksi', () {
-    test('S4: sebelum kickoff hanya matchId, commit, dan createdAt', () {
+    test('serializer commit-only (dipertahankan): hanya matchId, commit, createdAt',
+        () {
       final j = predictionCommitToJson(prediction(7001, 2, 1));
       expect(j.keys.toSet(), {'matchId', 'commit', 'createdAt'});
       expect(j['matchId'], 7001);
       expect(j['commit'], 'commit7001');
     });
 
-    test('S4: skor dan salt tidak ikut terkirim sebelum kickoff', () {
+    test('serializer commit-only tidak memuat skor maupun salt', () {
       final j = predictionCommitToJson(prediction(7001, 2, 1));
       expect(j.containsKey('salt'), isFalse);
       expect(j.containsKey('homeScore'), isFalse);
@@ -106,7 +107,7 @@ void main() {
       expect(j.values.join('|').contains('salt7001'), isFalse);
     });
 
-    test('S4: bentuk penuh dipakai setelah blok result ditulis', () {
+    test('bentuk penuh memuat skor dan salt', () {
       final j = revealedPredictionToJson(prediction(7001, 2, 1));
       expect(j['salt'], 'salt7001');
       expect(j['homeScore'], 2);
@@ -137,23 +138,27 @@ void main() {
     });
   });
 
-  group('S4: bentuk payload dipilih dari rantai', () {
+  group('prediksi selalu bentuk penuh saat sinkronisasi', () {
     Map<String, dynamic> resultBlock(int matchId) => {
           'index': 2,
           'type': Prediction.blockTypeResult,
           'data': {'match': matchId, 'salt': 'x', 'points': 3},
         };
 
-    test('tanpa blok result hanya commit yang dikirim', () {
+    test('tanpa blok result tetap penuh: skor dan salt ikut dikirim', () {
       final out = predictionsToSync([
         prediction(7001, 2, 1)
       ], const [
         {'index': 0, 'type': 'genesis', 'data': {}},
       ]);
-      expect(out.single.keys.toSet(), {'matchId', 'commit', 'createdAt'});
+      expect(out.single.keys.toSet(),
+          {'matchId', 'homeScore', 'awayScore', 'salt', 'commit', 'createdAt'});
+      expect(out.single['homeScore'], 2);
+      expect(out.single['awayScore'], 1);
+      expect(out.single['salt'], 'salt7001');
     });
 
-    test('ada blok result untuk laga itu, bentuk penuh yang dikirim', () {
+    test('ada blok result untuk laga itu, tetap bentuk penuh', () {
       final out = predictionsToSync(
         [prediction(7001, 2, 1)],
         [resultBlock(7001)],
@@ -163,15 +168,16 @@ void main() {
       expect(out.single['awayScore'], 1);
     });
 
-    test('blok result laga lain tidak membuka prediksi ini', () {
+    test('blok result laga lain tidak mengubah bentuk payload', () {
       final out = predictionsToSync(
         [prediction(7001, 2, 1)],
         [resultBlock(9999)],
       );
-      expect(out.single.containsKey('salt'), isFalse);
+      expect(out.single['salt'], 'salt7001');
+      expect(out.single['homeScore'], 2);
     });
 
-    test('blok commit saja tidak cukup untuk membuka salt', () {
+    test('blok commit saja pun tetap mengirim skor dan salt', () {
       final out = predictionsToSync(
         [prediction(7001, 2, 1)],
         [
@@ -182,26 +188,25 @@ void main() {
           },
         ],
       );
-      expect(out.single.containsKey('salt'), isFalse);
+      expect(out.single['salt'], 'salt7001');
+      expect(out.single['homeScore'], 2);
     });
 
-    test('campuran: hanya prediksi yang sudah selesai yang terbuka', () {
+    test('campuran: semua prediksi dikirim penuh', () {
       final out = predictionsToSync(
         [prediction(7001, 2, 1), prediction(7002, 0, 0)],
         [resultBlock(7002)],
       );
-      expect(out[0].containsKey('salt'), isFalse);
+      expect(out[0]['salt'], 'salt7001');
       expect(out[1]['salt'], 'salt7002');
+      expect(out[0]['homeScore'], 2);
+      expect(out[1]['awayScore'], 0);
     });
 
-    test('blok tanpa data tidak membuat crash', () {
-      final out = predictionsToSync(
-        [prediction(7001, 1, 0)],
-        [
-          {'index': 3, 'type': Prediction.blockTypeResult},
-        ],
-      );
-      expect(out.single.containsKey('salt'), isFalse);
+    test('rantai kosong tidak membuat crash', () {
+      final out = predictionsToSync([prediction(7001, 1, 0)], const []);
+      expect(out.single['salt'], 'salt7001');
+      expect(out.single['homeScore'], 1);
     });
   });
 
@@ -278,6 +283,36 @@ void main() {
           const [], [revealedPredictionToJson(prediction(7002, 0, 0))]);
       expect(hasil.length, 1);
       expect(hasil.first.matchId, 7002);
+    });
+
+    test('baris lama commit-only (tanpa salt) tetap dilewati', () {
+      final hasil = mergePredictions(const [], [
+        {
+          'matchId': 7003,
+          'commit': 'commit7003',
+          'createdAt': '2026-08-15T14:00:00.000Z',
+        },
+      ]);
+      expect(hasil, isEmpty);
+    });
+  });
+
+  group('restorasi prediksi belum ter-reveal', () {
+    test('baris penuh tanpa blok result memulihkan commit yang sama', () {
+      final asli = prediction(7001, 2, 1);
+      // Tanpa blok result apa pun di rantai.
+      final row = predictionsToSync([asli], const []).single;
+      expect(row['homeScore'], 2);
+      expect(row['awayScore'], 1);
+      expect(row['salt'], 'salt7001');
+
+      final hasil = mergePredictions(const [], [row]);
+      expect(hasil.length, 1);
+      expect(hasil.single.matchId, 7001);
+      expect(hasil.single.homeScore, 2);
+      expect(hasil.single.awayScore, 1);
+      expect(hasil.single.salt, 'salt7001');
+      expect(hasil.single.commit, asli.commit);
     });
   });
 

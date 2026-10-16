@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/away_day/presentation/away_day_screen.dart';
-import 'package:smart_football_fan/features/football/data/models.dart';
-import 'package:smart_football_fan/features/lens/providers/lens_provider.dart';
+import 'package:ultimate_fanzone/features/away_day/presentation/away_day_screen.dart';
+import 'package:ultimate_fanzone/features/football/data/models.dart';
+import 'package:ultimate_fanzone/features/lens/providers/lens_provider.dart';
 
 PlClub _club({
   required String key,

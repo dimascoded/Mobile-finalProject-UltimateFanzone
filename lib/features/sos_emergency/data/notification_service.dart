@@ -61,13 +61,30 @@ class NotificationService {
 
   // ---------- Slot id notifikasi ----------
   //
-  // Satu laga punya DUA notifikasi (pengingat kickoff + pengingat hasil), jadi
-  // keduanya harus memakai id berbeda agar tidak saling menimpa.
-  // SOS memakai id 0.
+  // Satu laga punya minimal DUA notifikasi (pengingat kickoff + pengingat
+  // hasil), dan pengingat kickoff kini boleh punya sampai [kickoffSlotCount]
+  // slot lead time. Semuanya harus memakai id berbeda agar tidak saling
+  // menimpa. SOS memakai id 0.
+  //
+  // Tata letak per laga: `matchId * 10` + {1, 3, 4} = slot kickoff 0..2,
+  // + 2 = hasil akhir, + 0 dan + 5..9 tidak dipakai.
   static const sosId = 0;
 
-  /// Id notifikasi terjadwal untuk pengingat kickoff sebuah laga.
+  /// Jumlah slot pengingat kickoff per laga. Harus sama dengan
+  /// `maxReminderSlots` di reminder_leads.dart.
+  static const kickoffSlotCount = 3;
+
+  /// Id notifikasi terjadwal untuk pengingat kickoff sebuah laga (slot 0).
   static int kickoffId(int matchId) => matchId * 10 + 1;
+
+  /// Id notifikasi terjadwal untuk pengingat kickoff pada [slot] (0..2).
+  /// Slot 0 = [kickoffId]; slot 1 dan 2 sengaja melompati +2 karena angka
+  /// itu milik [resultId].
+  static int kickoffIdForSlot(int matchId, int slot) => switch (slot) {
+        1 => matchId * 10 + 3,
+        2 => matchId * 10 + 4,
+        _ => kickoffId(matchId),
+      };
 
   /// Id notifikasi terjadwal untuk pengingat hasil akhir sebuah laga.
   static int resultId(int matchId) => matchId * 10 + 2;
@@ -123,7 +140,9 @@ class NotificationService {
     }
   }
 
-  /// Jadwalkan pengingat kickoff. [minutesBefore] default 30 menit.
+  /// Jadwalkan pengingat kickoff pada slot [slot]. Waktu bunyi dihitung dari
+  /// [kickoffUtc] dikurangi [minutesBefore], kecuali [fireUtc] diberikan
+  /// (dipakai lead time yang sudah dihitung `plannedReminders`).
   /// Mengembalikan false bila waktunya sudah lewat.
   static Future<bool> scheduleKickoff({
     required int matchId,
@@ -131,12 +150,16 @@ class NotificationService {
     required String title,
     required String body,
     int minutesBefore = 30,
+    int slot = 0,
+    DateTime? fireUtc,
   }) =>
       _scheduleAt(
-          kickoffId(matchId),
-          kickoffUtc.toUtc().subtract(Duration(minutes: minutesBefore)),
-          title,
-          body);
+        kickoffIdForSlot(matchId, slot),
+        fireUtc?.toUtc() ??
+            kickoffUtc.toUtc().subtract(Duration(minutes: minutesBefore)),
+        title,
+        body,
+      );
 
   /// Jadwalkan notifikasi hasil akhir (dipakai result_notification_provider).
   static Future<bool> scheduleResult({
@@ -147,9 +170,13 @@ class NotificationService {
   }) =>
       _scheduleAt(resultId(matchId), whenUtc.toUtc(), title, body);
 
-  /// Batalkan hanya notifikasi pengingat kickoff milik sebuah laga.
-  static Future<void> cancelKickoff(int matchId) =>
-      _plugin.cancel(kickoffId(matchId));
+  /// Batalkan seluruh slot pengingat kickoff milik sebuah laga (semua lead
+  /// time). Tidak menyentuh [resultId].
+  static Future<void> cancelKickoff(int matchId) async {
+    for (var slot = 0; slot < kickoffSlotCount; slot++) {
+      await _plugin.cancel(kickoffIdForSlot(matchId, slot));
+    }
+  }
 
   /// Batalkan hanya notifikasi pengingat hasil milik sebuah laga.
   static Future<void> cancelResult(int matchId) =>

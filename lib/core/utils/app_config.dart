@@ -1,5 +1,6 @@
-/// Semua rahasia diinjeksi saat build, TIDAK di-hardcode:
-/// flutter run --dart-define=GEMINI_API_KEY=xxx --dart-define=BACKEND_URL=https://api.example.com
+/// Semua rahasia diinjeksi saat build, TIDAK di-hardcode. Isi `env.json`
+/// (contoh di `env.example.json`) lalu jalankan:
+///   flutter run --dart-define-from-file=env.json
 class AppConfig {
   static const geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
@@ -27,9 +28,6 @@ class AppConfig {
     'gemini-3.5-flash-lite',
     'gemini-flash-latest',
   ];
-
-  /// Kosong = mode mock (login diterima tanpa backend, untuk development).
-  static const backendUrl = String.fromEnvironment('BACKEND_URL');
 
   /// API key gratis dari football-data.org. Kosong = data contoh (bukan jadwal resmi).
   static const footballApiKey = String.fromEnvironment('FOOTBALL_API_KEY');

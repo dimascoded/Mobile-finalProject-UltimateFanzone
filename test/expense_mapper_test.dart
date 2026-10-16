@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/lens/data/expense_mapper.dart';
+import 'package:ultimate_fanzone/features/lens/data/expense_mapper.dart';
 
 void main() {
   // Rates API basis IDR: rates['GBP'] = GBP per 1 Rupiah (dipakai membagi).

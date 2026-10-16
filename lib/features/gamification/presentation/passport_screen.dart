@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/permission_gate.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
+import '../providers/card_collection_provider.dart';
 import '../providers/gamification_providers.dart';
+import 'card_collection_screen.dart';
 
 class PassportScreen extends ConsumerWidget {
   const PassportScreen({super.key});
@@ -34,20 +36,20 @@ class PassportScreen extends ConsumerWidget {
     final crests = ref.watch(clubCrestProvider);
     final stamps = ref.watch(stampsProvider);
     final valid = ref.watch(chainValidProvider);
-    final chain = ref.watch(chainProvider);
     final demoMode = ref.watch(demoModeProvider);
     final busy = ref.watch(stampProvider).isLoading;
     final distance = ref.watch(stampDistanceProvider);
+    final owned = ref.watch(ownedClubsProvider);
 
     if (club == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Paspor Digital')),
+        appBar: AppBar(title: const Text('Paspor Suporter')),
         body: const Center(child: Text('Pilih tim favorit dulu')),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Paspor Digital')),
+      appBar: AppBar(title: const Text('Paspor Suporter')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Card(
           child: Padding(
@@ -153,8 +155,25 @@ class PassportScreen extends ConsumerWidget {
           child: ListTile(
             leading: Icon(valid ? Icons.verified : Icons.error,
                 color: valid ? Colors.green : Colors.red),
-            title: const Text('Validitas rantai'),
-            subtitle: Text('${chain.length} blok'),
+            title: Text(valid ? 'Riwayat aman' : 'Riwayat tidak cocok'),
+            subtitle: Text(valid
+                ? 'Semua pencapaianmu tercatat dan belum pernah diubah.'
+                : 'Ada catatan yang tidak sesuai. Coba cadangkan ulang.'),
+          ),
+        ),
+        Card(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          child: ListTile(
+            leading: const Icon(Icons.style_outlined),
+            title: Text('Koleksi Kartu (${owned.length})'),
+            subtitle: const Text('Lihat klub yang sudah kamu kumpulkan'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const CardCollectionScreen(),
+              ),
+            ),
           ),
         ),
         Row(children: [
@@ -175,7 +194,7 @@ class PassportScreen extends ConsumerWidget {
             leading: const Icon(Icons.approval, color: Colors.teal),
             title: Text('${b.data['stadium']}'),
             subtitle: Text(
-                'Blok #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
+                'Catatan #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
           ),
       ]),
     );

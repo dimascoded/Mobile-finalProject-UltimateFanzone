@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/penalty_shootout/data/penalty_rules.dart';
+import 'package:ultimate_fanzone/features/penalty_shootout/data/penalty_rules.dart';
 
 void main() {
   group('zoneFromAim', () {

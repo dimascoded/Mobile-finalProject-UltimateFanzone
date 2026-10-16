@@ -31,14 +31,18 @@ class Block {
       CryptoUtils.sha256Hash(
           '$index|$timestamp|$type|${canonicalDataJson(data)}|$owner|$prevHash|$nonce');
 
-  /// Bentuk JSON yang sama di Dart dan di JavaScript.
+  /// Bentuk JSON kanonik yang identik di Dart, JavaScript, dan Postgres jsonb.
   ///
-  /// Server menghitung ulang hash blok (B4) dengan `JSON.stringify` atas data
-  /// yang dia terima. Masalahnya `jsonEncode(1500.0)` di Dart menghasilkan
-  /// `1500.0`, sementara `JSON.parse` + `JSON.stringify` di Node menghasilkan
-  /// `1500`. Blok dengan `distance_m` bulat seperti itu akan dianggap dipalsukan
-  /// padahal isinya sah. Jadi sebelum di-encode, setiap double tanpa bagian
-  /// desimal dinormalkan menjadi int; setelah itu kedua sisi selalu sama.
+  /// Dua normalisasi dilakukan sebelum encode supaya teks hasilnya selalu sama
+  /// di ketiga sisi:
+  ///   1. Key setiap map diurutkan menaik dengan perbandingan ordinal string
+  ///      (recursif, termasuk map di dalam list). Supabase menyimpan `data`
+  ///      sebagai jsonb yang mengurutkan ulang key, dan `JSON.stringify` di
+  ///      Node memakai urutan parse; tanpa pengurutan ini hash yang dihitung
+  ///      ulang dari baris cloud tidak akan pernah cocok.
+  ///   2. Double tanpa bagian desimal dinormalkan menjadi int, karena
+  ///      `jsonEncode(1500.0)` di Dart menghasilkan `1500.0` sementara
+  ///      `JSON.stringify` di Node menghasilkan `1500`.
   static String canonicalDataJson(Map<String, dynamic> data) =>
       jsonEncode(_canonicalValue(data));
 
@@ -48,8 +52,11 @@ class Block {
       return whole && value.abs() <= 9007199254740992 ? value.toInt() : value;
     }
     if (value is Map) {
-      return value
-          .map((key, v) => MapEntry(key.toString(), _canonicalValue(v)));
+      final entries = value.entries
+          .map((e) => MapEntry(e.key.toString(), _canonicalValue(e.value)))
+          .toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      return Map.fromEntries(entries);
     }
     if (value is List) return value.map(_canonicalValue).toList();
     return value;

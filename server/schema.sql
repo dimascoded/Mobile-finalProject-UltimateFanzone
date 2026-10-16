@@ -1,4 +1,4 @@
--- Skema database Smart Football Fan.
+-- Skema database Ultimate Fanzone.
 -- Domain sudah diubah dari Traveler ke sepak bola: tidak ada trips/countries.
 
 CREATE TABLE IF NOT EXISTS users (

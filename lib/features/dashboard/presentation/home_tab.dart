@@ -61,7 +61,7 @@ const _menuGroups = <FeatureSection, _MenuGroup>{
     icon: Icons.sports_esports,
     items: [
       (
-        label: 'Paspor Digital',
+        label: 'Paspor Suporter',
         description: 'Stamp stadion dan pencapaian',
         icon: Icons.approval,
         page: PassportScreen(),

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/away_day/providers/away_day_providers.dart';
+import 'package:ultimate_fanzone/features/away_day/providers/away_day_providers.dart';
 
 void main() {
   // exchangerate-api.com v4 dengan basis IDR: rates['GBP'] = GBP per 1 Rupiah.

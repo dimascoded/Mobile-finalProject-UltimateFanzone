@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:smart_football_fan/core/database/hive_service.dart';
-import 'package:smart_football_fan/features/auth/providers/user_data_cleanup.dart';
-import 'package:smart_football_fan/features/away_day/data/away_day_repository.dart';
-import 'package:smart_football_fan/features/away_day/providers/away_day_providers.dart';
+import 'package:ultimate_fanzone/core/database/hive_service.dart';
+import 'package:ultimate_fanzone/features/auth/providers/user_data_cleanup.dart';
+import 'package:ultimate_fanzone/features/away_day/data/away_day_repository.dart';
+import 'package:ultimate_fanzone/features/away_day/providers/away_day_providers.dart';
 
 /// U4: data yang masih tertahan di memori provider harus ikut hilang setelah
 /// akun keluar, bukan hanya yang ada di Hive.

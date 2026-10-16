@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 
 /// Galat dari panggilan Gemini. [message] selalu dalam Bahasa Indonesia dan
@@ -26,6 +29,16 @@ class GeminiResult {
 
   final String text;
   final String model;
+}
+
+/// Satu giliran percakapan untuk [GeminiClient.chat].
+///
+/// [role] harus tepat 'user' atau 'model' sesuai skema Gemini.
+class ChatTurn {
+  const ChatTurn({required this.role, required this.text});
+
+  final String role;
+  final String text;
 }
 
 /// Urutan model yang akan dicoba: [configured], lalu [remembered], lalu
@@ -134,66 +147,203 @@ String? parseGeminiText(Object? body) {
 /// Klien REST kecil ke Gemini. Memakai instance [Dio] sendiri tanpa logging
 /// interceptor supaya API key tidak pernah tercatat di log.
 class GeminiClient {
-  GeminiClient({Dio? dio})
+  GeminiClient({Dio? dio, Future<void> Function(Duration)? sleep})
       : _dio = dio ??
             Dio(BaseOptions(
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 30),
-            ));
+            )),
+        _sleep = sleep ?? ((duration) => Future<void>.delayed(duration));
 
   final Dio _dio;
+
+  /// Dapat ditukar pada pengujian supaya backoff tidak benar-benar menunggu.
+  final Future<void> Function(Duration) _sleep;
 
   static final _modelPattern = RegExp(r'^[A-Za-z0-9._-]+$');
   static const _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
 
+  /// Jeda backoff tanpa header `Retry-After`: sekitar 1 s lalu 2 s, ditambah
+  /// jitter acak sampai 300 ms supaya banyak klien tidak menyerbu bersamaan.
+  static const _backoffSeconds = <int>[1, 2];
+
+  /// Batas tunggu bila server mengirim header `Retry-After`.
+  static const _maxRetryAfter = Duration(seconds: 8);
+
+  /// Batas total satu panggilan [generate] atau [chat].
+  static const _overallDeadline = Duration(seconds: 45);
+
+  /// Retry maksimum per model di samping percobaan pertama (total 3).
+  static const _maxRetries = 2;
+
+  final Random _random = Random();
+
   /// Kirim [prompt] ke model pertama di [models] yang bisa dipakai.
   ///
-  /// Berpindah ke model berikutnya HANYA saat respons 404. Galat lain langsung
-  /// dipetakan ke [GeminiException] dan dihentikan.
+  /// Galat sementara (429, 5xx, timeout, koneksi) diulang pada model yang sama
+  /// sampai [_maxRetries] kali, lalu berpindah ke model berikutnya. Respons 404
+  /// langsung berpindah model. 400, 401, dan 403 tidak diulang dan tidak
+  /// berpindah model.
   Future<GeminiResult> generate({
     required String apiKey,
     required String prompt,
     required List<String> models,
+  }) {
+    return _send(
+      apiKey: apiKey,
+      models: models,
+      body: {
+        'contents': [
+          {
+            'parts': [
+              {'text': prompt},
+            ],
+          },
+        ],
+      },
+    );
+  }
+
+  /// Percakapan multi-giliran. [turns] harus diawali dan diakhiri oleh giliran
+  /// 'user' dan tidak boleh kosong.
+  Future<GeminiResult> chat({
+    required String apiKey,
+    required String systemInstruction,
+    required List<ChatTurn> turns,
+    required List<String> models,
   }) async {
-    GeminiException? lastNotFound;
+    if (turns.isEmpty) {
+      throw GeminiException('Riwayat percakapan belum ada');
+    }
+    if (turns.first.role != 'user') {
+      throw GeminiException('Pesan pertama harus berasal dari pengguna');
+    }
+    if (turns.last.role != 'user') {
+      throw GeminiException('Pesan terakhir harus berasal dari pengguna');
+    }
+    return _send(
+      apiKey: apiKey,
+      models: models,
+      body: {
+        'systemInstruction': {
+          'parts': [
+            {'text': systemInstruction},
+          ],
+        },
+        'contents': [
+          for (final turn in turns)
+            {
+              'role': turn.role,
+              'parts': [
+                {'text': turn.text},
+              ],
+            },
+        ],
+      },
+    );
+  }
+
+  /// Jalur bersama [generate] dan [chat]: bangun permintaan [body], terapkan
+  /// deadline, retry per model, perpindahan model, parsing, dan pemetaan galat.
+  Future<GeminiResult> _send({
+    required String apiKey,
+    required List<String> models,
+    required Map<String, Object?> body,
+  }) async {
+    final clock = Stopwatch()..start();
+    GeminiException? lastFailure;
     for (final model in models) {
       if (!_modelPattern.hasMatch(model)) {
         throw GeminiException('Nama model AI tidak valid: $model');
       }
-      try {
-        final res = await _dio.post(
-          '$_baseUrl/$model:generateContent',
-          data: {
-            'contents': [
-              {
-                'parts': [
-                  {'text': prompt},
-                ],
-              },
-            ],
-          },
-          options: Options(headers: {'x-goog-api-key': apiKey}),
-        );
-        final text = parseGeminiText(res.data);
-        if (text == null) {
-          throw GeminiException('Respons AI kosong',
-              statusCode: res.statusCode);
+      var retries = 0;
+      while (true) {
+        final remaining = _overallDeadline - clock.elapsed;
+        if (remaining <= Duration.zero) {
+          throw lastFailure ??
+              geminiFailure(type: DioExceptionType.receiveTimeout);
         }
-        return GeminiResult(text: text, model: model);
-      } on DioException catch (e) {
-        final failure = geminiFailure(
-          statusCode: e.response?.statusCode,
-          type: e.type,
-        );
-        if (failure.statusCode == 404) {
-          lastNotFound = failure;
-          continue;
+        try {
+          final res = await _dio
+              .post(
+                '$_baseUrl/$model:generateContent',
+                data: body,
+                options: Options(headers: {'x-goog-api-key': apiKey}),
+              )
+              .timeout(remaining);
+          final text = parseGeminiText(res.data);
+          if (text == null) {
+            throw GeminiException('Respons AI kosong',
+                statusCode: res.statusCode);
+          }
+          return GeminiResult(text: text, model: model);
+        } on TimeoutException {
+          throw lastFailure ??
+              geminiFailure(type: DioExceptionType.receiveTimeout);
+        } on DioException catch (e) {
+          final failure = geminiFailure(
+            statusCode: e.response?.statusCode,
+            type: e.type,
+          );
+          lastFailure = failure;
+          if (failure.modelUnavailable) {
+            break;
+          }
+          if (!_isRetryable(e)) {
+            throw failure;
+          }
+          if (retries >= _maxRetries) {
+            break;
+          }
+          final delay = _retryDelay(retries, e.response?.headers);
+          if (clock.elapsed + delay >= _overallDeadline) {
+            throw failure;
+          }
+          await _sleep(delay);
+          retries++;
         }
-        throw failure;
       }
     }
-    throw lastNotFound ??
+    throw lastFailure ??
         GeminiException('Model tidak tersedia', modelUnavailable: true);
+  }
+
+  /// True bila galat [e] layak diulang pada model yang sama.
+  static bool _isRetryable(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 429 ||
+        status == 500 ||
+        status == 502 ||
+        status == 503 ||
+        status == 504) {
+      return true;
+    }
+    return e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.badCertificate;
+  }
+
+  /// Jeda sebelum percobaan ke-[retries]. Pakai `Retry-After` (detik) bila ada,
+  /// dibatasi [_maxRetryAfter]; kalau tidak, backoff + jitter.
+  Duration _retryDelay(int retries, Headers? headers) {
+    final retryAfter = _parseRetryAfter(headers?.value('retry-after'));
+    if (retryAfter != null) {
+      return retryAfter > _maxRetryAfter ? _maxRetryAfter : retryAfter;
+    }
+    final seconds = _backoffSeconds[retries < _backoffSeconds.length
+        ? retries
+        : _backoffSeconds.length - 1];
+    return Duration(seconds: seconds, milliseconds: _random.nextInt(300));
+  }
+
+  /// Parse header `Retry-After` sebagai detik. Format tanggal HTTP diabaikan.
+  static Duration? _parseRetryAfter(String? raw) {
+    if (raw == null) return null;
+    final seconds = int.tryParse(raw.trim());
+    if (seconds == null || seconds < 0) return null;
+    return Duration(seconds: seconds);
   }
 }

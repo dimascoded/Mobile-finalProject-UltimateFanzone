@@ -231,6 +231,17 @@ class SettleAction {
       ),
       owner,
     );
+    // Kartu milestone hanya bila tebakan benar: skor tepat atau arah hasil
+    // (menang/seri/kalah) sesuai, sama seperti bonus arah di scorePoints.
+    final exact = p.homeScore == m.homeScore! && p.awayScore == m.awayScore!;
+    final outcomeMatches = p.homeScore.compareTo(p.awayScore) ==
+        m.homeScore!.compareTo(m.awayScore!);
+    if (exact || outcomeMatches) {
+      await _ref.read(cardMinterProvider).mintCard(
+            source: 'prediction',
+            ref: 'prediction:${p.matchId}',
+          );
+    }
     return SettledPrediction(
       prediction: p,
       realHome: m.homeScore!,

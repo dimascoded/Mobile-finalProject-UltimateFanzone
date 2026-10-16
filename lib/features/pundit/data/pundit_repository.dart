@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/hive_service.dart';
 import '../../../core/network/gemini_client.dart';
 import '../../../core/utils/app_config.dart';
 import '../../football/data/models.dart';
+import 'pundit_chat.dart';
 
 class PunditResult {
   PunditResult(
@@ -37,7 +40,16 @@ class PunditRepository {
   /// berikutnya mencoba model itu lebih dulu.
   static const _workingModelKey = 'gemini_model_ok';
 
+  /// Awalan key riwayat chat per klub. Ikut terhapus oleh [clearCache] karena
+  /// semuanya diawali 'pundit_'.
+  static const _chatKeyPrefix = 'pundit_chat_';
+
+  /// Batas pesan yang disimpan per klub.
+  static const _maxChatMessages = 30;
+
   String _key(String clubKey) => 'pundit_$clubKey';
+
+  String _chatKey(String clubKey) => '$_chatKeyPrefix$clubKey';
 
   Future<PunditResult> generate(PlClub club, List<StandingRow> standings,
       List<FootballMatch> last5) async {
@@ -94,6 +106,67 @@ class PunditRepository {
     await HiveService.cache
         .put('${_key(club.key)}_at', DateTime.now().toUtc().toIso8601String());
     return PunditResult(text);
+  }
+
+  /// Balasan percakapan multi-giliran "Tanya Pundit".
+  ///
+  /// Memakai kandidat model dan model yang diingat yang sama seperti
+  /// [generate], dan menyimpan model yang berhasil.
+  Future<String> chatReply({
+    required String systemInstruction,
+    required List<ChatTurn> turns,
+  }) async {
+    if (AppConfig.geminiApiKey.isEmpty) {
+      throw Exception('GEMINI_API_KEY belum diset (gunakan --dart-define)');
+    }
+    final remembered = HiveService.cache.get(_workingModelKey);
+    final models = modelCandidates(
+      configured: AppConfig.geminiModel,
+      remembered: remembered,
+      fallbacks: AppConfig.geminiFallbackModels,
+    );
+    final GeminiResult res;
+    try {
+      res = await _client.chat(
+        apiKey: AppConfig.geminiApiKey,
+        systemInstruction: systemInstruction,
+        turns: turns,
+        models: models,
+      );
+    } on GeminiException catch (e) {
+      throw Exception(e.message);
+    }
+    final text = res.text;
+    if (text.isEmpty) throw Exception('Respons AI kosong');
+    await HiveService.cache.put(_workingModelKey, res.model);
+    return text;
+  }
+
+  /// Muat riwayat chat klub. Data rusak dikembalikan sebagai daftar kosong.
+  List<ChatMessage> loadChat(String clubKey) {
+    final raw = HiveService.cache.get(_chatKey(clubKey));
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      final out = <ChatMessage>[];
+      for (final item in decoded) {
+        final m = ChatMessage.fromJson(item);
+        if (m != null) out.add(m);
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Simpan riwayat chat klub, menyisakan [_maxChatMessages] pesan terakhir.
+  Future<void> saveChat(String clubKey, List<ChatMessage> messages) async {
+    final kept = messages.length > _maxChatMessages
+        ? messages.sublist(messages.length - _maxChatMessages)
+        : messages;
+    final encoded = jsonEncode([for (final m in kept) m.toJson()]);
+    await HiveService.cache.put(_chatKey(clubKey), encoded);
   }
 
   PunditResult? cached(String? clubKey) {

@@ -38,20 +38,22 @@ Map<String, dynamic> expenseToJson(AwayDayExpense e) => {
       'date': e.date.toIso8601String(),
     };
 
-/// Bentuk yang aman dikirim sebelum kickoff (S4).
+/// Bentuk commit-only: hanya `matchId`, `commit`, dan `createdAt` (tanpa skor
+/// maupun `salt`).
 ///
-/// Yang boleh keluar hanya `matchId`, `commit`, dan `createdAt`. Skor tebakan
-/// dan `salt` TIDAK boleh ikut: kalau keduanya terkirim sebelum kickoff, orang
-/// lain bisa menghitung sendiri `sha256(matchId|home|away|salt)` dari data
-/// yang sama dan membandingkan dengan `commit`.
+/// Dipertahankan untuk kompatibilitas dan pengujian bentuk commit murni, tetapi
+/// TIDAK lagi dipakai [predictionsToSync]. Baris cloud bersifat privat milik
+/// pemiliknya (RLS `owner manages score predictions`), dan bukti integritas
+/// commit-reveal ada di blok `prediction_commit` pada rantai — bukan pada baris
+/// cloud. Menyimpan skor + `salt` di baris privat itu justru wajib supaya
+/// prediksi yang belum ter-reveal tetap bisa dipulihkan setelah logout/reinstall.
 Map<String, dynamic> predictionCommitToJson(Prediction p) => {
       'matchId': p.matchId,
       'commit': p.commit,
       'createdAt': p.createdAt.toUtc().toIso8601String(),
     };
 
-/// Bentuk lengkap, hanya boleh dipakai SETELAH blok result ditulis ke rantai,
-/// karena saat itu salt dan skor sudah terbuka secara publik.
+/// Bentuk lengkap: `matchId`, skor tebakan, `salt`, `commit`, dan `createdAt`.
 Map<String, dynamic> revealedPredictionToJson(Prediction p) => {
       'matchId': p.matchId,
       'homeScore': p.homeScore,
@@ -62,25 +64,28 @@ Map<String, dynamic> revealedPredictionToJson(Prediction p) => {
     };
 
 /// true kalau rantai lokal sudah punya blok result untuk laga ini.
+///
+/// Dipertahankan sebagai helper (mis. untuk pengujian atau logika lain), tetapi
+/// sinkronisasi tidak lagi memakainya untuk memilih bentuk payload — lihat
+/// [predictionsToSync].
 bool hasResultBlock(List<Map<String, dynamic>> chain, int matchId) => chain
     .where((b) => b['type'] == Prediction.blockTypeResult)
     .any((b) => b['data'] is Map && (b['data']! as Map)['match'] == matchId);
 
-/// Bentuk payload per prediksi (S4).
+/// Payload prediksi: SELALU bentuk penuh untuk SETIAP prediksi.
 ///
-/// Kalau sudah ada blok result untuk laga itu, bentuk yang dikirim lengkap.
-/// Tanpa blok result, hanya commit.
+/// Baris `score_predictions` privat per pengguna (RLS: hanya pemilik yang boleh
+/// baca/tulis), sedangkan bukti integritas commit-reveal ada di blok
+/// `prediction_commit` pada rantai passport. Karena itu mengirim `homeScore`,
+/// `awayScore`, dan `salt` tidak membocorkan rahasia ke pengguna lain, dan
+/// justru diperlukan agar prediksi yang belum ter-reveal bisa dipulihkan setelah
+/// logout/reinstall. Tidak lagi bergantung pada [hasResultBlock]; parameter
+/// `chain` dipertahankan agar pemanggil tidak perlu berubah.
 List<Map<String, dynamic>> predictionsToSync(
   List<Prediction> predictions,
   List<Map<String, dynamic>> chain,
 ) =>
-    [
-      for (final p in predictions)
-        if (hasResultBlock(chain, p.matchId))
-          revealedPredictionToJson(p)
-        else
-          predictionCommitToJson(p),
-    ];
+    [for (final p in predictions) revealedPredictionToJson(p)];
 
 AwayDayExpense expenseFromJson(Map<String, dynamic> j) => AwayDayExpense(
       title: (j['title'] ?? '').toString(),
@@ -132,9 +137,10 @@ List<AwayDayExpense> mergeExpenses(
 
 /// Sama seperti [mergeExpenses], satu prediksi per matchId.
 ///
-/// Entri server yang belum punya `salt` (hanya commit, lihat
-/// `predictionCommitToJson`) diabaikan: tanpa salt prediksi itu tidak akan
-/// pernah bisa direveal, jadi mengadopsinya hanya menambah data yang tidak
+/// Baris cloud kini membawa `salt` dan `commit`, jadi [Prediction.fromJson]
+/// bisa memulihkannya — termasuk prediksi yang belum ter-reveal. Baris lama yang
+/// masih commit-only (tanpa `salt`) TETAP dilewati: tanpa salt prediksi itu tidak
+/// akan pernah bisa direveal, jadi mengadopsinya hanya menambah data yang tidak
 /// bisa dipakai. Prediksi lokal selalu menang untuk matchId yang sama.
 List<Prediction> mergePredictions(
   List<Prediction> local,
@@ -146,7 +152,7 @@ List<Prediction> mergePredictions(
       final p = Prediction.fromJson(r);
       byMatch[p.matchId] = p;
     } catch (_) {
-      continue; // commit-only atau rusak: lewati
+      continue; // commit-only lama atau baris rusak: lewati
     }
   }
   final out = <Prediction>[...byMatch.values];

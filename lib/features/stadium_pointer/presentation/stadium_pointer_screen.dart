@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/permission_gate.dart';
@@ -64,7 +65,7 @@ class _Picker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final target = ref.watch(selectedStadiumProvider);
-    final position = ref.watch(positionProvider);
+    final position = ref.watch(effectivePositionProvider);
     final heading = ref.watch(compassProvider);
     final crests = ref.watch(clubCrestProvider);
 
@@ -124,7 +125,7 @@ class _Picker extends ConsumerWidget {
   }
 }
 
-class _Pointer extends StatelessWidget {
+class _Pointer extends ConsumerWidget {
   const _Pointer({
     required this.target,
     required this.crestUrl,
@@ -140,7 +141,7 @@ class _Pointer extends StatelessWidget {
   final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (target == null) {
       return const EmptyState(
         icon: Icons.touch_app,
@@ -169,17 +170,84 @@ class _Pointer extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final info = computePointer(position.requireValue, club);
+    final pos = position.requireValue;
+    final info = computePointer(pos, club);
     final hdg = heading.requireValue;
     //bearing - heading, dinormalisasi ke 0..360 (0 = lurus ke depan)
     final relative = (info.bearing - hdg + 360) % 360;
 
+    final demo = ref.watch(demoNearStadiumProvider);
+    // Bulatkan posisi ke 3 desimal dulu supaya jitter GPS tidak
+    // membangun family key (dan fetch rute) baru tiap update.
+    final routeAsync = ref.watch(routeProvider((
+      fromLat: _round3(pos.latitude),
+      fromLng: _round3(pos.longitude),
+      toLat: club.lat,
+      toLng: club.lng,
+    )));
+    final route = routeAsync.valueOrNull;
+    final routeUnavailable = routeAsync.hasValue && route == null;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: Column(
         children: [
-          _LocationMap(position: position.requireValue, target: club),
-          const SizedBox(height: 16),
+          _LocationMap(
+            position: pos,
+            target: club,
+            routePoints: route?.points,
+            routeUnavailable: routeUnavailable,
+            showDemoChip: demo,
+          ),
+          if (routeUnavailable)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Rute jalan tidak tersedia dari lokasimu (mungkin terpisah '
+                'laut atau terlalu jauh). Garis putus-putus menunjukkan '
+                'arah lurus.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          if (routeAsync.isLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 3),
+            ),
+          if (route != null)
+            Card(
+              margin: const EdgeInsets.only(top: 8),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.directions_car, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Rute berkendara: '
+                        '${route.distanceKm.toStringAsFixed(1)} km, '
+                        'sekitar ${_durationLabel(route.durationMin)}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          SwitchListTile(
+            value: demo,
+            onChanged: (v) =>
+                ref.read(demoNearStadiumProvider.notifier).state = v,
+            title: const Text('Uji rute dengan lokasi simulasi'),
+            subtitle: const Text(
+              'Memakai posisi sekitar 1,5 km dari stadion supaya rute '
+              'bisa dicoba tanpa berada di sana.',
+            ),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 4),
           _CompassDial(relativeBearing: relative, color: club.colorValue),
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -225,6 +293,12 @@ class _Pointer extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: () => _openInGoogleMaps(context, club),
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Buka di Google Maps'),
+          ),
+          const SizedBox(height: 12),
           Text(
             'Sensor: magnetometer (kompas) + GPS.',
             textAlign: TextAlign.center,
@@ -253,11 +327,62 @@ class _Pointer extends StatelessWidget {
   }
 }
 
+/// Bulatkan ke 3 desimal (~111 m) untuk family key rute.
+double _round3(double v) => double.parse(v.toStringAsFixed(3));
+
+String _durationLabel(double minutes) {
+  final m = minutes.round();
+  if (m < 60) return '$m menit';
+  final h = m ~/ 60;
+  final rest = m % 60;
+  return rest == 0 ? '$h jam' : '$h jam $rest menit';
+}
+
+Future<void> _openInGoogleMaps(BuildContext context, PlClub club) async {
+  // Asal sengaja tidak dikirim: Google Maps memakai lokasi GPS asli.
+  final uri = Uri.parse(
+    'https://www.google.com/maps/dir/?api=1'
+    '&destination=${club.lat},${club.lng}'
+    '&travelmode=driving',
+  );
+  try {
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      _showMapsError(context);
+    }
+  } catch (_) {
+    if (context.mounted) {
+      _showMapsError(context);
+    }
+  }
+}
+
+void _showMapsError(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Tidak bisa membuka aplikasi peta.')),
+  );
+}
+
 class _LocationMap extends StatefulWidget {
-  const _LocationMap({required this.position, required this.target});
+  const _LocationMap({
+    required this.position,
+    required this.target,
+    this.routePoints,
+    this.routeUnavailable = false,
+    this.showDemoChip = false,
+  });
 
   final Position position;
   final PlClub target;
+
+  /// Titik-titik rute jalan OSRM; null = belum ada / tidak tersedia.
+  final List<LatLng>? routePoints;
+
+  /// true = rute sudah selesai diambil dan hasilnya null (garis putus-putus).
+  final bool routeUnavailable;
+
+  /// true = tampilkan chip "Lokasi simulasi" di pojok kiri atas.
+  final bool showDemoChip;
 
   @override
   State<_LocationMap> createState() => _LocationMapState();
@@ -271,12 +396,17 @@ class _LocationMapState extends State<_LocationMap> {
 
   LatLng get _stadiumLocation => LatLng(widget.target.lat, widget.target.lng);
 
-  void _showBothLocations() {
+  void _fitAllPoints() {
+    final points = <LatLng>[
+      _deviceLocation,
+      _stadiumLocation,
+      ...?widget.routePoints,
+    ];
     _mapController.fitCamera(
       CameraFit.bounds(
-        bounds: LatLngBounds.fromPoints([_deviceLocation, _stadiumLocation]),
+        bounds: LatLngBounds.fromPoints(points),
         padding: const EdgeInsets.all(36),
-        maxZoom: 14,
+        maxZoom: 15,
       ),
     );
   }
@@ -288,8 +418,21 @@ class _LocationMapState extends State<_LocationMap> {
   }
 
   @override
+  void didUpdateWidget(covariant _LocationMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Fit hanya saat rute baru datang atau stadion berganti, bukan tiap
+    // update GPS (instance [RouteResult]-nya sama selama tidak berubah).
+    final stadiumChanged = widget.target.key != oldWidget.target.key;
+    final routeChanged = !identical(widget.routePoints, oldWidget.routePoints);
+    if (stadiumChanged || routeChanged) {
+      _fitAllPoints();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final clubColor = widget.target.colorValue;
+    final routePoints = widget.routePoints;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
@@ -305,8 +448,37 @@ class _LocationMapState extends State<_LocationMap> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'smart_football_fan',
+                  userAgentPackageName: 'ultimate_fanzone',
                 ),
+                if (routePoints != null && routePoints.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      // Border putih 2px di bawah garis biru.
+                      Polyline(
+                        points: routePoints,
+                        strokeWidth: 9,
+                        color: Colors.white,
+                      ),
+                      Polyline(
+                        points: routePoints,
+                        strokeWidth: 5,
+                        color: Colors.blue,
+                      ),
+                    ],
+                  )
+                else if (widget.routeUnavailable)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: [_deviceLocation, _stadiumLocation],
+                        strokeWidth: 3,
+                        color: Colors.grey,
+                        pattern: StrokePattern.dashed(
+                          segments: const [8, 6],
+                        ),
+                      ),
+                    ],
+                  ),
                 MarkerLayer(
                   markers: [
                     Marker(
@@ -338,6 +510,17 @@ class _LocationMapState extends State<_LocationMap> {
                 ),
               ],
             ),
+            if (widget.showDemoChip)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Chip(
+                  avatar: const Icon(Icons.science, size: 16),
+                  label: const Text('Lokasi simulasi'),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                ),
+              ),
             Positioned(
               top: 8,
               right: 8,
@@ -358,7 +541,7 @@ class _LocationMapState extends State<_LocationMap> {
                     shape: const CircleBorder(),
                     child: IconButton(
                       tooltip: 'Tampilkan lokasi dan stadion',
-                      onPressed: _showBothLocations,
+                      onPressed: _fitAllPoints,
                       icon: const Icon(Icons.zoom_out_map),
                     ),
                   ),
@@ -409,38 +592,73 @@ class _CompassDial extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 240,
-      height: 240,
-      child: CustomPaint(
-        painter: _DialPainter(relativeBearing: relativeBearing, color: color),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.navigation, size: 52, color: color),
-              Text(
-                '${relativeBearing.toStringAsFixed(0)}\u00B0',
-                style: Theme.of(context).textTheme.titleMedium,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final diameter = math.min(constraints.maxWidth * 0.6, 190.0);
+        return Center(
+          child: SizedBox(
+            key: const ValueKey('stadium-compass-dial'),
+            width: diameter,
+            height: diameter,
+            child: CustomPaint(
+              painter: _DialPainter(
+                relativeBearing: relativeBearing,
+                color: color,
+                diameter: diameter,
               ),
-            ],
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.navigation, size: diameter * 0.22, color: color),
+                    Text(
+                      '${relativeBearing.toStringAsFixed(0)}\u00B0',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _DialPainter extends CustomPainter {
-  _DialPainter({required this.relativeBearing, required this.color});
+/// Wrapper publik agar [_CompassDial] bisa di-pump dari widget test.
+@visibleForTesting
+class CompassDialTestWrapper extends StatelessWidget {
+  const CompassDialTestWrapper({
+    super.key,
+    required this.relativeBearing,
+    required this.color,
+  });
 
   final double relativeBearing;
   final Color color;
 
   @override
+  Widget build(BuildContext context) =>
+      _CompassDial(relativeBearing: relativeBearing, color: color);
+}
+
+class _DialPainter extends CustomPainter {
+  _DialPainter({
+    required this.relativeBearing,
+    required this.color,
+    required this.diameter,
+  });
+
+  final double relativeBearing;
+  final Color color;
+  final double diameter;
+
+  @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 6;
+    final scale = diameter / 240;
 
     canvas.drawCircle(
       center,
@@ -451,13 +669,13 @@ class _DialPainter extends CustomPainter {
         ..color = color.withAlpha(120),
     );
 
-    // Tick tiap 45 derajat; tick utara lebih tebal.
+    // Tick tiap 45 derajat; tick utara lebih tebal. Panjang tick diskalakan.
     for (var deg = 0; deg < 360; deg += 45) {
       final a = (deg - 90) * math.pi / 180;
       final outer = center + Offset(math.cos(a), math.sin(a)) * (radius - 2);
       final inner = center +
           Offset(math.cos(a), math.sin(a)) *
-              (radius - (deg % 90 == 0 ? 18 : 10));
+              (radius - (deg % 90 == 0 ? 18 * scale : 10 * scale));
       canvas.drawLine(
         inner,
         outer,
@@ -471,7 +689,7 @@ class _DialPainter extends CustomPainter {
     final angle = (relativeBearing - 90) * math.pi / 180;
     canvas.drawLine(
       center,
-      center + Offset(math.cos(angle), math.sin(angle)) * (radius - 26),
+      center + Offset(math.cos(angle), math.sin(angle)) * (radius - 26 * scale),
       Paint()
         ..color = color
         ..strokeWidth = 7
@@ -481,5 +699,7 @@ class _DialPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DialPainter old) =>
-      old.relativeBearing != relativeBearing || old.color != color;
+      old.relativeBearing != relativeBearing ||
+      old.color != color ||
+      old.diameter != diameter;
 }

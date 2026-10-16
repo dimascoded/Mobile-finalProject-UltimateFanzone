@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,19 +9,78 @@ import '../../../core/utils/app_config.dart';
 import '../../sos_emergency/data/notification_service.dart';
 import '../data/football_repository.dart';
 import '../data/models.dart';
+import '../data/reminder_leads.dart';
 import 'football_providers.dart';
 
 /// Berapa menit sebelum kickoff pengingat ditampilkan. Bisa diturunkan saat
 /// uji manual lewat `--dart-define=KICKOFF_REMINDER_MINUTES=2`.
 const kickoffReminderMinutes = AppConfig.kickoffReminderMinutes;
 
-/// Batas jumlah pengingat yang dijadwalkan. iOS hanya menerima 64 notifikasi
-/// terjadwal, jadi kita bertahan jauh di bawah batas itu.
-const maxKickoffReminders = 20;
+/// Batas jumlah laga yang boleh punya pengingat. iOS hanya menerima 64
+/// notifikasi terjadwal; dengan [maxReminderSlots] lead time per laga,
+/// 10 laga x 3 slot = 30, masih jauh di bawah batas itu.
+const maxKickoffReminders = 10;
 
 /// Signature jadwal yang terakhir diproses, supaya tidak menjadwal ulang
 /// event yang sama setiap kali provider dibangun ulang.
 final _lastScheduledProvider = StateProvider<String>((ref) => '');
+
+// ---------- Lead time pengingat (pilihan pengguna) ----------
+
+/// Kunci Hive untuk lead time pengingat kickoff. Sengaja bukan kunci data
+/// pengguna: pengaturan ini ikut bertahan saat logout.
+const kickoffLeadsCacheKey = 'kickoff_reminder_leads';
+
+/// Izin exact alarm diminta sekali saja (tanda 'exact_alarm_asked'), baik
+/// saat lead time pertama kali disimpan maupun saat tombol Match Center
+/// ditekan.
+Future<void> ensureExactAlarmPermissionAsked() async {
+  if (HiveService.cache.get('exact_alarm_asked') == 'true') return;
+  await NotificationService.requestExactAlarmPermission();
+  await HiveService.cache.put('exact_alarm_asked', 'true');
+}
+
+/// Daftar lead time (menit, urut menurun) yang dipilih pengguna. Daftar kosong
+/// berarti pengingat kickoff nonaktif.
+class KickoffLeadsNotifier extends StateNotifier<List<int>> {
+  KickoffLeadsNotifier() : super(_load());
+
+  static List<int> _load() {
+    final raw = HiveService.cache.get(kickoffLeadsCacheKey);
+    // Kunci belum pernah disimpan -> pakai lead time bawaan.
+    if (raw == null) return List<int>.of(defaultLeads);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return List<int>.of(defaultLeads);
+      return normalizeLeads(decoded.whereType<num>().map((e) => e.toInt()));
+    } catch (_) {
+      // Nilai rusak/bukan JSON: kembali ke bawaan.
+      return List<int>.of(defaultLeads);
+    }
+  }
+
+  /// Simpan lead time baru (di-normalisasi dulu) lalu minta izin exact alarm
+  /// bila hasilnya tidak kosong.
+  Future<void> set(List<int> leads) async {
+    final normalized = normalizeLeads(leads);
+    if (!listEquals(state, normalized)) state = normalized;
+    await HiveService.cache.put(kickoffLeadsCacheKey, jsonEncode(normalized));
+    if (normalized.isNotEmpty) await ensureExactAlarmPermissionAsked();
+  }
+
+  Future<void> add(int minutes) async => set([...state, minutes]);
+
+  Future<void> remove(int minutes) async => set([...state]..remove(minutes));
+
+  Future<void> reset() async => set(defaultLeads);
+}
+
+/// Lead time pengingat kickoff milik pengguna.
+final kickoffLeadsProvider =
+    StateNotifierProvider<KickoffLeadsNotifier, List<int>>(
+        (ref) => KickoffLeadsNotifier());
+
+// ---------- Sasaran pengingat ----------
 
 /// Laga yang perlu pengingat: hanya yang memuat tim favorit, maksimal
 /// [maxKickoffReminders] laga terdekat. Kosong bila tim favorit belum dipilih.
@@ -38,13 +98,16 @@ List<FootballMatch> reminderTargets(
   return pool.take(maxKickoffReminders).toList();
 }
 
-String _signature(List<FootballMatch> targets, int minutesBefore) {
+/// Signature jadwal yang terakhir diproses: lead time + daftar laga. Lead time
+/// ikut dihitung supaya penggantian lead time selalu memicu penjadwalan ulang.
+String _signature(List<FootballMatch> targets, List<int> leads) {
   final parts = targets.map((m) => '${m.id}@${m.kickoffUtc.toIso8601String()}');
-  return '$minutesBefore|${parts.join('|')}';
+  return '${leads.join(',')}|${parts.join('|')}';
 }
 
 /// Dijalankan sekali setelah cache pertandingan termuat, dan setiap kali tim
-/// favorit berubah (N3: jadwal lama dibatalkan lalu dibuat ulang).
+/// favorit atau lead time pengingat berubah (jadwal lama dibatalkan lalu
+/// dibuat ulang).
 final kickoffReminderSyncProvider = Provider<void>((ref) {
   void reschedule(AsyncValue<FootballResult<List<FootballMatch>>> next) {
     final snapshot = next.valueOrNull;
@@ -57,12 +120,24 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
       return;
     }
 
+    final leads = ref.read(kickoffLeadsProvider);
     final targets = reminderTargets(data, ref.read(favoriteClubProvider));
-    final sig = _signature(targets, kickoffReminderMinutes);
+    final sig = _signature(targets, leads);
     if (ref.read(_lastScheduledProvider) == sig) return;
     ref.read(_lastScheduledProvider.notifier).state = sig;
-    unawaited(
-        scheduleReminders(targets, minutesBefore: kickoffReminderMinutes));
+    unawaited(scheduleReminders(targets, leads: leads));
+  }
+
+  /// Batalkan seluruh slot lama untuk [targets] dulu, baru susun ulang.
+  /// `cancelKickoff` kini membatalkan tiga slot berurutan, jadi penjadwalan
+  /// baru baru boleh dikirim setelah pembatalan selesai — kalau tidak,
+  /// jadwal baru ikut terhapus.
+  Future<void> cancelThenReschedule(List<FootballMatch> targets) async {
+    try {
+      await cancelReminders(targets);
+    } finally {
+      reschedule(ref.read(matchesProvider));
+    }
   }
 
   ref.listen(matchesProvider, (_, next) => reschedule(next),
@@ -72,12 +147,24 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
   ref.listen(favoriteClubProvider, (prev, next) {
     final data = ref.read(matchesProvider).valueOrNull?.data;
     ref.read(_lastScheduledProvider.notifier).state = '';
-    unawaited(cancelReminders(data ?? const <FootballMatch>[]));
-    reschedule(ref.read(matchesProvider));
+    unawaited(cancelThenReschedule(data ?? const <FootballMatch>[]));
+  });
+
+  // Lead time diganti -> batalkan semua slot laga target (lead time lama
+  // mungkin punya lebih banyak slot), lalu susun ulang dengan lead time baru.
+  // Lead time kosong berarti pengingat nonaktif: cukup batalkan, lalu
+  // scheduleReminders tidak menjadwalkan apa pun.
+  ref.listen(kickoffLeadsProvider, (prev, next) {
+    final data = ref.read(matchesProvider).valueOrNull?.data;
+    final targets = reminderTargets(
+        data ?? const <FootballMatch>[], ref.read(favoriteClubProvider));
+    ref.read(_lastScheduledProvider.notifier).state = '';
+    unawaited(cancelThenReschedule(targets));
   });
 });
 
-/// Batalkan pengingat kickoff untuk daftar [matches] yang diberikan.
+/// Batalkan pengingat kickoff untuk daftar [matches] yang diberikan
+/// (seluruh slot tiap laga).
 Future<void> cancelReminders(List<FootballMatch> matches) async {
   for (final m in matches) {
     await NotificationService.cancelKickoff(m.id);
@@ -85,10 +172,13 @@ Future<void> cancelReminders(List<FootballMatch> matches) async {
 }
 
 /// Dipanggil tombol "Atur pengingat" di Match Center. Mengembalikan jumlah
-/// pengingat yang berhasil dijadwalkan.
+/// notifikasi yang berhasil dijadwalkan.
+///
+/// [minutesBefore] hanya override untuk uji; tanpa itu, lead time dibaca dari
+/// pilihan pengguna di [kickoffLeadsProvider].
 Future<int> scheduleRemindersForUpcoming(
   WidgetRef ref, {
-  int minutesBefore = kickoffReminderMinutes,
+  int? minutesBefore,
 }) async {
   final snapshot = ref.read(matchesProvider).valueOrNull;
   if (snapshot == null) return 0;
@@ -97,36 +187,52 @@ Future<int> scheduleRemindersForUpcoming(
     debugPrint('Data contoh: pengingat kickoff tidak dijadwalkan.');
     return 0;
   }
-  // C5: izin exact alarm diminta sekali saja, saat pengguna menekan tombol
-  // pengingat, bukan tiap kali aplikasi dibuka.
-  if (HiveService.cache.get('exact_alarm_asked') != 'true') {
-    await NotificationService.requestExactAlarmPermission();
-    await HiveService.cache.put('exact_alarm_asked', 'true');
-  }
-  final targets =
-      reminderTargets(snapshot.data, ref.read(favoriteClubProvider));
-  return scheduleReminders(targets, minutesBefore: minutesBefore);
-}
-
-/// Jadwalkan [targets] secara paralel dan mengembalikan jumlah berhasil.
-Future<int> scheduleReminders(
-  List<FootballMatch> targets, {
-  required int minutesBefore,
-}) async {
-  if (targets.isEmpty) {
-    debugPrint('Tidak ada pengingat yang dijadwalkan (tim favorit kosong).');
+  final leads = minutesBefore != null
+      ? normalizeLeads([minutesBefore])
+      : ref.read(kickoffLeadsProvider);
+  if (leads.isEmpty) {
+    debugPrint('Lead time kosong: pengingat kickoff tidak dijadwalkan.');
     return 0;
   }
-  final results = await Future.wait(targets.map((m) {
-    return NotificationService.scheduleKickoff(
-      matchId: m.id,
-      kickoffUtc: m.kickoffUtc,
-      title: 'Kickoff ${m.homeShort} vs ${m.awayShort}',
-      body: 'Mulai dalam $minutesBefore menit',
-      minutesBefore: minutesBefore,
-    );
-  }));
+  // C5: izin exact alarm diminta sekali saja (lihat
+  // [ensureExactAlarmPermissionAsked]), bukan tiap kali aplikasi dibuka.
+  await ensureExactAlarmPermissionAsked();
+  final targets =
+      reminderTargets(snapshot.data, ref.read(favoriteClubProvider));
+  return scheduleReminders(targets, leads: leads);
+}
+
+/// Jadwalkan seluruh slot pengingat untuk setiap laga di [targets] secara
+/// paralel dan mengembalikan jumlah notifikasi yang benar-benar dibuat.
+/// [leads] kosong -> tidak ada yang dijadwalkan (pengingat nonaktif).
+Future<int> scheduleReminders(
+  List<FootballMatch> targets, {
+  required List<int> leads,
+}) async {
+  final normalized = normalizeLeads(leads);
+  if (targets.isEmpty || normalized.isEmpty) {
+    debugPrint('Tidak ada pengingat yang dijadwalkan '
+        '(laga: ${targets.length}, lead time: ${normalized.length}).');
+    return 0;
+  }
+  final now = DateTime.now().toUtc();
+  final jobs = <Future<bool>>[];
+  for (final m in targets) {
+    final planned = plannedReminders(m.kickoffUtc, normalized, now);
+    for (final (slot, minutes, fireUtc) in planned) {
+      jobs.add(NotificationService.scheduleKickoff(
+        matchId: m.id,
+        kickoffUtc: m.kickoffUtc,
+        title: 'Kickoff ${m.homeShort} vs ${m.awayShort}',
+        body: leadBody(minutes),
+        slot: slot,
+        fireUtc: fireUtc,
+      ));
+    }
+  }
+  final results = await Future.wait(jobs);
   final count = results.where((ok) => ok).length;
-  debugPrint('Pengingat kickoff terjadwal: $count dari ${targets.length} laga');
+  debugPrint('Pengingat kickoff terjadwal: $count notifikasi dari '
+      '${targets.length} laga');
   return count;
 }

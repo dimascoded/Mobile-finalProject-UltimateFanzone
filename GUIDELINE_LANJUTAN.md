@@ -1,13 +1,13 @@
-# Guideline Lanjutan — Smart Football Fan (Liga Inggris)
+# Guideline Lanjutan — Ultimate Fanzone (Liga Inggris)
 
 > Dokumen ini adalah **pegangan untuk melanjutkan proyek**: status terakhir, cara kerja kode,
 > sisa pekerjaan (langkah 5–7), dan bahan laporan. Baca bagian 1–3 dulu sebelum mengubah kode.
 
 ---
 
-## 1. Konsep Proyek (TEMA BARU: Smart Football Fan — Premier League)
+## 1. Konsep Proyek (TEMA BARU: Ultimate Fanzone — Premier League)
 
-> Tema lama "Smart Global Traveler" tidak bisa dipakai. Proyek dimigrasi bertahap ke **Smart Football Fan**:
+> Tema lama tidak bisa dipakai. Proyek dimigrasi bertahap ke **Ultimate Fanzone**:
 > pendamping penggemar Liga Inggris di Indonesia. Kickoff Liga Inggris (waktu London) sering jatuh dini hari WIB,
 > sehingga konversi waktu, pengingat, dan alarm menjadi inti aplikasi.
 
@@ -120,7 +120,7 @@ node --env-file=.env index.js
 
 ---
 
-## 2b. Peta Migrasi ke Smart Football Fan
+## 2b. Peta Migrasi ke Ultimate Fanzone
 
 **Round A ✅ (selesai di kode):** data 20 klub, klien API + cache Hive + data contoh, tim favorit, Match Center
 (jadwal 4 zona waktu, klasemen, top skor), kartu tim favorit di Home, judul/ikon aplikasi diganti.
@@ -323,7 +323,7 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 
 > **Tabel di bawah sudah usang.** Baris T09–T15 dan T29 masih menyebut fitur
 > perjalanan (negara, trip, itinerary, JPY) yang sudah dihapus saat migrasi ke
-> Smart Football Fan. **Lembar uji yang benar adalah `LEMBAR_UJI_T4.md`** —
+> Ultimate Fanzone. **Lembar uji yang benar adalah `LEMBAR_UJI_T4.md`** —
 > isi kolom *Hasil aktual* dan *Bukti* di sana untuk laporan. Tabel ini
 > dipertahankan hanya sebagai contoh format.
 
@@ -430,8 +430,8 @@ Hapus `test/widget_test.dart` bawaan `flutter create` (akan gagal karena `MyApp`
 
 Salin teks ini ke percakapan baru bersama zip/kode proyek:
 
-> Proyek Flutter "Smart Football Fan" (Liga Inggris; Riverpod, Feature-Driven Clean Architecture; lihat
-> GUIDELINE_LANJUTAN.md). Nama paket `smart_football_fan`, applicationId `com.smartfootballfan`.
+> Proyek Flutter "Ultimate Fanzone" (Liga Inggris; Riverpod, Feature-Driven Clean Architecture; lihat
+> GUIDELINE_LANJUTAN.md). Nama paket `ultimate_fanzone`, applicationId `com.smartfootballfan`.
 > Batch 1–7 di `DAFTAR_PERBAIKAN.md` sudah selesai: backend sinkronisasi, notifikasi, penalty, commit–reveal,
 > akun per pengguna, UI, dan kebersihan proyek. `flutter analyze` bersih, 245 test Flutter + 52 test server hijau.
 > Sisa: mengisi `LEMBAR_UJI_T4.md` di perangkat fisik (T4) dan penulisan laporan.

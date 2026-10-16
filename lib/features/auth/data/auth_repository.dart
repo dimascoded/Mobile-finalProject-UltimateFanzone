@@ -1,26 +1,22 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supa;
-import '../../../core/network/dio_client.dart';
+
 import '../../../core/utils/app_config.dart';
-import '../../../core/utils/crypto_utils.dart';
-import '../../../core/utils/jwt_utils.dart';
 
-const _tokenKey = 'session_token';
-const _expiryKey = 'session_expiry';
-const _emailKey = 'user_email';
-
-/// Cadangan kalau server tidak mengirim klaim `exp` pada token.
-const fallbackSessionDuration = Duration(days: 7);
+/// Pesan saat env Supabase belum diisi, jadi autentikasi tidak mungkin jalan.
+const notConfiguredAuthMessage =
+    'Aplikasi belum dikonfigurasi. Isi SUPABASE_URL dan SUPABASE_ANON_KEY di env.json lalu jalankan ulang.';
 
 final secureStorageProvider = Provider((ref) => const FlutterSecureStorage());
 
 /// Galat autentikasi dengan pesan yang layak ditampilkan ke pengguna (U2).
 ///
-/// Isinya sudah Bahasa Indonesia dan tidak pernah memuat `DioException` mentah,
+/// Isinya sudah Bahasa Indonesia dan tidak pernah memuat galat mentah,
 /// `uri` internal, atau kode status yang tidak berguna bagi pengguna.
 class AuthException implements Exception {
   AuthException(this.message);
@@ -31,27 +27,22 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
-/// Petakan kegagalan jaringan/server menjadi kalimat Indonesia.
+/// Petakan kegagalan autentikasi menjadi kalimat Indonesia.
 String describeAuthError(Object error) {
   if (error is AuthException) return error.message;
+  if (error is supa.AuthException) return _mapSupabaseAuthError(error);
+  if (error is SocketException) {
+    return 'Tidak ada koneksi ke server. Cek internetmu.';
+  }
   if (error is DioException) {
-    final code = error.response?.statusCode;
     switch (error.type) {
+      case DioExceptionType.connectionError:
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return 'Server tidak terjangkau. Coba beberapa saat lagi.';
-      case DioExceptionType.connectionError:
         return 'Tidak ada koneksi ke server. Cek internetmu.';
-      case DioExceptionType.badCertificate:
-        return 'Sertifikat server tidak valid.';
-      case DioExceptionType.cancel:
-        return 'Permintaan dibatalkan.';
-      case DioExceptionType.badResponse:
-      case DioExceptionType.unknown:
-        return _describeStatus(code, error.response?.data);
       default:
-        return _describeStatus(code, error.response?.data);
+        break;
     }
   }
   final text = error.toString();
@@ -59,97 +50,105 @@ String describeAuthError(Object error) {
   return text.isEmpty ? 'Gagal masuk.' : text;
 }
 
-/// 401/403 memang terjadi karena kredensial, jadi spesifik. Status lain
-/// sebaiknya dijelaskan server, tapi kalau tidak ada pakai bawaan.
-String _describeStatus(int? code, Object? body) {
-  final fromServer = body is Map ? body['error']?.toString().trim() : null;
-  if (code == 401 || code == 403) {
-    return fromServer != null && fromServer.isNotEmpty
-        ? fromServer
-        : 'Email atau password salah.';
+/// Petakan galat Supabase Auth ke Bahasa Indonesia. `code` dipakai lebih dulu
+/// karena stabil; kalau tidak ada, petakan dari pesan yang sudah di-lowercase.
+String _mapSupabaseAuthError(supa.AuthException e) {
+  switch (e.code) {
+    case 'invalid_credentials':
+      return 'Email atau password salah.';
+    case 'email_not_confirmed':
+      return 'Email belum diverifikasi. Cek kotak masuk emailmu.';
+    case 'user_already_exists':
+      return 'Email sudah terdaftar. Silakan masuk.';
+    case 'over_request_rate_limit':
+    case 'over_email_send_rate_limit':
+      return 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.';
+    case 'weak_password':
+      return 'Password terlalu lemah. Gunakan minimal 8 karakter.';
   }
-  if (fromServer != null && fromServer.isNotEmpty) return fromServer;
-  return code == null
-      ? 'Gagal menghubungi server.'
-      : 'Server menolak permintaan ($code). Coba lagi nanti.';
+  final message = e.message.toLowerCase();
+  if (message.contains('invalid login credentials')) {
+    return 'Email atau password salah.';
+  }
+  if (message.contains('email not confirmed')) {
+    return 'Email belum diverifikasi. Cek kotak masuk emailmu.';
+  }
+  if (message.contains('already registered') ||
+      message.contains('already exists')) {
+    return 'Email sudah terdaftar. Silakan masuk.';
+  }
+  if (message.contains('rate limit') || message.contains('too many requests')) {
+    return 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.';
+  }
+  if (message.contains('weak password')) {
+    return 'Password terlalu lemah. Gunakan minimal 8 karakter.';
+  }
+  return e.message.isNotEmpty ? e.message : 'Gagal masuk.';
 }
 
+/// Autentikasi hanya lewat Supabase Auth.
 class AuthRepository {
-  AuthRepository(
-    this._dio,
-    this._storage,
-    this._localAuth, {
-    String baseUrl = AppConfig.backendUrl,
-    bool? allowMock,
-  })  : _baseUrl = baseUrl,
-        _allowMock = allowMock ?? mockAllowedByDefault;
+  AuthRepository(this._storage, this._localAuth);
 
-  final Dio _dio;
   final FlutterSecureStorage _storage;
   final LocalAuthentication _localAuth;
-  final String _baseUrl;
-  final bool _allowMock;
 
   bool get _usesSupabase => AppConfig.supabaseConfigured;
-
-  /// U3: mode mock hanya untuk pengembangan. Di build rilis, login dan
-  /// registrasi tanpa `BACKEND_URL` ditolak supaya tidak ada akun palsu yang
-  /// berhasil masuk dan menyimpan data lokal yang tidak pernah sampai server.
-  static bool get mockAllowedByDefault => !kReleaseMode;
-
-  bool get isMock => _baseUrl.isEmpty;
-
-  /// Melempar kalau aplikasi berjalan tanpa server di build rilis.
-  void ensureMockAllowed(String action) {
-    if (isMock && !_allowMock) {
-      throw AuthException(
-        'Build ini tidak punya alamat server, jadi "$action" dinonaktifkan.',
-      );
-    }
-  }
 
   Future<void> login(String email, String password) async {
     final mail = email.trim();
     if (mail.isEmpty || password.isEmpty) {
       throw AuthException('Email dan password wajib diisi.');
     }
-    if (_usesSupabase) {
-      try {
-        await supa.Supabase.instance.client.auth.signInWithPassword(
-          email: mail,
-          password: password,
-        );
-        return;
-      } on supa.AuthException catch (e) {
-        throw AuthException(e.message);
-      } catch (e) {
-        throw AuthException(describeAuthError(e));
-      }
+    if (!_usesSupabase) {
+      throw AuthException(notConfiguredAuthMessage);
     }
-    ensureMockAllowed('Masuk');
-
-    // Hash SHA-256 dilakukan SEBELUM password dikirim ke backend.
-    final hashed = CryptoUtils.sha256Hash(password);
-    String token;
-
-    if (isMock) {
-      // Mode mock: backend belum tersedia.
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      token = 'mock-${hashed.substring(0, 24)}';
-    } else {
-      final res =
-          await _post('/auth/login', {'email': mail, 'password': hashed});
-      final data = res.data;
-      if (data is! Map || data['token'] is! String) {
-        throw AuthException('Respons server tidak dikenali.');
-      }
-      token = data['token'] as String;
+    try {
+      await supa.Supabase.instance.client.auth.signInWithPassword(
+        email: mail,
+        password: password,
+      );
+    } on supa.AuthException catch (e) {
+      throw AuthException(_mapSupabaseAuthError(e));
+    } catch (e) {
+      throw AuthException(describeAuthError(e));
     }
-    await _saveSession(token, mail);
   }
 
-  /// U1: buat akun baru. Password di-hash di klien, jadi password asli tidak
-  /// pernah meninggalkan perangkat.
+  /// Verifikasi password akun yang sedang masuk TANPA menghapus data apa pun.
+  ///
+  /// Dipakai layar kunci sebagai alternatif biometrik: email diambil dari sesi
+  /// yang sudah ada, jadi pengguna tidak perlu mengetiknya lagi. Beda dari
+  /// [login] yang memulai sesi baru, kegagalan di sini hanya menghasilkan
+  /// [AuthException] dan tidak menyentuh data pengguna di Hive/secure storage.
+  Future<void> verifyPassword(String password) async {
+    if (password.isEmpty) {
+      throw AuthException('Password wajib diisi.');
+    }
+    if (!_usesSupabase) {
+      throw AuthException(notConfiguredAuthMessage);
+    }
+    final email = supa.Supabase.instance.client.auth.currentUser?.email;
+    if (email == null || email.isEmpty) {
+      throw AuthException('Sesi tidak ditemukan. Masuk ulang dengan password.');
+    }
+    try {
+      final response = await supa.Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
+      if (response.session == null) {
+        throw AuthException('Email atau password salah.');
+      }
+    } on supa.AuthException catch (e) {
+      throw AuthException(_mapSupabaseAuthError(e));
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException(describeAuthError(e));
+    }
+  }
+
+  /// Buat akun baru lewat Supabase. Kalau Supabase meminta verifikasi email,
+  /// tidak ada sesi yang dikembalikan dan pengguna diarahkan untuk masuk.
   Future<void> register(String email, String password, String confirm) async {
     final mail = email.trim();
     if (mail.isEmpty || password.isEmpty) {
@@ -161,92 +160,33 @@ class AuthRepository {
     if (password.length < 8) {
       throw AuthException('Password minimal 8 karakter.');
     }
-    if (_usesSupabase) {
-      try {
-        final response = await supa.Supabase.instance.client.auth.signUp(
-          email: mail,
-          password: password,
-        );
-        if (response.session == null) {
-          throw AuthException(
-            'Akun dibuat. Verifikasi email terlebih dahulu, lalu masuk.',
-          );
-        }
-        return;
-      } on supa.AuthException catch (e) {
-        throw AuthException(e.message);
-      } on AuthException {
-        rethrow;
-      } catch (e) {
-        throw AuthException(describeAuthError(e));
-      }
+    if (!_usesSupabase) {
+      throw AuthException(notConfiguredAuthMessage);
     }
-    ensureMockAllowed('Daftar');
-
-    final hashed = CryptoUtils.sha256Hash(password);
-    if (isMock) {
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-    } else {
-      try {
-        final res =
-            await _post('/auth/register', {'email': mail, 'password': hashed});
-        if (res.data is! Map) {
-          throw AuthException('Respons server tidak dikenali.');
-        }
-      } on DioException catch (e) {
-        // U1: email sudah ada harus terbaca jelas, bukan "DioException 409".
-        if (e.response?.statusCode == 409) {
-          throw AuthException('Email sudah terdaftar. Silakan masuk.');
-        }
-        rethrow;
-      }
-    }
-    // Langsung masuk supaya pengguna tidak mengetik ulang akun yang baru dibuat.
-    await login(email, password);
-  }
-
-  /// POST ke server dengan galat jaringan sudah diterjemahkan (U2).
-  Future<Response<dynamic>> _post(
-      String path, Map<String, dynamic> data) async {
     try {
-      return await _dio.post('$_baseUrl$path', data: data);
-    } on DioException catch (e) {
+      final response = await supa.Supabase.instance.client.auth.signUp(
+        email: mail,
+        password: password,
+      );
+      if (response.session == null) {
+        throw AuthException(
+          'Akun dibuat. Verifikasi email terlebih dahulu, lalu masuk.',
+        );
+      }
+    } on supa.AuthException catch (e) {
+      throw AuthException(_mapSupabaseAuthError(e));
+    } on AuthException {
+      rethrow;
+    } catch (e) {
       throw AuthException(describeAuthError(e));
     }
   }
 
-  Future<void> _saveSession(String token, String email) async {
-    await _storage.write(key: _tokenKey, value: token);
-    // U5: masa berlaku ikut server (klaim `exp`), bukan tebakan 7 hari.
-    final expiresAt =
-        tokenExpiry(token) ?? DateTime.now().add(fallbackSessionDuration);
-    await _storage.write(
-      key: _expiryKey,
-      value: expiresAt.millisecondsSinceEpoch.toString(),
-    );
-    await _storage.write(key: _emailKey, value: email);
-  }
-
-  /// Sesi valid = token ada DAN belum kedaluwarsa. Sesi kedaluwarsa dihapus.
+  /// Sesi valid kalau Supabase punya sesi yang belum kedaluwarsa.
   Future<bool> hasSession() async {
-    if (_usesSupabase) {
-      final session = supa.Supabase.instance.client.auth.currentSession;
-      return session != null && !session.isExpired;
-    }
-    final token = await _storage.read(key: _tokenKey);
-    final stored = int.tryParse(await _storage.read(key: _expiryKey) ?? '');
-    if (token == null) return false;
-
-    // `exp` dari server adalah acuan; nilai yang disimpan hanya cadangan untuk
-    // token tanpa `exp` (misalnya token mock).
-    final fromJwt = tokenExpiry(token);
-    final expiry = fromJwt?.millisecondsSinceEpoch ?? stored;
-    if (expiry == null) return false;
-    if (DateTime.now().millisecondsSinceEpoch > expiry) {
-      await logout();
-      return false;
-    }
-    return true;
+    if (!_usesSupabase) return false;
+    final session = supa.Supabase.instance.client.auth.currentSession;
+    return session != null && !session.isExpired;
   }
 
   Future<bool> canUseBiometric() async =>
@@ -254,21 +194,17 @@ class AuthRepository {
       await _localAuth.canCheckBiometrics;
 
   Future<String?> userEmail() async {
-    if (_usesSupabase) {
-      return supa.Supabase.instance.client.auth.currentUser?.email;
-    }
-    return _storage.read(key: _emailKey);
+    if (!_usesSupabase) return null;
+    return supa.Supabase.instance.client.auth.currentUser?.email;
   }
 
-  /// Token JWT untuk endpoint yang butuh Authorization header.
+  /// Token JWT Supabase untuk endpoint yang butuh Authorization header.
   Future<String?> currentToken() async {
-    if (_usesSupabase) {
-      return supa.Supabase.instance.client.auth.currentSession?.accessToken;
-    }
-    return _storage.read(key: _tokenKey);
+    if (!_usesSupabase) return null;
+    return supa.Supabase.instance.client.auth.currentSession?.accessToken;
   }
 
-  /// Biometrik hanya valid jika sudah pernah login (token tersimpan).
+  /// Biometrik hanya valid jika sudah pernah login (sesi Supabase ada).
   Future<bool> authenticateBiometric() async {
     if (!await hasSession()) {
       throw AuthException('Login manual dulu minimal sekali.');
@@ -296,15 +232,12 @@ class AuthRepository {
         // Supabase menghapus session lokal sebelum mencoba mencabutnya di server.
       }
     }
-    await _storage.delete(key: _tokenKey);
-    await _storage.delete(key: _expiryKey);
-    await _storage.delete(key: _emailKey);
     for (final key in AuthRepository.privateKeyKeys) {
       await _storage.delete(key: key);
     }
   }
 
-  /// Kunci secure storage milik pengguna: sesi, email, dan private key wallet.
+  /// Kunci secure storage milik pengguna: private key wallet.
   static const privateKeyKeys = ['wallet_private_key'];
 
   /// Semua kunci Hive yang berisi data pengguna (U4).
@@ -330,7 +263,6 @@ class AuthRepository {
 }
 
 final authRepositoryProvider = Provider((ref) => AuthRepository(
-      ref.watch(dioProvider),
       ref.watch(secureStorageProvider),
       LocalAuthentication(),
     ));

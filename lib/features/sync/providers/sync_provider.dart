@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
@@ -12,6 +14,7 @@ import '../../away_day/providers/away_day_providers.dart';
 import '../../gamification/data/blockchain.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../../prediction/providers/prediction_provider.dart';
+import '../data/chain_reconcile.dart';
 import '../data/sync_repository.dart';
 
 /// Waktu sinkronisasi terakhir (epoch milidetik), disimpan di Hive.
@@ -72,8 +75,32 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
   final Ref _ref;
 
+  /// Ada permintaan run() lain saat sedang sibuk; jalankan sekali lagi setelah
+  /// selesai supaya perubahan yang datang di tengah sinkronisasi tidak hilang.
+  bool _rerun = false;
+
+  /// Batas re-run berurutan dari satu panggilan awal, supaya tidak looping.
+  static const _maxReruns = 3;
+
   Future<void> run() async {
-    if (state.busy) return;
+    if (state.busy) {
+      _rerun = true;
+      return;
+    }
+    var reruns = 0;
+    while (true) {
+      await _runOnce();
+      if (_rerun && reruns < _maxReruns) {
+        _rerun = false;
+        reruns++;
+        continue;
+      }
+      _rerun = false;
+      break;
+    }
+  }
+
+  Future<void> _runOnce() async {
     state = const SyncState(busy: true);
     try {
       final pendingRevisions = await OfflineSyncDatabase.pendingRevisions();
@@ -100,17 +127,30 @@ class SyncNotifier extends StateNotifier<SyncState> {
             .read(predictionsProvider.notifier)
             .replaceAll(result.predictions);
       }
-      if (!result.mock) {
+      if (AppConfig.supabaseConfigured) {
         await OfflineSyncDatabase.markSynced(pendingRevisions);
-        if (AppConfig.supabaseConfigured) {
-          await OfflineSyncDatabase.markDeletionsSynced(pendingDeletions);
-        }
+        await OfflineSyncDatabase.markDeletionsSynced(pendingDeletions);
       }
 
-      // S2: adopsi rantai server hanya bila valid, genesis sama, dan lebih
-      // panjang dari rantai lokal.
+      // S2: adopsi rantai cloud "cloud wins" saat rekonsiliasi memutuskan
+      // demikian. Blok lokal yang tidak ada di cloud dibuang, TIDAK
+      // ditambang ulang (khususnya blok 'card').
       var adopted = false;
-      if (result.remoteChain.isNotEmpty) {
+      var dropped = 0;
+      if (result.chainOutcome == ChainOutcome.adoptRemote) {
+        final remote = SyncRepository.parseChain(result.remoteChain);
+        if (Blockchain.isValid(remote)) {
+          final local = _ref.read(chainProvider);
+          if (jsonEncode(local.map((b) => b.toJson()).toList()) !=
+              jsonEncode(remote.map((b) => b.toJson()).toList())) {
+            await _ref.read(chainProvider.notifier).replaceAll(remote);
+          }
+          adopted = true;
+          dropped = droppedLocalBlocks(local, remote);
+        }
+      } else if (result.remoteChain.isNotEmpty) {
+        // Jalur HTTP lama (non-Supabase) masih ada; pertahankan perilaku
+        // adopsinya.
         final remote = SyncRepository.parseChain(result.remoteChain);
         final local = _ref.read(chainProvider);
         if (Blockchain.canAdoptRemote(local, remote)) {
@@ -130,10 +170,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
         pushedPredictions: result.pushedPredictions,
         mergedExpenses: result.mergedExpenses,
         mergedPredictions: result.mergedPredictions,
-        mock: result.mock,
         expenses: result.expenses,
         predictions: result.predictions,
         remoteChain: result.remoteChain,
+        chainOutcome: result.chainOutcome,
+        droppedLocalBlocks: dropped,
         adoptedChain: adopted,
       ));
     } on SyncException catch (e) {
@@ -159,19 +200,73 @@ class SyncNotifier extends StateNotifier<SyncState> {
 final syncProvider =
     StateNotifierProvider<SyncNotifier, SyncState>((ref) => SyncNotifier(ref));
 
-final automaticSyncProvider = Provider<void>((ref) {
-  if (!AppConfig.supabaseConfigured && AppConfig.backendUrl.isEmpty) return;
+/// Seam status sesi: true bila Supabase terkonfigurasi DAN ada sesi aktif.
+///
+/// Produksi membaca `AppConfig.supabaseConfigured` lalu `Supabase.instance`.
+/// Semua dibungkus try/catch supaya lingkungan tanpa Supabase (mis. unit test)
+/// dianggap "tanpa sesi" alih-alih melempar. Test meng-override provider ini
+/// sehingga tidak perlu menyentuh Supabase.
+final sessionAvailableProvider = Provider<bool>((ref) {
+  if (!AppConfig.supabaseConfigured) return false;
+  try {
+    return supa.Supabase.instance.client.auth.currentSession != null;
+  } catch (_) {
+    return false;
+  }
+});
 
+/// Apakah pesan galat berarti "tidak ada sesi" (jalur Supabase maupun HTTP).
+///
+/// Retry 30 detik percuma tanpa sesi, jadi timer retry dilewati untuk pesan ini.
+bool _isNoSessionError(String message) =>
+    message.contains('Masuk ke akun dulu') || message.contains('Belum login');
+
+/// Menjaga sinkronisasi otomatis tetap hidup selama Dashboard ter-mount.
+///
+/// `autoDispose` penting: saat logout `DashboardScreen` dilepas, provider ikut
+/// dibuang (timer debounce/retry, listener, timer periodik, lifecycle) sehingga
+/// tidak ada percobaan sync maupun loop retry selagi aplikasi di layar login.
+/// Saat login berikutnya Dashboard ter-mount lagi dan body ini dijalankan ulang.
+final automaticSyncProvider = Provider.autoDispose<void>((ref) {
+  // Tanpa Supabase/sesi tidak ada yang bisa disinkronkan. Ini juga mematikan
+  // auto-sync pada build non-Supabase, sama seperti perilaku sebelumnya.
+  if (!ref.read(sessionAvailableProvider)) return;
+
+  var disposed = false;
   Timer? debounce;
   Timer? retry;
+
+  /// Sinkronisasi pertama setelah mount dipicu lebih cepat (300 ms) supaya data
+  /// langsung terisi begitu login; perubahan berikutnya memakai 900 ms.
+  var firstSchedule = true;
+
   void scheduleSync() {
+    if (disposed) return;
+    // Tanpa sesi (mis. setelah logout) jangan jadwalkan apa pun: batalkan
+    // debounce/retry yang tertunda supaya tidak ada sync gagal maupun loop
+    // retry 30 detik selama aplikasi berada di layar login.
+    if (!ref.read(sessionAvailableProvider)) {
+      debounce?.cancel();
+      retry?.cancel();
+      return;
+    }
     if (ref.read(onlineProvider).valueOrNull != true) return;
     debounce?.cancel();
     retry?.cancel();
-    debounce = Timer(const Duration(milliseconds: 900), () {
+    final delay = firstSchedule
+        ? const Duration(milliseconds: 300)
+        : const Duration(milliseconds: 900);
+    firstSchedule = false;
+    debounce = Timer(delay, () {
       unawaited(ref.read(syncProvider.notifier).run());
     });
   }
+
+  // Sinkron juga saat aplikasi kembali ke depan dan tiap 5 menit, supaya data
+  // baru terkirim walau tidak ada perubahan provider yang terpicu.
+  final lifecycle = AppLifecycleListener(onResume: scheduleSync);
+  final periodic =
+      Timer.periodic(const Duration(minutes: 5), (_) => scheduleSync());
 
   ref.listen<AsyncValue<bool>>(onlineProvider, (previous, next) {
     if (next.valueOrNull == true && previous?.valueOrNull != true) {
@@ -184,13 +279,24 @@ final automaticSyncProvider = Provider<void>((ref) {
   ref.listen<SyncState>(syncProvider, (_, next) {
     if (next.error != null) {
       retry?.cancel();
-      retry = Timer(const Duration(seconds: 30), scheduleSync);
+      // Tanpa sesi ("Masuk ke akun dulu..."/"Belum login...") retry percuma;
+      // berhenti sampai login berikutnya, jangan bikin loop 30 detik.
+      if (!_isNoSessionError(next.error!)) {
+        retry = Timer(const Duration(seconds: 30), scheduleSync);
+      }
     } else if (next.ok) {
       retry?.cancel();
     }
   });
   ref.onDispose(() {
+    disposed = true;
     debounce?.cancel();
     retry?.cancel();
+    lifecycle.dispose();
+    periodic.cancel();
   });
+
+  // Tarik data segera setelah Dashboard ter-mount (login), tanpa menunggu
+  // perubahan provider atau pemicu berkala.
+  Future.microtask(scheduleSync);
 });

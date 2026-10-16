@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/away_day/data/away_day_repository.dart';
-import 'package:smart_football_fan/features/football/data/models.dart';
-import 'package:smart_football_fan/features/lens/data/receipt_parser.dart';
+import 'package:ultimate_fanzone/features/away_day/data/away_day_repository.dart';
+import 'package:ultimate_fanzone/features/football/data/models.dart';
+import 'package:ultimate_fanzone/features/lens/data/receipt_parser.dart';
 
 const _sample1 = 'THE PIE SHOP\n'
     '12 High Street, London E15 1AA\n'
@@ -11,7 +11,7 @@ const _sample1 = 'THE PIE SHOP\n'
     'Coffee             3.50\n'
     'Subtotal           14.50\n'
     'VAT 20%            2.42\n'
-    'TOTAL  £14.50\n'
+    'TOTAL  Â£14.50\n'
     'Card **** 4242';
 
 const _sample2 = 'WARUNG NASI BU TINI\n'
@@ -31,7 +31,7 @@ const _sample3 = 'PREMIER LEAGUE\n'
     'Sat 24 Oct 2026  15:00\n'
     'Block 112  Row 14  Seat 9\n'
     'Gate B\n'
-    'Ticket price £68.00';
+    'Ticket price Â£68.00';
 
 const _arsenal = PlClub(
   key: 'arsenal',
@@ -146,7 +146,7 @@ void main() {
 
   test('Change dan Cash tidak pernah dipilih', () {
     final draft = parseReceipt(
-      'CAFE\nCoffee 3.00\nTotal £3.00\nChange £0.00\nCash £50.00',
+      'CAFE\nCoffee 3.00\nTotal Â£3.00\nChange Â£0.00\nCash Â£50.00',
       clubs: const [],
     );
     expect(draft.amount, 3.00);

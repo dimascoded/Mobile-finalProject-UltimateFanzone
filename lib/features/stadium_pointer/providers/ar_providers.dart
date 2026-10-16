@@ -1,8 +1,12 @@
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../../../core/network/dio_client.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
+import '../data/route_repository.dart';
 
 /// null = belum ada pilihan manual, jadi mengikuti klub favorit.
 final selectedStadiumIndexProvider =
@@ -46,6 +50,62 @@ final compassProvider = StreamProvider.autoDispose<double>((ref) {
       .where((e) => e.heading != null)
       .map((e) => (e.heading! + 360) % 360);
 });
+
+/// Mode uji: menyala = layar kompas memakai posisi sintetis di sekitar
+/// stadion supaya rute jalan bisa dicoba tanpa berada di sana.
+final demoNearStadiumProvider = StateProvider.autoDispose<bool>((ref) => false);
+
+/// Posisi yang dipakai layar kompas (peta, jarak, bearing, rute).
+///
+/// Saat [demoNearStadiumProvider] menyala dan stadion sudah dipilih,
+/// mengembalikan posisi sintetis 0,012° ke selatan dan 0,010° ke barat
+/// stadion (~1,5 km). Selain itu meneruskan [positionProvider] apa adanya.
+///
+/// Provider lain (stamp/passport) tetap membaca [positionProvider]
+/// langsung dan tidak terpengaruh posisi simulasi ini.
+final effectivePositionProvider =
+    Provider.autoDispose<AsyncValue<Position>>((ref) {
+  final demo = ref.watch(demoNearStadiumProvider);
+  final stadium = ref.watch(selectedStadiumProvider);
+  if (demo && stadium != null) {
+    return AsyncValue.data(Position(
+      latitude: stadium.lat - 0.012,
+      longitude: stadium.lng - 0.010,
+      timestamp: DateTime.now(),
+      accuracy: 5,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    ));
+  }
+  return ref.watch(positionProvider);
+});
+
+typedef RouteQuery = ({
+  double fromLat,
+  double fromLng,
+  double toLat,
+  double toLng,
+});
+
+final routeRepositoryProvider = Provider<RouteRepository>(
+  (ref) => RouteRepository(ref.watch(dioProvider)),
+);
+
+/// Rute jalan OSRM dari posisi ke stadion.
+///
+/// Pembulatan fromLat/fromLng ke 3 desimal (~111 m) dilakukan di layar
+/// sebelum key dibangun, supaya jitter GPS tidak fetch ulang tiap update.
+final routeProvider =
+    FutureProvider.autoDispose.family<RouteResult?, RouteQuery>(
+  (ref, q) => ref.watch(routeRepositoryProvider).fetch(
+        LatLng(q.fromLat, q.fromLng),
+        LatLng(q.toLat, q.toLng),
+      ),
+);
 
 // Catatan (UI5): accelerometerProvider/gyroscopeProvider yang pernah ada di sini
 // dihapus karena tidak ada layar yang membacanya. Membukanya lewat

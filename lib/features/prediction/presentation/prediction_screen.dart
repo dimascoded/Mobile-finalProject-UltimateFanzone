@@ -110,7 +110,7 @@ class PredictionScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Skor dikunci dengan hash SHA-256 dan tidak bisa diubah setelah kickoff.',
+            'Prediksi dikunci dan tidak bisa diubah setelah kickoff.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -361,7 +361,7 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
               messenger.showSnackBar(
                 SnackBar(
                   content: Text(r.alreadyCommitted
-                      ? 'Sudah ada prediksi untuk laga ini'
+                      ? 'Prediksi sudah dikunci untuk laga ini'
                       : 'Prediksi $_home-$_away dikunci'),
                 ),
               );

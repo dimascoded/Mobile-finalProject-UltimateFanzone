@@ -96,11 +96,31 @@ function requireIsoDate(value, name) {
  * Hash blok harus sama persis dengan `Block.computeHash` di sisi Flutter
  * (lib/features/gamification/data/blockchain.dart):
  *
- *   sha256(index|timestamp|type|JSON.stringify(data)|owner|prevHash|nonce)
+ *   sha256(index|timestamp|type|canonicalJson(data)|owner|prevHash|nonce)
  *
- * Notice `JSON.stringify` dipakai apa adanya supaya urutan key sama seperti
- * yang dikirim Dart. Kalau hash tidak cocok, blok ditolak, bukan disimpan.
+ * `canonicalJson` = JSON.stringify dengan key yang diurutkan menaik (ordinal,
+ * recursif termasuk map di dalam list). Flutter melakukan sort yang sama di
+ * `Block.canonicalDataJson`; tanpa sort di kedua sisi, urutan key yang
+ * berbeda (mis. setelah putaran jsonb Supabase) membuat hash tidak cocok.
+ * Kalau hash tidak cocok, blok ditolak, bukan disimpan.
  */
+function canonicalValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value !== null && typeof value === 'object') {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      out[key] = canonicalValue(value[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Bentuk JSON kanonik: key terurut menaik, sama dengan canonicalDataJson di Dart. */
+function canonicalDataJson(data) {
+  return JSON.stringify(canonicalValue(data));
+}
+
 function computeBlockHash({ index, timestamp, type, dataJson, owner, prevHash, nonce }) {
   return crypto
     .createHash('sha256')
@@ -139,7 +159,7 @@ function validateChain(chain, storedBlocks) {
     if (!SHA256_RE.test(hash)) throw bad('chain[].hash harus hex 64 karakter');
 
     const data = block.data == null ? {} : asObject(block.data, 'chain[].data');
-    const dataJson = JSON.stringify(data);
+    const dataJson = canonicalDataJson(data);
 
     if (prevHash !== expectedPrev) {
       throw bad('chain[].prevHash tidak menunjuk blok sebelumnya');
@@ -253,7 +273,7 @@ function upsertChain(userId, rawChain) {
       b.index,
       b.timestamp,
       b.type.trim(),
-      JSON.stringify(b.data == null ? {} : asObject(b.data, 'chain[].data')),
+      canonicalDataJson(b.data == null ? {} : asObject(b.data, 'chain[].data')),
       b.owner.trim(),
       b.prevHash.trim(),
       b.nonce,

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/away_day/data/away_day_repository.dart';
-import 'package:smart_football_fan/features/gamification/data/blockchain.dart';
+import 'package:ultimate_fanzone/features/away_day/data/away_day_repository.dart';
+import 'package:ultimate_fanzone/features/gamification/data/blockchain.dart';
 
 void main() {
   // C2: parse per-item toleran. Satu baris rusak tidak boleh menghapus data lain.

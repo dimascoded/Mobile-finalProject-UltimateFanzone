@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/network/rates_provider.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../auth/presentation/auto_lock_observer.dart';
 import '../../away_day/data/away_day_repository.dart';
 import '../../away_day/presentation/away_day_screen.dart';
 import '../../away_day/providers/away_day_providers.dart';
@@ -38,8 +39,11 @@ class _LensScreenState extends ConsumerState<LensScreen> {
   /// null = Otomatis (biarkan parser menentukan jenis dokumen).
   DocKind? _forceKind;
 
-  Future<void> _scan(ImageSource source) =>
-      ref.read(lensProvider.notifier).scan(source, forceKind: _forceKind);
+  Future<void> _scan(ImageSource source) => withoutAutoLock(
+        ref,
+        () =>
+            ref.read(lensProvider.notifier).scan(source, forceKind: _forceKind),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +168,7 @@ class _ResultView extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         ExpansionTile(
-          title: const Text('Teks OCR mentah'),
+          title: const Text('Teks yang terbaca dari foto'),
           children: [
             Padding(
               padding: const EdgeInsets.all(8),

@@ -2,11 +2,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../auth/presentation/login_screen.dart';
+import '../../../core/utils/app_config.dart';
+import '../../auth/presentation/auto_lock_observer.dart';
+import '../../auth/presentation/logout_flow.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../football/data/reminder_leads.dart';
 import '../../football/presentation/club_crest.dart';
+import '../../football/presentation/reminder_settings_screen.dart';
 import '../../football/presentation/team_picker_screen.dart';
 import '../../football/providers/football_providers.dart';
+import '../../football/providers/kickoff_reminder_provider.dart';
+import '../../gamification/presentation/card_collection_screen.dart';
+import '../../gamification/providers/card_collection_provider.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../../sync/providers/sync_provider.dart';
 import '../providers/dashboard_provider.dart';
@@ -14,33 +21,6 @@ import 'feedback_screen.dart';
 
 class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
-
-  Future<void> _logout(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Keluar?'),
-        content: const Text('Sesi akan dihapus dari perangkat ini.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Keluar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await ref.read(logoutProvider)();
-    if (!context.mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-    );
-  }
 
   Future<void> _choosePhoto(BuildContext context, WidgetRef ref) async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -61,22 +41,34 @@ class ProfileTab extends ConsumerWidget {
       ),
     );
     if (source != null) {
-      await ref.read(profilePhotoProvider.notifier).pick(source);
+      await withoutAutoLock(
+        ref,
+        () => ref.read(profilePhotoProvider.notifier).pick(source),
+      );
     }
   }
 
   /// Ringkasan status sinkronisasi untuk kartu di Profil.
   static String _syncSubtitle(SyncState sync, DateTime? lastSync) {
+    if (!AppConfig.supabaseConfigured) return 'Cloud belum dikonfigurasi';
     final teks = lastSync == null
-        ? 'Belum pernah sinkron'
-        : 'Terakhir: ${_two(lastSync.hour)}:${_two(lastSync.minute)}';
+        ? 'Otomatis saat ada internet.'
+        : 'Otomatis saat ada internet. Terakhir: '
+            '${_two(lastSync.hour)}:${_two(lastSync.minute)}';
     if (sync.busy) return 'Mengirim data ke server...';
     if (sync.error != null) return 'Gagal: ${sync.error}';
     final r = sync.result;
     if (r == null) return teks;
-    final mode = r.mock ? ' (mode mock, tanpa BACKEND_URL)' : '';
-    return '$teks • naik: ${r.pushedExpenses} pengeluaran, '
-        '${r.pushedChain} blok, ${r.pushedPredictions} prediksi$mode';
+    var pesan = '$teks • naik: ${r.pushedExpenses} pengeluaran, '
+        '${r.pushedChain} catatan, ${r.pushedPredictions} prediksi';
+    if (r.adoptedChain) {
+      pesan += ' • Riwayat dipulihkan dari cloud';
+      if (r.droppedLocalBlocks > 0) {
+        pesan +=
+            ' (${r.droppedLocalBlocks} catatan lokal tidak bisa digabung)';
+      }
+    }
+    return pesan;
   }
 
   static String _two(int n) => n.toString().padLeft(2, '0');
@@ -84,7 +76,6 @@ class ProfileTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final email = ref.watch(userEmailProvider);
-    final wallet = ref.watch(walletAddressProvider);
     final photo = ref.watch(profilePhotoProvider);
     final stamps = ref.watch(stampsProvider);
     final chain = ref.watch(chainProvider);
@@ -94,6 +85,8 @@ class ProfileTab extends ConsumerWidget {
     final favoriteClub = ref.watch(favoriteClubProvider);
     final crests = ref.watch(clubCrestProvider);
     final biometricEnabled = ref.watch(biometricEnabledProvider);
+    final ownedClubs = ref.watch(ownedClubsProvider);
+    final kickoffLeads = ref.watch(kickoffLeadsProvider);
     final achievements = chain.where((b) => b.type == 'achievement').length;
     final displayName = email.valueOrNull
             ?.split('@')
@@ -220,12 +213,15 @@ class ProfileTab extends ConsumerWidget {
       const SizedBox(height: 16),
       Card(
         child: ListTile(
-          leading: const Icon(Icons.account_balance_wallet),
-          title: const Text('Wallet Web3'),
-          subtitle: wallet.when(
-            data: (a) => SelectableText(a),
-            loading: () => const Text('Membuat wallet...'),
-            error: (e, _) => Text('Gagal: $e'),
+          leading: const Icon(Icons.style_outlined),
+          title: Text('Koleksi Kartu (${ownedClubs.length})'),
+          subtitle: const Text('Klub yang sudah kamu kumpulkan'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const CardCollectionScreen(),
+            ),
           ),
         ),
       ),
@@ -233,9 +229,9 @@ class ProfileTab extends ConsumerWidget {
         child: ListTile(
           leading: Icon(valid ? Icons.verified : Icons.error,
               color: valid ? Colors.green : Colors.red),
-          title: const Text('Paspor Digital'),
-          subtitle: Text('${stamps.length} stamp • $achievements achievement • '
-              '${chain.length} blok'),
+          title: const Text('Paspor Suporter'),
+          subtitle: Text('${stamps.length} stamp • $achievements pencapaian • '
+              '${chain.length} catatan'),
         ),
       ),
       Card(
@@ -246,12 +242,12 @@ class ProfileTab extends ConsumerWidget {
                   height: 24,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.sync),
-          title: const Text('Sinkronisasi Data'),
+          title: const Text('Cadangan ke Cloud'),
           subtitle: Text(_syncSubtitle(sync, lastSync)),
           trailing: TextButton(
             onPressed:
                 sync.busy ? null : () => ref.read(syncProvider.notifier).run(),
-            child: const Text('Sinkron'),
+            child: const Text('Cadangkan sekarang'),
           ),
         ),
       ),
@@ -263,6 +259,24 @@ class ProfileTab extends ConsumerWidget {
           value: biometricEnabled,
           onChanged: (enabled) =>
               ref.read(biometricEnabledProvider.notifier).setEnabled(enabled),
+        ),
+      ),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('Pengingat Kickoff'),
+          subtitle: Text(
+            kickoffLeads.isEmpty
+                ? 'Mati'
+                : kickoffLeads.map(formatLead).join(', '),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ReminderSettingsScreen(),
+            ),
+          ),
         ),
       ),
       Card(
@@ -283,14 +297,14 @@ class ProfileTab extends ConsumerWidget {
         const Padding(
           padding: EdgeInsets.all(16),
           child: Text(
-              'Belum ada stamp. Kunjungi stadion lewat menu Paspor Digital.'),
+              'Belum ada stamp. Kunjungi stadion lewat menu Paspor Suporter.'),
         ),
       for (final b in stamps)
         ListTile(
           leading: const Icon(Icons.approval, color: Colors.teal),
           title: Text('${b.data['stadium']}'),
           subtitle: Text(
-              'Blok #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
+              'Catatan #${b.index} • ${b.data['gps_verified'] == true ? 'GPS terverifikasi' : 'mode demo'}'),
         ),
       Card(
         child: ListTile(
@@ -300,8 +314,16 @@ class ProfileTab extends ConsumerWidget {
           ),
           title: const Text('Keluar'),
           subtitle: const Text('Hapus sesi dari perangkat ini'),
-          onTap: () => _logout(context, ref),
+          onTap: () => confirmAndLogout(context, ref),
         ),
+      ),
+      const SizedBox(height: 16),
+      Text(
+        'Ultimate Fanzone tidak berafiliasi dengan Premier League maupun klub '
+        'mana pun. Data pertandingan dari football-data.org.',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
       ),
     ]);
   }

@@ -708,9 +708,9 @@ class _PhaseControls extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (state.minted)
-            const Text('Blok achievement dicetak ke rantai Paspor')
+            const Text('Pencapaian tersimpan permanen di Paspormu')
           else if (state.goals > 0)
-            const Text('Blok achievement hari ini sudah dicetak'),
+            const Text('Pencapaian hari ini sudah tersimpan'),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: notifier.reset,

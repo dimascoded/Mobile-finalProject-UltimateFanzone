@@ -1,17 +1,17 @@
-# Smart Football Fan (Liga Inggris)
+# Ultimate Fanzone (Liga Inggris)
 
 Panduan lengkap ada di **GUIDELINE_LANJUTAN.md**.
 
 | Item                                | Nilai                  |
 | ----------------------------------- | ---------------------- |
-| Nama paket Dart                     | `smart_football_fan`   |
-| Label aplikasi                      | Smart Football Fan     |
+| Nama paket Dart                     | `ultimate_fanzone`   |
+| Label aplikasi                      | Ultimate Fanzone     |
 | `applicationId` / namespace Android | `com.smartfootballfan` |
 | Bundle ID iOS                       | `com.smartfootballfan` |
 
 > Folder repositori masih bernama `smart_global_traveler` (nama lama tidak diubah
 > supaya riwayat Git tetap terhubung). Nama paket dan ID di dalam proyek sudah
-> memakai `smart_football_fan` / `com.smartfootballfan`.
+> memakai `ultimate_fanzone` / `com.smartfootballfan`.
 
 ## Setup
 

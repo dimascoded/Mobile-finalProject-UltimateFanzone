@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/features/prediction/data/prediction_repository.dart';
+import 'package:ultimate_fanzone/features/prediction/data/prediction_repository.dart';
 
 void main() {
   const matchId = 7001;

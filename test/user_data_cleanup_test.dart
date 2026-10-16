@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:smart_football_fan/core/database/hive_service.dart';
-import 'package:smart_football_fan/features/auth/data/auth_repository.dart';
-import 'package:smart_football_fan/features/auth/providers/auth_provider.dart';
-import 'package:smart_football_fan/features/auth/providers/user_data_cleanup.dart';
+import 'package:ultimate_fanzone/core/database/hive_service.dart';
+import 'package:ultimate_fanzone/features/auth/data/auth_repository.dart';
+import 'package:ultimate_fanzone/features/auth/providers/auth_provider.dart';
+import 'package:ultimate_fanzone/features/auth/providers/user_data_cleanup.dart';
 
 /// U4: setelah logout, data pengguna tidak boleh tersisa di perangkat.
 void main() {

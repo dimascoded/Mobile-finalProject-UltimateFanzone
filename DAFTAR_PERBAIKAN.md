@@ -1,4 +1,4 @@
-# Daftar Perbaikan — Smart Football Fan
+# Daftar Perbaikan — Ultimate Fanzone
 
 Dokumen ini hanya berisi **pekerjaan yang perlu dilakukan**, diurutkan per batch.
 Setiap butir punya: file yang diubah, langkah perbaikan, dan kriteria "selesai bila".

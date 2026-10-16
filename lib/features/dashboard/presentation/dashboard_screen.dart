@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/widgets/offline_banner.dart';
+import '../../auth/presentation/auto_lock_observer.dart';
+import '../../gamification/presentation/widgets/card_reveal_overlay.dart';
 import '../../sos_emergency/presentation/sos_actions.dart';
 import '../../sos_emergency/presentation/sos_hold_button.dart';
 import '../../sos_emergency/providers/shake_provider.dart';
@@ -23,7 +25,7 @@ class DashboardScreen extends ConsumerWidget {
   ];
 
   static const _titles = <String>[
-    'Smart Football Fan',
+    'Ultimate Fanzone',
     'Pertandingan',
     'Seru-seruan',
     'Alat Bantu',
@@ -55,61 +57,65 @@ class DashboardScreen extends ConsumerWidget {
       );
     });
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_titles[index]),
-        actions: [
-          IconButton(
-            tooltip: isDark ? 'Mode terang' : 'Mode gelap',
-            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-            onPressed: () => ref
-                .read(themeModeProvider.notifier)
-                .set(isDark ? ThemeMode.light : ThemeMode.dark),
+    return AutoLockObserver(
+      child: CardRevealListener(
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(_titles[index]),
+            actions: [
+              IconButton(
+                tooltip: isDark ? 'Mode terang' : 'Mode gelap',
+                icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                onPressed: () => ref
+                    .read(themeModeProvider.notifier)
+                    .set(isDark ? ThemeMode.light : ThemeMode.dark),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(children: [
-        const OfflineBanner(),
-        Expanded(
-          child: IndexedStack(index: index, children: _pages),
+          body: Column(children: [
+            const OfflineBanner(),
+            Expanded(
+              child: IndexedStack(index: index, children: _pages),
+            ),
+          ]),
+          floatingActionButton: SosHoldButton(
+            size: 64,
+            onTriggered: () => ref.read(sosProvider.notifier).trigger(),
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: index,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            onDestinationSelected: (i) =>
+                ref.read(tabIndexProvider.notifier).state = i,
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.sports_soccer_outlined),
+                selectedIcon: Icon(Icons.sports_soccer),
+                label: 'Laga',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.sports_esports_outlined),
+                selectedIcon: Icon(Icons.sports_esports),
+                label: 'Seru',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.widgets_outlined),
+                selectedIcon: Icon(Icons.widgets),
+                label: 'Alat',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profil',
+              ),
+            ],
+          ),
         ),
-      ]),
-      floatingActionButton: SosHoldButton(
-        size: 64,
-        onTriggered: () => ref.read(sosProvider.notifier).trigger(),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (i) =>
-            ref.read(tabIndexProvider.notifier).state = i,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_soccer_outlined),
-            selectedIcon: Icon(Icons.sports_soccer),
-            label: 'Laga',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports),
-            label: 'Seru',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.widgets_outlined),
-            selectedIcon: Icon(Icons.widgets),
-            label: 'Alat',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profil',
-          ),
-        ],
       ),
     );
   }

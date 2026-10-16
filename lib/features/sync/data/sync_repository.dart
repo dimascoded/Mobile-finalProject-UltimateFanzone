@@ -8,6 +8,7 @@ import '../../auth/data/auth_repository.dart';
 import '../../away_day/data/away_day_repository.dart';
 import '../../gamification/data/blockchain.dart';
 import '../../prediction/data/prediction_repository.dart';
+import 'chain_reconcile.dart';
 import 'sync_models.dart';
 
 /// Hasil satu siklus sinkronisasi.
@@ -18,10 +19,11 @@ class SyncResult {
     this.pushedPredictions = 0,
     this.mergedExpenses = 0,
     this.mergedPredictions = 0,
-    this.mock = false,
     List<AwayDayExpense>? expenses,
     List<Prediction>? predictions,
     List<Map<String, dynamic>>? remoteChain,
+    this.chainOutcome,
+    this.droppedLocalBlocks = 0,
     this.adoptedChain = false,
     this.unauthorized = false,
   })  : // S1: kembalikan daftar hasil merge, bukan hanya jumlah, supaya
@@ -33,15 +35,18 @@ class SyncResult {
   final int pushedExpenses, pushedChain, pushedPredictions;
   final int mergedExpenses, mergedPredictions;
 
-  /// true = tidak ada BACKEND_URL, jadi sinkronisasi disimulasikan.
-  final bool mock;
-
   /// Daftar gabungan yang harus ditulis ke Hive.
   final List<AwayDayExpense> expenses;
   final List<Prediction> predictions;
 
   /// Rantai dari server, untuk diperiksa [Blockchain.canAdoptRemote].
   final List<Map<String, dynamic>> remoteChain;
+
+  /// Keputusan rekonsiliasi cloud (hanya diisi jalur Supabase).
+  final ChainOutcome? chainOutcome;
+
+  /// Blok lokal yang tidak bisa digabung setelah adopsi cloud.
+  final int droppedLocalBlocks;
 
   /// Rantai server berhasil diadopsi (S2).
   final bool adoptedChain;
@@ -67,7 +72,7 @@ class SyncRepository {
   SyncRepository(
     this._dio,
     this._auth, {
-    String baseUrl = AppConfig.backendUrl,
+    String baseUrl = '',
     Future<String?> Function()? tokenLoader,
   }) : _baseUrl = baseUrl {
     // Token diambil lewat [tokenLoader] kalau diberi, supaya _guard dan
@@ -79,8 +84,6 @@ class SyncRepository {
   final AuthRepository _auth;
   final String _baseUrl;
   late final Future<String?> Function() _tokenLoader;
-
-  bool get isMock => _baseUrl.isEmpty;
 
   Future<SyncResult> sync({
     required List<AwayDayExpense> expenses,
@@ -97,17 +100,15 @@ class SyncRepository {
         deletions: deletions,
       );
     }
-    if (isMock) {
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      // Kembalikan daftar lokal apa adanya: mode mock tidak boleh menyentuh
-      // Hive, jadi `replaceAll` nanti hanya menulis ulang data yang sama.
+    if (_baseUrl.isEmpty) {
+      // Cloud belum dikonfigurasi: jangan sentuh Hive, kembalikan data lokal
+      // apa adanya supaya `replaceAll` hanya menulis ulang data yang sama.
       return SyncResult(
         pushedExpenses: expenses.length,
         pushedChain: chain.length,
         pushedPredictions: predictions.length,
         mergedExpenses: expenses.length,
         mergedPredictions: predictions.length,
-        mock: true,
         expenses: expenses,
         predictions: predictions,
       );
@@ -115,14 +116,15 @@ class SyncRepository {
 
     final token = await _tokenLoader();
     if (token == null || token.isEmpty) {
-      throw SyncException('Belum login. Masuk dulu sebelum sinkronisasi.');
+      throw SyncException('Belum login. Masuk dulu sebelum mencadangkan.');
     }
     final headers = {'Authorization': 'Bearer $token'};
     final payload = SyncPayload(
       expenses: expenses.map(expenseToJson).toList(),
       chain: chainToJson(chain),
-      // S4: sebelum kickoff hanya commit yang boleh keluar. Skor dan salt
-      // baru dikirim setelah blok result ada di rantai lokal.
+      // Prediksi dikirim dalam bentuk PENUH (skor + salt) untuk setiap laga.
+      // Baris prediksi privat per pengguna, dan bukti integritas commit-reveal
+      // tetap blok `prediction_commit` di rantai, bukan baris cloud.
       predictions: predictionsToSync(predictions, chain),
       feedback: feedback,
     );
@@ -169,7 +171,7 @@ class SyncRepository {
     final client = supa.Supabase.instance.client;
     final userId = client.auth.currentUser?.id;
     if (userId == null) {
-      throw SyncException('Masuk ke akun Supabase sebelum sinkronisasi.');
+      throw SyncException('Masuk ke akun dulu sebelum mencadangkan.');
     }
 
     if (deletions.isNotEmpty) {
@@ -260,44 +262,33 @@ class SyncRepository {
     ];
     final mergedPredictions =
         mergePredictions(predictions, normalizedRemotePredictions);
-    final predictionRows = predictionsToSync(mergedPredictions, chain);
-    final commitRows = <Map<String, dynamic>>[];
-    final revealedRows = <Map<String, dynamic>>[];
-    for (final prediction in predictionRows) {
-      final row = <String, dynamic>{
-        'user_id': userId,
-        'match_id': prediction['matchId'],
-        'commit_hash': prediction['commit'],
-        'created_at': prediction['createdAt'],
-      };
-      if (prediction.containsKey('salt')) {
-        row.addAll({
+    // Setiap baris kini membawa skor dan `salt`, jadi tidak ada lagi cabang
+    // commit-only: semua baris lewat upsert biasa (merge) supaya `home_score`,
+    // `away_score`, dan `salt` ikut tersimpan dan bisa memulihkan prediksi yang
+    // belum ter-reveal setelah logout/reinstall. Baris cloud privat milik
+    // pemilik (RLS), sehingga menulis ketiganya aman.
+    final predictionRows = [
+      for (final prediction in predictionsToSync(mergedPredictions, chain))
+        <String, dynamic>{
+          'user_id': userId,
+          'match_id': prediction['matchId'],
           'home_score': prediction['homeScore'],
           'away_score': prediction['awayScore'],
           'salt': prediction['salt'],
-        });
-        revealedRows.add(row);
-      } else {
-        commitRows.add(row);
-      }
-    }
-    if (commitRows.isNotEmpty) {
+          'commit_hash': prediction['commit'],
+          'created_at': prediction['createdAt'],
+        },
+    ];
+    if (predictionRows.isNotEmpty) {
       await client.from('score_predictions').upsert(
-            commitRows,
-            onConflict: 'user_id,match_id',
-            ignoreDuplicates: true,
-          );
-    }
-    if (revealedRows.isNotEmpty) {
-      await client.from('score_predictions').upsert(
-            revealedRows,
+            predictionRows,
             onConflict: 'user_id,match_id',
           );
     }
 
-    final blocks = chain.map(Block.fromJson).toList();
-    if (!Blockchain.isValid(blocks)) {
-      throw SyncException('Rantai lokal tidak valid dan tidak dikirim.');
+    final localBlocks = chain.map(Block.fromJson).toList();
+    if (!Blockchain.isValid(localBlocks)) {
+      throw SyncException('Riwayat lokal tidak cocok dan tidak dikirim.');
     }
     final remoteChainRows = await _selectAll(
       client,
@@ -305,46 +296,65 @@ class SyncRepository {
       userId,
       orderBy: 'idx',
     );
-    final localBlocksByIndex = {
-      for (final block in chain) (block['index'] as num).toInt(): block,
-    };
-    for (final remote in remoteChainRows) {
-      final local = localBlocksByIndex[remote['idx'] as int];
-      if (local != null && local['hash'] != remote['hash']) {
-        throw SyncException(
-          'Blok paspor #${remote['idx']} berbeda dari salinan cloud.',
+    // Baris cloud dipetakan ke bentuk JSON Block yang sama seperti [Block.toJson]
+    // supaya bisa di-parse ulang oleh `Block.fromJson` di sisi pemanggil.
+    // `sortBlockRowsByIndex` menormalkan urutan `idx` menaik, sebab urutan
+    // bawaan PostgREST menurun dan membuat rantai valid tampak tidak valid.
+    final remoteChain = [
+      for (final row in sortBlockRowsByIndex(remoteChainRows))
+        blockRowToJson(row),
+    ];
+    final remoteBlocks = SyncRepository.parseChain(remoteChain);
+
+    final ChainOutcome outcome;
+    try {
+      outcome = reconcileChain(localBlocks, remoteBlocks);
+    } on StateError catch (e) {
+      throw SyncException(e.message);
+    }
+
+    // Hanya kirim blok baru saat lokal yang mendahului cloud. Cloud bersifat
+    // append-only, jadi `inSync` dan `adoptRemote` tidak menulis apa pun.
+    final rowsToPush = <Map<String, dynamic>>[];
+    if (outcome == ChainOutcome.pushLocal) {
+      var highestRemoteIdx = -1;
+      for (final block in remoteBlocks) {
+        if (block.index > highestRemoteIdx) highestRemoteIdx = block.index;
+      }
+      for (final block in localBlocks) {
+        if (block.index > highestRemoteIdx) {
+          rowsToPush.add({
+            'user_id': userId,
+            'idx': block.index,
+            'timestamp': block.timestamp,
+            'type': block.type,
+            'data': block.data,
+            'owner': block.owner,
+            'prev_hash': block.prevHash,
+            'nonce': block.nonce,
+            'hash': block.hash,
+          });
+        }
+      }
+      if (rowsToPush.isNotEmpty) {
+        await client.from('passport_chain_blocks').upsert(
+          rowsToPush,
+          onConflict: 'user_id,idx',
+          ignoreDuplicates: true,
         );
       }
-    }
-    if (chain.isNotEmpty) {
-      await client.from('passport_chain_blocks').upsert(
-        [
-          for (final block in chain)
-            {
-              'user_id': userId,
-              'idx': block['index'],
-              'timestamp': block['timestamp'],
-              'type': block['type'],
-              'data': block['data'],
-              'owner': block['owner'],
-              'prev_hash': block['prevHash'],
-              'nonce': block['nonce'],
-              'hash': block['hash'],
-            },
-        ],
-        onConflict: 'user_id,idx',
-        ignoreDuplicates: true,
-      );
     }
 
     return SyncResult(
       pushedExpenses: mergedExpenses.length,
-      pushedChain: chain.length,
+      pushedChain: rowsToPush.length,
       pushedPredictions: predictionRows.length,
       mergedExpenses: mergedExpenses.length,
       mergedPredictions: mergedPredictions.length,
       expenses: mergedExpenses,
       predictions: mergedPredictions,
+      remoteChain: remoteChain,
+      chainOutcome: outcome,
     );
   }
 
@@ -359,7 +369,9 @@ class SyncRepository {
     var start = 0;
     while (true) {
       dynamic query = client.from(table).select().eq('user_id', userId);
-      if (orderBy != null) query = query.order(orderBy);
+      // ascending: true karena `order()` bawaan PostgREST menurun; rantai
+      // harus dibaca idx menaik agar sesuai dengan urutan sebenarnya.
+      if (orderBy != null) query = query.order(orderBy, ascending: true);
       final page = await query.range(start, start + pageSize - 1);
       rows.addAll((page as List).cast<Map<String, dynamic>>());
       if (page.length < pageSize) return rows;
@@ -409,7 +421,7 @@ class SyncRepository {
     return SyncException(
       fallback ??
           serverMessage ??
-          'Server menolak sinkronisasi${code == null ? '' : ' ($code)'}',
+          'Server menolak pencadangan${code == null ? '' : ' ($code)'}',
     );
   }
 
@@ -433,15 +445,15 @@ class SyncRepository {
       case DioExceptionType.badCertificate:
         return 'Sertifikat server tidak valid.';
       case DioExceptionType.cancel:
-        return 'Sinkronisasi dibatalkan.';
+        return 'Pencadangan dibatalkan.';
       case DioExceptionType.badResponse:
         return serverMessage ??
-            'Server menolak sinkronisasi (${e.response?.statusCode}).';
+            'Server menolak pencadangan (${e.response?.statusCode}).';
       case DioExceptionType.unknown:
         return serverMessage ??
-            'Sinkronisasi gagal: ${e.message ?? 'tidak diketahui'}';
+            'Pencadangan gagal: ${e.message ?? 'tidak diketahui'}';
       default:
-        return serverMessage ?? 'Sinkronisasi gagal';
+        return serverMessage ?? 'Pencadangan gagal';
     }
   }
 

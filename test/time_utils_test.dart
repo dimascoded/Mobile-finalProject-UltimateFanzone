@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_football_fan/core/utils/time_utils.dart';
+import 'package:ultimate_fanzone/core/utils/time_utils.dart';
 
 /// Zona waktu yang dipakai aplikasi, lengkap dengan aturan DST-nya.
 ///

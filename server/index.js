@@ -123,7 +123,7 @@ app.use((err, _req, res, _next) => {
 if (require.main === module) {
   const port = Number(process.env.PORT || 3000);
   app.listen(port, '0.0.0.0', () => {
-    console.log(`Smart Football Fan API berjalan di http://0.0.0.0:${port}`);
+    console.log(`Ultimate Fanzone API berjalan di http://0.0.0.0:${port}`);
     // B7: di produksi, server ini hanya boleh dipasang di belakang reverse
     // proxy yang mengakhiri TLS. Tanpa HTTPS, token JWT terbaca polos oleh
     // siapa pun yang menyadap paket di jaringan.

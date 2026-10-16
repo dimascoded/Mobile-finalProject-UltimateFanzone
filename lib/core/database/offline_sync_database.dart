@@ -151,6 +151,13 @@ class OfflineSyncDatabase {
     };
   }
 
+  /// Nama koleksi yang punya perubahan lokal belum dikirim ke server.
+  ///
+  /// Dipakai dialog keluar: kalau daftar ini tidak kosong, keluar akan
+  /// menghapus data yang belum tersinkron.
+  static Future<List<String>> pendingCollections() async =>
+      (await pendingRevisions()).keys.toList();
+
   static Future<List<({String collection, String itemId})>>
       pendingDeletions() async {
     final rows = await _database?.query('sync_deletions') ?? const [];
