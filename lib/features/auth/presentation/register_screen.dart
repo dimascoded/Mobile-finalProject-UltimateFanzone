@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
+import '../../../core/ui/app_images.dart';
+import '../../../core/ui/scrim_image.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
@@ -47,75 +52,119 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     final loading = ref.watch(authProvider).isLoading;
+    final theme = Theme.of(context);
+    final fz = context.fz;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Daftar Akun')),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      helperText: 'Dipakai untuk masuk dan mencadangkan data',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _password,
-                    obscureText: _obscure,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      helperText: 'Minimal 8 karakter',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                            _obscure ? Icons.visibility : Icons.visibility_off),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _confirm,
-                    obscureText: _obscure,
-                    decoration: const InputDecoration(
-                      labelText: 'Ulangi password',
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: loading
-                          ? null
-                          : () => ref.read(authProvider.notifier).register(
-                                _email.text,
-                                _password.text,
-                                _confirm.text,
-                              ),
-                      child: loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Daftar'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed:
-                        loading ? null : () => Navigator.of(context).maybePop(),
-                    child: const Text('Sudah punya akun? Masuk'),
-                  ),
-                ]),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const ScrimImage(
+            assetPath: AppImages.bgLogin,
+            borderRadius: 0,
+            scrim: 0.7,
+            showPitchPattern: true,
           ),
-        ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: fz.accent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.sports_soccer,
+                            size: 44, color: fz.onAccent),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Ultimate Fanzone',
+                        style: theme.textTheme.headlineMedium
+                            ?.copyWith(color: Colors.white),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextField(
+                              controller: _email,
+                              keyboardType: TextInputType.emailAddress,
+                              autocorrect: false,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                helperText:
+                                    'Dipakai untuk masuk dan mencadangkan data',
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            TextField(
+                              controller: _password,
+                              obscureText: _obscure,
+                              decoration: InputDecoration(
+                                labelText: 'Password',
+                                helperText: 'Minimal 8 karakter',
+                                suffixIcon: IconButton(
+                                  icon: Icon(_obscure
+                                      ? Icons.visibility
+                                      : Icons.visibility_off),
+                                  onPressed: () =>
+                                      setState(() => _obscure = !_obscure),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            TextField(
+                              controller: _confirm,
+                              obscureText: _obscure,
+                              decoration: const InputDecoration(
+                                labelText: 'Ulangi password',
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.xl),
+                            FilledButton(
+                              onPressed: loading
+                                  ? null
+                                  : () =>
+                                      ref.read(authProvider.notifier).register(
+                                            _email.text,
+                                            _password.text,
+                                            _confirm.text,
+                                          ),
+                              child: loading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Text('Daftar'),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            TextButton(
+                              onPressed: loading
+                                  ? null
+                                  : () => Navigator.of(context).maybePop(),
+                              child: const Text('Sudah punya akun? Masuk'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

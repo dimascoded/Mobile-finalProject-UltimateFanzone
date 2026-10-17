@@ -7,6 +7,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/permission_gate.dart';
 import '../../football/data/models.dart';
@@ -72,7 +74,8 @@ class _Picker extends ConsumerWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 0),
           child: DropdownButtonFormField<PlClub>(
             key: ValueKey(target?.key),
             initialValue: target,
@@ -187,9 +190,11 @@ class _Pointer extends ConsumerWidget {
     )));
     final route = routeAsync.valueOrNull;
     final routeUnavailable = routeAsync.hasValue && route == null;
+    final scheme = Theme.of(context).colorScheme;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
       child: Column(
         children: [
           _LocationMap(
@@ -216,15 +221,15 @@ class _Pointer extends ConsumerWidget {
               child: LinearProgressIndicator(minHeight: 3),
             ),
           if (route != null)
-            Card(
-              margin: const EdgeInsets.only(top: 8),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                 child: Row(
                   children: [
                     const Icon(Icons.directions_car, size: 20),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
                         'Rute berkendara: '
@@ -263,7 +268,8 @@ class _Pointer extends ConsumerWidget {
           Text(club.stadium, style: Theme.of(context).textTheme.bodyMedium),
           Text(club.city, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 20),
-          Card(
+          AppCard(
+            padding: EdgeInsets.zero,
             child: Column(
               children: [
                 ListTile(
@@ -283,7 +289,7 @@ class _Pointer extends ConsumerWidget {
                         ? Icons.check_circle
                         : Icons.turn_right,
                     color:
-                        relative < 45 || relative > 315 ? Colors.green : null,
+                        relative < 45 || relative > 315 ? scheme.primary : null,
                   ),
                   title: Text(_relativeLabel(relative)),
                   subtitle:
@@ -433,8 +439,9 @@ class _LocationMapState extends State<_LocationMap> {
   Widget build(BuildContext context) {
     final clubColor = widget.target.colorValue;
     final routePoints = widget.routePoints;
+    final scheme = Theme.of(context).colorScheme;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: SizedBox(
         height: 280,
         child: Stack(
@@ -462,7 +469,7 @@ class _LocationMapState extends State<_LocationMap> {
                       Polyline(
                         points: routePoints,
                         strokeWidth: 5,
-                        color: Colors.blue,
+                        color: scheme.primary,
                       ),
                     ],
                   )
@@ -472,7 +479,7 @@ class _LocationMapState extends State<_LocationMap> {
                       Polyline(
                         points: [_deviceLocation, _stadiumLocation],
                         strokeWidth: 3,
-                        color: Colors.grey,
+                        color: scheme.outline,
                         pattern: StrokePattern.dashed(
                           segments: const [8, 6],
                         ),
@@ -485,9 +492,9 @@ class _LocationMapState extends State<_LocationMap> {
                       point: _deviceLocation,
                       width: 48,
                       height: 48,
-                      child: const Icon(
+                      child: Icon(
                         Icons.my_location,
-                        color: Colors.blue,
+                        color: scheme.primary,
                         size: 34,
                       ),
                     ),
@@ -554,7 +561,7 @@ class _LocationMapState extends State<_LocationMap> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -564,13 +571,12 @@ class _LocationMapState extends State<_LocationMap> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.my_location,
-                          color: Colors.blue, size: 16),
-                      const SizedBox(width: 4),
+                      Icon(Icons.my_location, color: scheme.primary, size: 16),
+                      const SizedBox(width: AppSpacing.xs),
                       const Text('Anda'),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppSpacing.md),
                       Icon(Icons.stadium, color: clubColor, size: 16),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Text(widget.target.shortName),
                     ],
                   ),
@@ -605,6 +611,7 @@ class _CompassDial extends StatelessWidget {
                 relativeBearing: relativeBearing,
                 color: color,
                 diameter: diameter,
+                tickColor: Theme.of(context).colorScheme.outline,
               ),
               child: Center(
                 child: Column(
@@ -648,11 +655,13 @@ class _DialPainter extends CustomPainter {
     required this.relativeBearing,
     required this.color,
     required this.diameter,
+    required this.tickColor,
   });
 
   final double relativeBearing;
   final Color color;
   final double diameter;
+  final Color tickColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -680,7 +689,7 @@ class _DialPainter extends CustomPainter {
         inner,
         outer,
         Paint()
-          ..color = deg % 90 == 0 ? color : Colors.grey
+          ..color = deg % 90 == 0 ? color : tickColor
           ..strokeWidth = deg % 90 == 0 ? 3 : 1.5,
       );
     }
@@ -701,5 +710,6 @@ class _DialPainter extends CustomPainter {
   bool shouldRepaint(_DialPainter old) =>
       old.relativeBearing != relativeBearing ||
       old.color != color ||
-      old.diameter != diameter;
+      old.diameter != diameter ||
+      old.tickColor != tickColor;
 }

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
+import '../../../core/ui/section_header.dart';
 import '../data/reminder_leads.dart';
 import '../providers/football_providers.dart';
 import '../providers/kickoff_reminder_provider.dart';
@@ -41,89 +44,100 @@ class ReminderSettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pengingat Kickoff')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Pilih kapan kamu diingatkan sebelum laga timmu mulai. '
-            'Maksimal 3 pengingat.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 20),
-          Text('Pengingatmu', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (leads.isEmpty)
-            Text(
-              'Pengingat dimatikan',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            )
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final minutes in leads)
-                  InputChip(
-                    label: Text(formatLead(minutes)),
-                    onDeleted: () =>
-                        ref.read(kickoffLeadsProvider.notifier).remove(minutes),
-                  ),
-              ],
-            ),
-          const SizedBox(height: 24),
-          Text('Pilihan cepat', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
-              for (final (minutes, label) in _presets)
-                FilterChip(
-                  label: Text(label),
-                  selected: leads.contains(minutes),
-                  onSelected: (_) => toggle(minutes),
+              Text(
+                'Pilih kapan kamu diingatkan sebelum laga timmu mulai. '
+                'Maksimal 3 pengingat.',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader(title: 'Pengingatmu'),
+              const SizedBox(height: AppSpacing.sm),
+              AppCard(
+                child: leads.isEmpty
+                    ? Text(
+                        'Pengingat dimatikan',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      )
+                    : Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: [
+                          for (final minutes in leads)
+                            InputChip(
+                              label: Text(formatLead(minutes)),
+                              onDeleted: () => ref
+                                  .read(kickoffLeadsProvider.notifier)
+                                  .remove(minutes),
+                            ),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader(title: 'Pilihan cepat'),
+              const SizedBox(height: AppSpacing.sm),
+              AppCard(
+                child: Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    for (final (minutes, label) in _presets)
+                      FilterChip(
+                        label: Text(label),
+                        selected: leads.contains(minutes),
+                        onSelected: (_) => toggle(minutes),
+                      ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => const _AddReminderDialog(),
+                  ),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Tambah sendiri'),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () =>
+                      ref.read(kickoffLeadsProvider.notifier).reset(),
+                  child: const Text('Kembalikan ke bawaan'),
+                ),
+              ),
+              const Divider(height: 32),
+              Text(
+                'Hanya untuk laga tim favoritmu. Pengingat yang waktunya sudah '
+                'lewat dilewati.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (favoriteClub == null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Pilih tim favorit di Profil agar pengingat aktif.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => const _AddReminderDialog(),
-              ),
-              icon: const Icon(Icons.add),
-              label: const Text('Tambah sendiri'),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => ref.read(kickoffLeadsProvider.notifier).reset(),
-              child: const Text('Kembalikan ke bawaan'),
-            ),
-          ),
-          const Divider(height: 32),
-          Text(
-            'Hanya untuk laga tim favoritmu. Pengingat yang waktunya sudah '
-            'lewat dilewati.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (favoriteClub == null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Pilih tim favorit di Profil agar pengingat aktif.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.primary,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }

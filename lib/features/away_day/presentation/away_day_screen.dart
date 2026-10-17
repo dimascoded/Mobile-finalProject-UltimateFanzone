@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/rates_provider.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../football/presentation/club_crest.dart';
@@ -87,24 +89,30 @@ class AwayDayScreen extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Catat'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        children: [
-          _Summary(totals: totals, budget: budget),
-          const SizedBox(height: 12),
-          _WorldClock(clock: clock),
-          const SizedBox(height: 12),
-          const _Filters(),
-          const SizedBox(height: 12),
-          if (items.isEmpty)
-            const EmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: 'Belum ada pengeluaran',
-              message: 'Tekan Catat untuk menambah pengeluaran Away Day.',
-            )
-          else
-            for (final e in items) _Tile(expense: e),
-        ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 96),
+            children: [
+              _Summary(totals: totals, budget: budget),
+              const SizedBox(height: AppSpacing.md),
+              _WorldClock(clock: clock),
+              const SizedBox(height: AppSpacing.md),
+              const _Filters(),
+              const SizedBox(height: AppSpacing.md),
+              if (items.isEmpty)
+                const EmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Belum ada pengeluaran',
+                  message: 'Tekan Catat untuk menambah pengeluaran Away Day.',
+                )
+              else
+                for (final e in items) _Tile(expense: e),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -126,100 +134,97 @@ class _Summary extends ConsumerWidget {
     final pct = budget > 0 ? (totalIdr / budget * 100).clamp(0.0, 100.0) : 0.0;
     final over = budget > 0 && totalIdr > budget;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Total pengeluaran',
-                style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 4),
-            Text(
-              formatMoney(summary.total, selectedCurrency),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: over ? scheme.error : scheme.primary,
-                  ),
-            ),
-            if (selectedCurrency != 'IDR')
-              Text('\u2248 ${_rp(totalIdr)}',
-                  style: Theme.of(context).textTheme.bodyMedium)
-            else
-              Text(_gbp(totals.gbp),
-                  style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 12),
-            Text('Tampilkan dalam',
-                style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final info in supportedCurrencies.values)
-                  ChoiceChip(
-                    label: Text(info.code),
-                    selected: selectedCurrency == info.code,
-                    onSelected: (v) {
-                      if (v) {
-                        ref
-                            .read(awayDaySummaryCurrencyProvider.notifier)
-                            .set(info.code);
-                      }
-                    },
-                  ),
-              ],
-            ),
-            if (snap?.fetchedAt != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Kurs per ${TimeUtils.formatDate(TimeUtils.wib(snap!.fetchedAt!))} WIB'
-                '${snap.fromCache ? ' (tersimpan)' : ''}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Total pengeluaran',
+              style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 4),
+          Text(
+            formatMoney(summary.total, selectedCurrency),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: over ? scheme.error : scheme.primary,
+                ),
+          ),
+          if (selectedCurrency != 'IDR')
+            Text('\u2248 ${_rp(totalIdr)}',
+                style: Theme.of(context).textTheme.bodyMedium)
+          else
+            Text(_gbp(totals.gbp),
+                style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 12),
+          Text('Tampilkan dalam',
+              style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final info in supportedCurrencies.values)
+                ChoiceChip(
+                  label: Text(info.code),
+                  selected: selectedCurrency == info.code,
+                  onSelected: (v) {
+                    if (v) {
+                      ref
+                          .read(awayDaySummaryCurrencyProvider.notifier)
+                          .set(info.code);
+                    }
+                  },
+                ),
             ],
-            if (summary.fallbackCount > 0)
-              Text(
-                '${summary.fallbackCount} pengeluaran memakai kurs saat dicatat',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.tertiary,
-                    ),
-              ),
-            if (summary.skippedCount > 0)
-              Text(
-                '${summary.skippedCount} pengeluaran tidak bisa dikonversi, kurs belum tersedia',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.error,
-                    ),
-              ),
-            const SizedBox(height: 12),
-            if (budget > 0) ...[
-              LinearProgressIndicator(
-                value: pct / 100,
-                color: over ? scheme.error : scheme.primary,
-                backgroundColor: scheme.surfaceContainerHighest,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                over
-                    ? 'Melebihi anggaran ${_rp(totalIdr - budget)}'
-                    : 'Sisa anggaran ${_rp(budget - totalIdr)}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: over ? scheme.error : null,
-                    ),
-              ),
-            ] else
-              TextButton.icon(
-                onPressed: () => _editBudget(context, ref),
-                icon: const Icon(Icons.savings_outlined, size: 18),
-                label: const Text('Atur anggaran'),
-              ),
-            if (budget > 0)
-              TextButton.icon(
-                onPressed: () => _editBudget(context, ref),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Ubah anggaran'),
-              ),
+          ),
+          if (snap?.fetchedAt != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Kurs per ${TimeUtils.formatDate(TimeUtils.wib(snap!.fetchedAt!))} WIB'
+              '${snap.fromCache ? ' (tersimpan)' : ''}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
-        ),
+          if (summary.fallbackCount > 0)
+            Text(
+              '${summary.fallbackCount} pengeluaran memakai kurs saat dicatat',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.tertiary,
+                  ),
+            ),
+          if (summary.skippedCount > 0)
+            Text(
+              '${summary.skippedCount} pengeluaran tidak bisa dikonversi, kurs belum tersedia',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.error,
+                  ),
+            ),
+          const SizedBox(height: 12),
+          if (budget > 0) ...[
+            LinearProgressIndicator(
+              value: pct / 100,
+              color: over ? scheme.error : scheme.primary,
+              backgroundColor: scheme.surfaceContainerHighest,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              over
+                  ? 'Melebihi anggaran ${_rp(totalIdr - budget)}'
+                  : 'Sisa anggaran ${_rp(budget - totalIdr)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: over ? scheme.error : null,
+                  ),
+            ),
+          ] else
+            TextButton.icon(
+              onPressed: () => _editBudget(context, ref),
+              icon: const Icon(Icons.savings_outlined, size: 18),
+              label: const Text('Atur anggaran'),
+            ),
+          if (budget > 0)
+            TextButton.icon(
+              onPressed: () => _editBudget(context, ref),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Ubah anggaran'),
+            ),
+        ],
       ),
     );
   }
@@ -238,210 +243,204 @@ class _WorldClock extends ConsumerWidget {
     final clubs = ref.watch(clubsProvider);
     final theme = Theme.of(context);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.public, size: 18),
-                const SizedBox(width: 8),
-                Text('Jam dunia',
-                    style: Theme.of(context).textTheme.labelLarge),
-              ],
-            ),
-            const SizedBox(height: 12),
-            clock.when(
-              loading: () =>
-                  const SizedBox(height: 40, child: LinearProgressIndicator()),
-              error: (e, _) => Text('Gagal: $e'),
-              data: (times) => clubs.when(
-                loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('Gagal memuat lokasi klub: $e'),
-                data: (clubList) {
-                  if (clubList.isEmpty) {
-                    return const Text('Daftar lokasi klub tidak tersedia.');
-                  }
-                  final cities = clubList
-                      .map((club) => club.city.trim())
-                      .where((city) => city.isNotEmpty)
-                      .toSet()
-                      .toList()
-                    ..sort();
-                  final favoriteCity = ref.watch(favoriteClubProvider)?.city;
-                  final city = cities.contains(selectedCity)
-                      ? selectedCity!
-                      : cities.contains(favoriteCity)
-                          ? favoriteCity!
-                          : cities.first;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.public, size: 18),
+              const SizedBox(width: 8),
+              Text('Jam dunia', style: Theme.of(context).textTheme.labelLarge),
+            ],
+          ),
+          const SizedBox(height: 12),
+          clock.when(
+            loading: () =>
+                const SizedBox(height: 40, child: LinearProgressIndicator()),
+            error: (e, _) => Text('Gagal: $e'),
+            data: (times) => clubs.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (e, _) => Text('Gagal memuat lokasi klub: $e'),
+              data: (clubList) {
+                if (clubList.isEmpty) {
+                  return const Text('Daftar lokasi klub tidak tersedia.');
+                }
+                final cities = clubList
+                    .map((club) => club.city.trim())
+                    .where((city) => city.isNotEmpty)
+                    .toSet()
+                    .toList()
+                  ..sort();
+                final favoriteCity = ref.watch(favoriteClubProvider)?.city;
+                final city = cities.contains(selectedCity)
+                    ? selectedCity!
+                    : cities.contains(favoriteCity)
+                        ? favoriteCity!
+                        : cities.first;
 
-                  final longitudes = cityLongitudes(clubList);
-                  final indoCity = indonesianCities.firstWhere(
-                    (c) => c.name == selectedIndoCity,
-                    orElse: () => indonesianCities.first,
-                  );
+                final longitudes = cityLongitudes(clubList);
+                final indoCity = indonesianCities.firstWhere(
+                  (c) => c.name == selectedIndoCity,
+                  orElse: () => indonesianCities.first,
+                );
 
-                  final utc = times['UTC'] ?? TimeUtils.nowUtc();
-                  final indonesiaTime = times[selectedZone] ?? times['WIB']!;
-                  final londonTime = times['London']!;
+                final utc = times['UTC'] ?? TimeUtils.nowUtc();
+                final indonesiaTime = times[selectedZone] ?? times['WIB']!;
+                final londonTime = times['London']!;
 
-                  final indoSolar = solarTime(utc, indoCity.lng);
-                  final englishLng = longitudes[city];
-                  final englishSolar =
-                      englishLng == null ? null : solarTime(utc, englishLng);
-                  final englishDiff = englishSolar?.difference(londonTime);
+                final indoSolar = solarTime(utc, indoCity.lng);
+                final englishLng = longitudes[city];
+                final englishSolar =
+                    englishLng == null ? null : solarTime(utc, englishLng);
+                final englishDiff = englishSolar?.difference(londonTime);
 
-                  final westToEast = longitudes.entries.toList()
-                    ..sort((a, b) => a.value.compareTo(b.value));
+                final westToEast = longitudes.entries.toList()
+                  ..sort((a, b) => a.value.compareTo(b.value));
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('clock-zone-$selectedZone'),
-                        initialValue: selectedZone,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: 'Zona waktu Indonesia',
-                          prefixIcon: Icon(Icons.schedule),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'WIB', child: Text('WIB')),
-                          DropdownMenuItem(value: 'WITA', child: Text('WITA')),
-                          DropdownMenuItem(value: 'WIT', child: Text('WIT')),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            ref.read(awayDayClockZoneProvider.notifier).state =
-                                value;
-                          }
-                        },
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('clock-zone-$selectedZone'),
+                      initialValue: selectedZone,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Zona waktu Indonesia',
+                        prefixIcon: Icon(Icons.schedule),
                       ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('clock-indo-$selectedIndoCity'),
-                        initialValue:
-                            selectedIndoCity ?? indonesianCities.first.name,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: 'Kota di Indonesia',
-                          prefixIcon: Icon(Icons.location_on),
-                        ),
-                        items: [
-                          for (final c in indonesianCities)
-                            DropdownMenuItem(
-                                value: c.name, child: Text(c.name)),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          final picked = indonesianCities
-                              .firstWhere((c) => c.name == value);
-                          ref
-                              .read(awayDayClockIndoCityProvider.notifier)
-                              .state = value;
+                      items: const [
+                        DropdownMenuItem(value: 'WIB', child: Text('WIB')),
+                        DropdownMenuItem(value: 'WITA', child: Text('WITA')),
+                        DropdownMenuItem(value: 'WIT', child: Text('WIT')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
                           ref.read(awayDayClockZoneProvider.notifier).state =
-                              picked.zone;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('clock-city-$city'),
-                        initialValue: city,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: 'Lokasi tim Premier League',
-                          prefixIcon: Icon(Icons.location_city),
-                        ),
-                        items: [
-                          for (final location in cities)
-                            DropdownMenuItem(
-                              value: location,
-                              child: Text(location),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          ref.read(awayDayClockCityProvider.notifier).state =
                               value;
-                        },
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('clock-indo-$selectedIndoCity'),
+                      initialValue:
+                          selectedIndoCity ?? indonesianCities.first.name,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Kota di Indonesia',
+                        prefixIcon: Icon(Icons.location_on),
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ClockReadout(
-                              label: selectedZone,
-                              time: indonesiaTime,
-                              detail: 'Waktu sipil Indonesia',
-                            ),
+                      items: [
+                        for (final c in indonesianCities)
+                          DropdownMenuItem(value: c.name, child: Text(c.name)),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        final picked =
+                            indonesianCities.firstWhere((c) => c.name == value);
+                        ref.read(awayDayClockIndoCityProvider.notifier).state =
+                            value;
+                        ref.read(awayDayClockZoneProvider.notifier).state =
+                            picked.zone;
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('clock-city-$city'),
+                      initialValue: city,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Lokasi tim Premier League',
+                        prefixIcon: Icon(Icons.location_city),
+                      ),
+                      items: [
+                        for (final location in cities)
+                          DropdownMenuItem(
+                            value: location,
+                            child: Text(location),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _ClockReadout(
-                              label: 'London',
-                              time: londonTime,
-                              detail: 'Jam resmi London',
-                            ),
+                      ],
+                      onChanged: (value) {
+                        ref.read(awayDayClockCityProvider.notifier).state =
+                            value;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ClockReadout(
+                            label: selectedZone,
+                            time: indonesiaTime,
+                            detail: 'Waktu sipil Indonesia',
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ClockReadout(
-                              label: indoCity.name,
-                              time: indoSolar,
-                              detail: 'Waktu surya lokal',
-                              showSeconds: true,
-                            ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _ClockReadout(
+                            label: 'London',
+                            time: londonTime,
+                            detail: 'Jam resmi London',
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _ClockReadout(
-                              label: city,
-                              time: englishSolar ?? londonTime,
-                              detail: englishDiff == null
-                                  ? 'Waktu surya lokal'
-                                  : 'Surya ${formatOffset(englishDiff)} dari London',
-                              showSeconds: true,
-                            ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ClockReadout(
+                            label: indoCity.name,
+                            time: indoSolar,
+                            detail: 'Waktu surya lokal',
+                            showSeconds: true,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Waktu surya lokal dihitung dari bujur kota, hanya untuk '
-                        'perbandingan. Jadwal laga memakai jam resmi.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 4),
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: EdgeInsets.zero,
-                        title: Text('Semua kota klub',
-                            style: Theme.of(context).textTheme.labelMedium),
-                        children: [
-                          for (final entry in westToEast)
-                            _CitySolarRow(
-                              city: entry.key,
-                              solar: solarTime(utc, entry.value),
-                              offset: solarTime(utc, entry.value)
-                                  .difference(londonTime),
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _ClockReadout(
+                            label: city,
+                            time: englishSolar ?? londonTime,
+                            detail: englishDiff == null
+                                ? 'Waktu surya lokal'
+                                : 'Surya ${formatOffset(englishDiff)} dari London',
+                            showSeconds: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Waktu surya lokal dihitung dari bujur kota, hanya untuk '
+                      'perbandingan. Jadwal laga memakai jam resmi.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: EdgeInsets.zero,
+                      title: Text('Semua kota klub',
+                          style: Theme.of(context).textTheme.labelMedium),
+                      children: [
+                        for (final entry in westToEast)
+                          _CitySolarRow(
+                            city: entry.key,
+                            solar: solarTime(utc, entry.value),
+                            offset: solarTime(utc, entry.value)
+                                .difference(londonTime),
+                          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -466,10 +465,10 @@ class _ClockReadout extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -614,39 +613,43 @@ class _Tile extends ConsumerWidget {
         ),
       ),
       onDismissed: (_) => ref.read(awayDayProvider.notifier).remove(expense.id),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: ListTile(
-          leading: club != null
-              ? ClubCrest(
-                  crestUrl: crests[club.tla.toUpperCase()],
-                  tla: club.tla,
-                  color: club.colorValue,
-                  size: 40,
-                )
-              : CircleAvatar(
-                  backgroundColor:
-                      Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Icon(_catIcon[expense.category], size: 20),
-                ),
-          title:
-              Text(expense.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            [
-              _catLabel[expense.category],
-              if (club != null) club.name,
-              TimeUtils.formatDate(expense.date),
-            ].join(' \u00B7 '),
-          ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(_rp(expense.amountIdr),
-                  style: Theme.of(context).textTheme.titleSmall),
-              Text(_foreignAmount(expense.amountForeign, expense.currencyCode),
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: AppCard(
+          padding: EdgeInsets.zero,
+          child: ListTile(
+            leading: club != null
+                ? ClubCrest(
+                    crestUrl: crests[club.tla.toUpperCase()],
+                    tla: club.tla,
+                    color: club.colorValue,
+                    size: 40,
+                  )
+                : CircleAvatar(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: Icon(_catIcon[expense.category], size: 20),
+                  ),
+            title: Text(expense.title,
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              [
+                _catLabel[expense.category],
+                if (club != null) club.name,
+                TimeUtils.formatDate(expense.date),
+              ].join(' \u00B7 '),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_rp(expense.amountIdr),
+                    style: Theme.of(context).textTheme.titleSmall),
+                Text(
+                    _foreignAmount(expense.amountForeign, expense.currencyCode),
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ),
         ),
       ),
@@ -726,9 +729,8 @@ class _AddFormState extends ConsumerState<_AddForm> {
   @override
   void initState() {
     super.initState();
-    _clubKey = widget.clubs.any((c) => c.key == widget.favKey)
-        ? widget.favKey
-        : null;
+    _clubKey =
+        widget.clubs.any((c) => c.key == widget.favKey) ? widget.favKey : null;
     _foreign.addListener(_syncFromForeign);
   }
 
@@ -769,159 +771,159 @@ class _AddFormState extends ConsumerState<_AddForm> {
 
     return SingleChildScrollView(
       child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Catat pengeluaran',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _title,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Keterangan',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _currency,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Mata uang',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final info in supportedCurrencies.values)
-                DropdownMenuItem(
-                  value: info.code,
-                  child: Text('${info.code} \u00B7 ${info.name}'),
-                ),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                _currency = value;
-                _foreign.clear();
-                _idr.clear();
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _foreign,
-            keyboardType: TextInputType.numberWithOptions(
-              decimal: _currency != 'IDR',
-            ),
-            decoration: InputDecoration(
-              labelText: 'Jumlah ($_currency)',
-              prefixText: _currencyPrefix(_currency),
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          if (_currency != 'IDR') ...[
-            const SizedBox(height: 8),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Catat pengeluaran',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
             TextField(
-              controller: _idr,
-              readOnly: !rateMissing,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+              controller: _title,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Keterangan',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _currency,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Mata uang',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final info in supportedCurrencies.values)
+                  DropdownMenuItem(
+                    value: info.code,
+                    child: Text('${info.code} \u00B7 ${info.name}'),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _currency = value;
+                  _foreign.clear();
+                  _idr.clear();
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _foreign,
+              keyboardType: TextInputType.numberWithOptions(
+                decimal: _currency != 'IDR',
               ),
               decoration: InputDecoration(
-                labelText: rateMissing
-                    ? 'Nilai Rupiah (wajib diisi manual)'
-                    : 'Perkiraan nilai Rupiah',
-                prefixText: 'Rp ',
+                labelText: 'Jumlah ($_currency)',
+                prefixText: _currencyPrefix(_currency),
                 border: const OutlineInputBorder(),
               ),
             ),
-            if (rateMissing)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Kurs $_currency tidak tersedia. Isi nilai Rupiah secara manual.',
-                  style: Theme.of(context).textTheme.bodySmall,
+            if (_currency != 'IDR') ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _idr,
+                readOnly: !rateMissing,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-              )
-            else if (snap?.fromCache == true)
-              Text(
-                'Kurs tersimpan \u2022 1 $_currency = ${_rp(1 / perIdr!)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              )
-            else if (perIdr != null)
-              Text(
-                'Kurs: 1 $_currency = ${_rp(1 / perIdr)}',
-                style: Theme.of(context).textTheme.bodySmall,
+                decoration: InputDecoration(
+                  labelText: rateMissing
+                      ? 'Nilai Rupiah (wajib diisi manual)'
+                      : 'Perkiraan nilai Rupiah',
+                  prefixText: 'Rp ',
+                  border: const OutlineInputBorder(),
+                ),
               ),
-          ],
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _foreign,
-            builder: (context, value, _) {
-              final amt = parseAmount(value.text);
-              if (amt == null || amt <= 0) return const SizedBox.shrink();
-              final converted =
-                  convertCurrency(amt, _currency, outCurrency, rates);
-              if (converted == null) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '\u2248 ${formatMoney(converted, outCurrency)}',
+              if (rateMissing)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Kurs $_currency tidak tersedia. Isi nilai Rupiah secara manual.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              else if (snap?.fromCache == true)
+                Text(
+                  'Kurs tersimpan \u2022 1 $_currency = ${_rp(1 / perIdr!)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              else if (perIdr != null)
+                Text(
+                  'Kurs: 1 $_currency = ${_rp(1 / perIdr)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<AwayDayCategory>(
-            initialValue: _cat,
-            decoration: const InputDecoration(
-              labelText: 'Kategori',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final c in AwayDayCategory.values)
-                DropdownMenuItem(value: c, child: Text(_catLabel[c]!)),
             ],
-            onChanged: (value) =>
-                setState(() => _cat = value ?? AwayDayCategory.lainnya),
-          ),
-          const SizedBox(height: 12),
-          if (widget.clubs.isNotEmpty)
-            DropdownButtonFormField<String>(
-              initialValue: _clubKey,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                  labelText: 'Klub', border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem<String>(
-                    value: null, child: Text('Umum')),
-                for (final c in widget.clubs)
-                  DropdownMenuItem<String>(
-                    value: c.key,
-                    child: Row(children: [
-                      ClubCrest(
-                        crestUrl: crests[c.tla.toUpperCase()],
-                        tla: c.tla,
-                        color: c.colorValue,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(child: Text(c.name)),
-                    ]),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _foreign,
+              builder: (context, value, _) {
+                final amt = parseAmount(value.text);
+                if (amt == null || amt <= 0) return const SizedBox.shrink();
+                final converted =
+                    convertCurrency(amt, _currency, outCurrency, rates);
+                if (converted == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '\u2248 ${formatMoney(converted, outCurrency)}',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-              ],
-              onChanged: (v) => setState(() => _clubKey = v),
+                );
+              },
             ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: _submit,
-            icon: const Icon(Icons.check),
-            label: const Text('Simpan'),
-          ),
-        ],
-      ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<AwayDayCategory>(
+              initialValue: _cat,
+              decoration: const InputDecoration(
+                labelText: 'Kategori',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final c in AwayDayCategory.values)
+                  DropdownMenuItem(value: c, child: Text(_catLabel[c]!)),
+              ],
+              onChanged: (value) =>
+                  setState(() => _cat = value ?? AwayDayCategory.lainnya),
+            ),
+            const SizedBox(height: 12),
+            if (widget.clubs.isNotEmpty)
+              DropdownButtonFormField<String>(
+                initialValue: _clubKey,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                    labelText: 'Klub', border: OutlineInputBorder()),
+                items: [
+                  const DropdownMenuItem<String>(
+                      value: null, child: Text('Umum')),
+                  for (final c in widget.clubs)
+                    DropdownMenuItem<String>(
+                      value: c.key,
+                      child: Row(children: [
+                        ClubCrest(
+                          crestUrl: crests[c.tla.toUpperCase()],
+                          tla: c.tla,
+                          color: c.colorValue,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(child: Text(c.name)),
+                      ]),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _clubKey = v),
+              ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.check),
+              label: const Text('Simpan'),
+            ),
+          ],
+        ),
       ),
     );
   }

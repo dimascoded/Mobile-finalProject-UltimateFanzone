@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
+import '../../../core/ui/app_images.dart';
+import '../../../core/ui/scrim_image.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
@@ -68,31 +72,78 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     });
     final loading = ref.watch(authProvider).isLoading;
     final biometricEnabled = ref.watch(biometricEnabledProvider);
+    final theme = Theme.of(context);
+    final fz = context.fz;
 
     return PopScope(
       canPop: false,
       child: Scaffold(
-        body: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.lock, size: 72),
-            const SizedBox(height: 16),
-            const Text('Aplikasi terkunci'),
-            const SizedBox(height: 24),
-            if (biometricEnabled)
-              FilledButton.icon(
-                onPressed: loading ? null : _unlockWithBiometric,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('Buka dengan Biometrik'),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const ScrimImage(
+              assetPath: AppImages.bgLogin,
+              borderRadius: 0,
+              scrim: 0.7,
+              showPitchPattern: true,
+            ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 88,
+                          height: 88,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: fz.accent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.lock, size: 44, color: fz.onAccent),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        Text(
+                          'Aplikasi terkunci',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineMedium
+                              ?.copyWith(color: Colors.white),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        AppCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (biometricEnabled)
+                                FilledButton.icon(
+                                  onPressed:
+                                      loading ? null : _unlockWithBiometric,
+                                  icon: const Icon(Icons.fingerprint),
+                                  label: const Text('Buka dengan Biometrik'),
+                                ),
+                              TextButton(
+                                onPressed: loading ? null : _showPasswordDialog,
+                                child: const Text('Gunakan password'),
+                              ),
+                              TextButton(
+                                onPressed: loading
+                                    ? null
+                                    : () => confirmAndLogout(context, ref),
+                                child: const Text('Keluar dari akun'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            TextButton(
-              onPressed: loading ? null : _showPasswordDialog,
-              child: const Text('Gunakan password'),
             ),
-            TextButton(
-              onPressed: loading ? null : () => confirmAndLogout(context, ref),
-              child: const Text('Keluar dari akun'),
-            ),
-          ]),
+          ],
         ),
       ),
     );

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
 import '../../football/data/models.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
@@ -83,6 +85,8 @@ class CardCollectionScreen extends ConsumerWidget {
     final clubKeys = {for (final c in clubs) c.key};
     final collected = byClub.keys.where(clubKeys.contains).length;
 
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.5);
+
     if (clubsAsync.isLoading && clubs.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Koleksi Kartu')),
@@ -93,14 +97,14 @@ class CardCollectionScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Koleksi Kartu')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
           _Header(
             collected: collected,
             total: clubs.length,
             counts: rarityCounts,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           if (cards.isEmpty)
             const _EmptyState()
           else
@@ -112,9 +116,9 @@ class CardCollectionScreen extends ConsumerWidget {
                 itemCount: clubs.length,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  mainAxisExtent: 196,
+                  crossAxisSpacing: AppSpacing.md,
+                  mainAxisSpacing: AppSpacing.md,
+                  mainAxisExtent: 196 * textScale,
                 ),
                 itemBuilder: (context, i) {
                   final club = clubs[i];
@@ -126,7 +130,7 @@ class CardCollectionScreen extends ConsumerWidget {
                 },
               );
             }),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _ChainFooter(valid: valid),
         ],
       ),
@@ -148,41 +152,42 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = total == 0 ? 0.0 : collected / total;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$collected dari $total klub terkumpul',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+    final scheme = Theme.of(context).colorScheme;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$collected dari $total klub terkumpul',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              color: scheme.primary,
+              backgroundColor: scheme.surfaceContainerHighest,
             ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 10,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final rarity in CardRarity.values)
-                  _RarityChip(
-                    rarity: rarity,
-                    count: counts[rarity] ?? 0,
-                  ),
-              ],
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              for (final rarity in CardRarity.values)
+                _RarityChip(
+                  rarity: rarity,
+                  count: counts[rarity] ?? 0,
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -198,10 +203,13 @@ class _RarityChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = rarityColor(rarity);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: color),
       ),
       child: Row(
@@ -212,8 +220,14 @@ class _RarityChip extends StatelessWidget {
             height: 10,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 6),
-          Text('${rarityLabel(rarity)} $count'),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              '${rarityLabel(rarity)} $count',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -243,20 +257,14 @@ class _ClubTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final owned = cards.isNotEmpty;
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap:
-            owned ? () => _showDetails(context, club, cards, crestUrl) : null,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: owned
-                ? _ownedContent(context, scheme)
-                : _unownedContent(scheme),
-          ),
-        ),
+    return AppCard(
+      onTap: owned ? () => _showDetails(context, club, cards, crestUrl) : null,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: owned
+            ? _ownedContent(context, scheme)
+            : _unownedContent(context, scheme),
       ),
     );
   }
@@ -271,7 +279,7 @@ class _ClubTile extends StatelessWidget {
         color: club.colorValue,
         size: 64,
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: AppSpacing.sm),
       Text(
         club.name,
         maxLines: 1,
@@ -279,12 +287,15 @@ class _ClubTile extends StatelessWidget {
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleSmall,
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: AppSpacing.sm),
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(
           cards.length > 1
@@ -300,22 +311,33 @@ class _ClubTile extends StatelessWidget {
     ];
   }
 
-  List<Widget> _unownedContent(ColorScheme scheme) => [
-        Container(
-          width: 64,
-          height: 64,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            '?',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: scheme.onSurfaceVariant,
-            ),
+  List<Widget> _unownedContent(BuildContext context, ColorScheme scheme) => [
+        Opacity(
+          opacity: 0.5,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClubCrest(
+                crestUrl: crestUrl,
+                tla: club.tla,
+                color: club.colorValue,
+                size: 64,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Icon(
+                Icons.lock_outline,
+                size: 24,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                club.shortName.isNotEmpty ? club.shortName : club.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
         ),
       ];
@@ -326,24 +348,22 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(
-              Icons.style_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Main Adu Penalti, Refleks Kiper, atau tebak skor untuk '
-              'mendapat kartu pertamamu.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        children: [
+          Icon(
+            Icons.style_outlined,
+            size: 48,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const Text(
+            'Main Adu Penalti, Refleks Kiper, atau tebak skor untuk '
+            'mendapat kartu pertamamu.',
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -356,17 +376,21 @@ class _ChainFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          valid ? Icons.check_circle : Icons.warning_amber_rounded,
-          color: valid ? Colors.green : Colors.orange,
-          size: 20,
-        ),
-        const SizedBox(width: 8),
-        Text(valid ? 'Riwayat aman' : 'Riwayat tidak cocok'),
-      ],
+    final scheme = Theme.of(context).colorScheme;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            valid ? Icons.check_circle : Icons.warning_amber_rounded,
+            color: valid ? scheme.primary : scheme.error,
+            size: 20,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(valid ? 'Riwayat aman' : 'Riwayat tidak cocok'),
+        ],
+      ),
     );
   }
 }

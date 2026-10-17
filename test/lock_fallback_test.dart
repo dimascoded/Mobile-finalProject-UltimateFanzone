@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:ultimate_fanzone/core/database/hive_service.dart';
+import 'package:ultimate_fanzone/core/theme/app_theme.dart';
 import 'package:ultimate_fanzone/features/auth/data/auth_repository.dart';
 import 'package:ultimate_fanzone/features/auth/presentation/lock_screen.dart';
 
@@ -68,6 +69,7 @@ void main() {
       ProviderScope(
         overrides: [authRepositoryProvider.overrideWithValue(fake)],
         child: MaterialApp(
+          theme: AppTheme.light,
           home: Builder(
             builder: (context) => Scaffold(
               body: Center(

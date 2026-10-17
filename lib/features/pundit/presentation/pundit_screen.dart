@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_tokens.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
@@ -43,111 +44,120 @@ class _AnalysisTab extends ConsumerWidget {
     final club = ref.watch(favoriteClubProvider);
     final crests = ref.watch(clubCrestProvider);
     final loading = state.isLoading;
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (club != null)
-          Row(children: [
-            ClubCrest(
-              crestUrl: crests[club.tla.toUpperCase()],
-              tla: club.tla,
-              color: club.colorValue,
-              size: 24,
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            if (club != null)
+              Row(children: [
+                ClubCrest(
+                  crestUrl: crests[club.tla.toUpperCase()],
+                  tla: club.tla,
+                  color: club.colorValue,
+                  size: 24,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(child: Text('Tim favorit: ${club.name}')),
+              ]),
+            const SizedBox(height: AppSpacing.md),
+            FilledButton.icon(
+              onPressed: loading
+                  ? null
+                  : () => ref.read(punditProvider.notifier).generate(),
+              icon: loading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome),
+              label:
+                  Text(loading ? 'Menulis analisis…' : 'Buat Analisis Pundit'),
             ),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Tim favorit: ${club.name}')),
-          ]),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: loading
-              ? null
-              : () => ref.read(punditProvider.notifier).generate(),
-          icon: loading
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.auto_awesome),
-          label: Text(loading ? 'Menulis analisis…' : 'Buat Analisis Pundit'),
-        ),
-        const SizedBox(height: 12),
-        state.when(
-          data: (r) {
-            if (r == null) {
-              return const Text('Belum ada analisis. Tekan tombol di atas.');
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (r.warning != null)
-                  Card(
-                    color: scheme.tertiaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.warning_amber_rounded,
-                              size: 20, color: scheme.onTertiaryContainer),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Analisis terbaru gagal dimuat, jadi yang tampil '
-                              'adalah hasil tersimpan. ${r.warning}',
-                              style:
-                                  TextStyle(color: scheme.onTertiaryContainer),
-                            ),
+            const SizedBox(height: AppSpacing.md),
+            state.when(
+              data: (r) {
+                if (r == null) {
+                  return const Text(
+                      'Belum ada analisis. Tekan tombol di atas.');
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (r.warning != null)
+                      Card(
+                        color: scheme.tertiaryContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  size: 20, color: scheme.onTertiaryContainer),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  'Analisis terbaru gagal dimuat, jadi yang tampil '
+                                  'adalah hasil tersimpan. ${r.warning}',
+                                  style: TextStyle(
+                                      color: scheme.onTertiaryContainer),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    if (r.fromCache)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Chip(
+                          avatar: const Icon(Icons.history, size: 18),
+                          label: Text(r.cachedAt == null
+                              ? 'Data tersimpan (tanpa waktu)'
+                              : 'Data tersimpan • ${TimeUtils.formatHm(TimeUtils.wib(r.cachedAt!))} WIB'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    Text(r.text,
+                        style:
+                            theme.textTheme.bodyLarge?.copyWith(height: 1.4)),
+                  ],
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Card(
+                color: scheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Analisis gagal', style: theme.textTheme.titleSmall),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(e.toString().replaceFirst('Exception: ', '')),
+                      const SizedBox(height: AppSpacing.sm),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            ref.read(punditProvider.notifier).generate(),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Coba lagi'),
+                      ),
+                    ],
                   ),
-                if (r.fromCache)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Chip(
-                      avatar: const Icon(Icons.history, size: 18),
-                      label: Text(r.cachedAt == null
-                          ? 'Data tersimpan (tanpa waktu)'
-                          : 'Data tersimpan • ${TimeUtils.formatHm(TimeUtils.wib(r.cachedAt!))} WIB'),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                Text(r.text, style: const TextStyle(height: 1.4)),
-              ],
-            );
-          },
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => Card(
-            color: scheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Analisis gagal',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 4),
-                  Text(e.toString().replaceFirst('Exception: ', '')),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        ref.read(punditProvider.notifier).generate(),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Coba lagi'),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -251,7 +261,7 @@ class _PunditChatTabState extends ConsumerState<PunditChatTab> {
               ? _EmptyChat(suggestions: _suggestions, onTap: _send)
               : ListView.builder(
                   controller: _scroll,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   itemCount: state.messages.length,
                   itemBuilder: (context, i) =>
                       _Bubble(message: state.messages[i]),
@@ -280,7 +290,7 @@ class _PunditChatTabState extends ConsumerState<PunditChatTab> {
             onRetry: () => ref.read(punditChatProvider.notifier).retry(),
           ),
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -303,7 +313,7 @@ class _PunditChatTabState extends ConsumerState<PunditChatTab> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   IconButton.filled(
                     tooltip: 'Kirim',
                     onPressed:
@@ -374,25 +384,28 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isUser = message.role == 'user';
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
         decoration: BoxDecoration(
-          color:
-              isUser ? scheme.primaryContainer : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
+          color: isUser ? scheme.primary : scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
         child: SelectableText(
           message.text,
-          style: TextStyle(
-            color: isUser ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: isUser ? scheme.onPrimary : scheme.onSurface,
           ),
         ),
       ),
@@ -416,16 +429,16 @@ class _ErrorBanner extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         children: [
           Icon(Icons.error_outline, size: 20, color: scheme.onErrorContainer),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               error,

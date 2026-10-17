@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
+import '../../../core/ui/app_images.dart';
+import '../../../core/ui/pill_badge.dart';
+import '../../../core/ui/scrim_image.dart';
 import '../../../core/widgets/permission_gate.dart';
 import '../data/penalty_rules.dart';
 import '../providers/penalty_provider.dart';
@@ -80,69 +85,76 @@ class _PenaltyScreenState extends ConsumerState<PenaltyScreen>
         title: 'Butuh sensor HP',
         message:
             'Accelerometer membaca arah dan kekuatan ayunan. Jika sensor tidak tersedia, tendangan demo dan geser cepat tetap bisa digunakan.',
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            _Scoreboard(state: state),
-            const SizedBox(height: 12),
-            if (state.results.isNotEmpty) ...[
-              _ResultChips(results: state.results),
-              const SizedBox(height: 12),
-            ],
-            _PhaseInstruction(state: state),
-            const SizedBox(height: 12),
-            Stack(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                AnimatedBuilder(
-                  animation: _execution,
-                  builder: (context, _) => _GoalBoard(
-                    state: state,
-                    progress: Curves.easeInOutCubic.transform(_execution.value),
-                    onTap:
-                        state.phase == Phase.aiming ? notifier.lockNow : null,
-                    onPanEnd: (details) => _handlePanEnd(details, notifier),
-                  ),
+                _Scoreboard(state: state),
+                const SizedBox(height: 12),
+                if (state.results.isNotEmpty) ...[
+                  _ResultChips(results: state.results),
+                  const SizedBox(height: 12),
+                ],
+                _PhaseInstruction(state: state),
+                const SizedBox(height: 12),
+                Stack(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _execution,
+                      builder: (context, _) => _GoalBoard(
+                        state: state,
+                        progress:
+                            Curves.easeInOutCubic.transform(_execution.value),
+                        onTap: state.phase == Phase.aiming
+                            ? notifier.lockNow
+                            : null,
+                        onPanEnd: (details) => _handlePanEnd(details, notifier),
+                      ),
+                    ),
+                    if (state.phase == Phase.resolved &&
+                        _animationComplete &&
+                        state.last != null)
+                      Positioned.fill(
+                        child: _ResultOverlay(
+                          result: state.last!,
+                          onNext: notifier.next,
+                        ),
+                      ),
+                  ],
                 ),
-                if (state.phase == Phase.resolved &&
-                    _animationComplete &&
-                    state.last != null)
-                  Positioned.fill(
-                    child: _ResultOverlay(
-                      result: state.last!,
-                      onNext: notifier.next,
+                if (state.phase == Phase.swinging) ...[
+                  const SizedBox(height: 16),
+                  _PowerMeter(shake: state.shake),
+                ],
+                if (state.demo) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Sensor tidak terdeteksi, memakai mode demo dengan tendangan acak.',
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Atau geser cepat di gawang',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                if (state.results.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _KickHistory(results: state.results),
+                ],
+                const SizedBox(height: 16),
+                _PhaseControls(state: state, notifier: notifier),
               ],
             ),
-            if (state.phase == Phase.swinging) ...[
-              const SizedBox(height: 16),
-              _PowerMeter(shake: state.shake),
-            ],
-            if (state.demo) ...[
-              const SizedBox(height: 12),
-              Card(
-                color: Theme.of(context).colorScheme.tertiaryContainer,
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    'Sensor tidak terdeteksi, memakai mode demo dengan tendangan acak.',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Atau geser cepat di gawang',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            if (state.results.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _KickHistory(results: state.results),
-            ],
-            const SizedBox(height: 16),
-            _PhaseControls(state: state, notifier: notifier),
-          ],
+          ),
         ),
       ),
     );
@@ -169,36 +181,23 @@ class _Scoreboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: _ScoreValue(
-            label: 'GOL / TENDANGAN',
-            value: '${state.goals} / ${state.taken}',
-          ),
-        ),
-        Expanded(
-          child: _ScoreValue(label: 'SKOR', value: '${state.score}'),
-        ),
-        if (state.suddenDeath)
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.errorContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Text(
-                'Sudden death',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onErrorContainer,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ScoreValue(
+              label: 'GOL / TENDANGAN',
+              value: '${state.goals} / ${state.taken}',
             ),
           ),
-      ],
+          Expanded(
+            child: _ScoreValue(label: 'SKOR', value: '${state.score}'),
+          ),
+          if (state.suddenDeath)
+            const PillBadge(label: 'Sudden death', tone: PillTone.accent),
+        ],
+      ),
     );
   }
 }
@@ -240,15 +239,13 @@ class _ResultChips extends StatelessWidget {
       runSpacing: 4,
       children: [
         for (var index = 0; index < results.length; index++)
-          Chip(
-            visualDensity: VisualDensity.compact,
-            avatar: Icon(
+          PillBadge(
+            label: '${index + 1}. ${_outcomeLabel(results[index].outcome)}',
+            icon: Icon(
               _outcomeIcon(results[index].outcome),
               size: 17,
               color: _outcomeColor(context, results[index].outcome),
             ),
-            label:
-                Text('${index + 1}. ${_outcomeLabel(results[index].outcome)}'),
           ),
       ],
     );
@@ -323,7 +320,9 @@ class _GoalBoard extends StatelessWidget {
 
             return Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              foregroundDecoration: BoxDecoration(
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outline,
                   width: 2,
@@ -333,6 +332,21 @@ class _GoalBoard extends StatelessWidget {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
+                  Positioned.fill(
+                    child: ScrimImage(
+                      assetPath: AppImages.gameGoal,
+                      borderRadius: 8,
+                      scrim: 0.35,
+                      fallbackColors: [
+                        Color.lerp(
+                          Colors.black,
+                          Theme.of(context).colorScheme.primary,
+                          0.35,
+                        )!,
+                        Colors.black,
+                      ],
+                    ),
+                  ),
                   Column(
                     children: [
                       Expanded(
@@ -457,53 +471,64 @@ class _ZoneCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final background = selected
-        ? locked
-            ? scheme.primary
-            : scheme.secondaryContainer
-        : scheme.surface;
-    final foreground = selected && locked
-        ? scheme.onPrimary
-        : selected
-            ? scheme.onSecondaryContainer
-            : scheme.onSurfaceVariant;
-    final borderColor = selected
-        ? locked
-            ? scheme.onPrimary
-            : scheme.primary
-        : scheme.outlineVariant;
+    final fz = context.fz;
+
+    final Color background;
+    final Color borderColor;
+    final double borderWidth;
+    if (selected && locked) {
+      background = scheme.primary.withValues(alpha: 0.55);
+      borderColor = Colors.white;
+      borderWidth = 3;
+    } else if (selected) {
+      background = scheme.primary.withValues(alpha: 0.30);
+      borderColor = fz.accent;
+      borderWidth = 3;
+    } else if (outcome != null) {
+      background = scheme.primary.withValues(alpha: 0.45);
+      borderColor = Colors.white.withValues(alpha: 0.6);
+      borderWidth = 2;
+    } else {
+      background = Colors.black.withValues(alpha: 0.18);
+      borderColor = Colors.white.withValues(alpha: 0.35);
+      borderWidth = 1;
+    }
 
     return Container(
       margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: background,
-        border: Border.all(color: borderColor, width: selected ? 2.5 : 1),
+        border: Border.all(color: borderColor, width: borderWidth),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (locked)
-                  Icon(Icons.lock, size: 17, color: foreground)
-                else if (outcome != null)
-                  Icon(_outcomeIcon(outcome!), size: 17, color: foreground),
-                const SizedBox(height: 3),
-                Text(
-                  _zoneLabel(zone),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: foreground,
-                        fontWeight: selected ? FontWeight.w700 : null,
-                      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (locked)
+              const Icon(Icons.lock, size: 17, color: Colors.white)
+            else if (outcome != null)
+              Icon(_outcomeIcon(outcome!), size: 17, color: Colors.white),
+            if (locked || outcome != null) const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                _zoneLabel(zone),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  shadows: const [
+                    Shadow(color: Colors.black54, blurRadius: 3),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

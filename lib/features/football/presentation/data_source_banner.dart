@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_tokens.dart';
 import '../../../core/utils/time_utils.dart';
 import '../data/football_repository.dart';
 
@@ -9,7 +10,8 @@ class DataSourceBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     late final String text;
     late final IconData icon;
     late final Color bg, fg;
@@ -35,15 +37,35 @@ class DataSourceBanner extends StatelessWidget {
         bg = scheme.secondaryContainer;
         fg = scheme.onSecondaryContainer;
     }
-    return Container(
-      width: double.infinity,
-      color: bg,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(children: [
-        Icon(icon, size: 16, color: fg),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: fg))),
-      ]),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xs,
+      ),
+      child: Card(
+        color: bg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Row(children: [
+            Icon(icon, size: 16, color: fg),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(color: fg),
+              ),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/network/rates_provider.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../auth/presentation/auto_lock_observer.dart';
@@ -62,89 +64,100 @@ class _LensScreenState extends ConsumerState<LensScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SegmentedButton<DocKind?>(
-                  segments: const [
-                    ButtonSegment(value: null, label: Text('Otomatis')),
-                    ButtonSegment(value: DocKind.receipt, label: Text('Struk')),
-                    ButtonSegment(value: DocKind.ticket, label: Text('Tiket')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SegmentedButton<DocKind?>(
+                      segments: const [
+                        ButtonSegment(value: null, label: Text('Otomatis')),
+                        ButtonSegment(
+                            value: DocKind.receipt, label: Text('Struk')),
+                        ButtonSegment(
+                            value: DocKind.ticket, label: Text('Tiket')),
+                      ],
+                      selected: {_forceKind},
+                      onSelectionChanged: (s) =>
+                          setState(() => _forceKind = s.first),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Pastikan seluruh struk terlihat, terang, dan tidak buram.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
-                  selected: {_forceKind},
-                  onSelectionChanged: (s) =>
-                      setState(() => _forceKind = s.first),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Pastikan seluruh struk terlihat, terang, dan tidak buram.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label: 'Ambil foto struk atau tiket',
-                    child: ElevatedButton.icon(
-                      onPressed: busy ? null : () => _scan(ImageSource.camera),
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text('Kamera'),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label: 'Pilih foto dari galeri',
-                    child: ElevatedButton.icon(
-                      onPressed: busy ? null : () => _scan(ImageSource.gallery),
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Galeri'),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (busy)
-            const LinearProgressIndicator(semanticsLabel: 'Memproses foto'),
-          Expanded(
-            child: state.when(
-              skipLoadingOnRefresh: true,
-              data: (r) => r == null
-                  ? const EmptyState(
-                      icon: Icons.document_scanner,
-                      title: 'Belum ada hasil',
-                      message:
-                          'Ambil foto struk atau tiket. Teks akan dibaca otomatis '
-                          'lalu diisi ke kartu pengeluaran yang bisa disunting.',
-                    )
-                  : _ResultView(result: r),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => EmptyState(
-                icon: Icons.error_outline,
-                title: 'Scan gagal',
-                message: e.toString().replaceFirst('Exception: ', ''),
-                action: OutlinedButton.icon(
-                  onPressed: () => _scan(ImageSource.camera),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Coba lagi'),
                 ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        button: true,
+                        label: 'Ambil foto struk atau tiket',
+                        child: FilledButton.icon(
+                          onPressed:
+                              busy ? null : () => _scan(ImageSource.camera),
+                          icon: const Icon(Icons.camera_alt),
+                          label: const Text('Kamera'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Semantics(
+                        button: true,
+                        label: 'Pilih foto dari galeri',
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              busy ? null : () => _scan(ImageSource.gallery),
+                          icon: const Icon(Icons.photo_library),
+                          label: const Text('Galeri'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (busy)
+                const LinearProgressIndicator(semanticsLabel: 'Memproses foto'),
+              Expanded(
+                child: state.when(
+                  skipLoadingOnRefresh: true,
+                  data: (r) => r == null
+                      ? const EmptyState(
+                          icon: Icons.document_scanner,
+                          title: 'Belum ada hasil',
+                          message:
+                              'Ambil foto struk atau tiket. Teks akan dibaca otomatis '
+                              'lalu diisi ke kartu pengeluaran yang bisa disunting.',
+                        )
+                      : _ResultView(result: r),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => EmptyState(
+                    icon: Icons.error_outline,
+                    title: 'Scan gagal',
+                    message: e.toString().replaceFirst('Exception: ', ''),
+                    action: OutlinedButton.icon(
+                      onPressed: () => _scan(ImageSource.camera),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Coba lagi'),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -158,26 +171,29 @@ class _ResultView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         if (result.imagePath.isNotEmpty) _ImagePreview(path: result.imagePath),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _ExpenseCard(
           key: ValueKey(result.imagePath),
           result: result,
         ),
-        const SizedBox(height: 12),
-        ExpansionTile(
-          title: const Text('Teks yang terbaca dari foto'),
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: SelectableText(
-                result.text.trim().isEmpty ? '(kosong)' : result.text,
-                style: Theme.of(context).textTheme.bodySmall,
+        const SizedBox(height: AppSpacing.md),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: ExpansionTile(
+            title: const Text('Teks yang terbaca dari foto'),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                child: SelectableText(
+                  result.text.trim().isEmpty ? '(kosong)' : result.text,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -318,186 +334,183 @@ class _ExpenseCardState extends ConsumerState<_ExpenseCard> {
         .where((c) => (c.amount - (draft.amount ?? -1)).abs() > 0.0001)
         .toList();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  draft.kind == DocKind.ticket
-                      ? Icons.confirmation_number_outlined
-                      : Icons.receipt_long_outlined,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  draft.kind == DocKind.ticket ? 'Tiket' : 'Struk',
-                  style: theme.textTheme.titleMedium,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _title,
-              decoration: const InputDecoration(
-                labelText: 'Keterangan',
-                border: OutlineInputBorder(),
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                draft.kind == DocKind.ticket
+                    ? Icons.confirmation_number_outlined
+                    : Icons.receipt_long_outlined,
+                size: 20,
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amount,
-              onChanged: (_) => setState(() {}),
-              keyboardType: TextInputType.numberWithOptions(
-                decimal: _currency != 'IDR',
-              ),
-              decoration: InputDecoration(
-                labelText: 'Jumlah ($_currency)',
-                prefixText: _currencyPrefix(_currency),
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            if (otherCandidates.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Nominal lain yang terbaca',
-                  style: theme.textTheme.labelMedium),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final c in otherCandidates)
-                    ChoiceChip(
-                      label: Text(_amountText(c.amount)),
-                      selected: false,
-                      onSelected: (_) =>
-                          setState(() => _amount.text = _amountText(c.amount)),
-                    ),
-                ],
+              const SizedBox(width: 8),
+              Text(
+                draft.kind == DocKind.ticket ? 'Tiket' : 'Struk',
+                style: theme.textTheme.titleMedium,
               ),
             ],
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _currency,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Mata uang',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                for (final currency in awayDayCurrencies)
-                  DropdownMenuItem(value: currency, child: Text(currency)),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() {
-                  _currency = value;
-                  _manualIdr.clear();
-                });
-              },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _title,
+            decoration: const InputDecoration(
+              labelText: 'Keterangan',
+              border: OutlineInputBorder(),
             ),
-            if (draft.currencyGuessed)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'Mata uang ditebak, periksa dulu',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            Text('Kategori', style: theme.textTheme.labelMedium),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _amount,
+            onChanged: (_) => setState(() {}),
+            keyboardType: TextInputType.numberWithOptions(
+              decimal: _currency != 'IDR',
+            ),
+            decoration: InputDecoration(
+              labelText: 'Jumlah ($_currency)',
+              prefixText: _currencyPrefix(_currency),
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          if (otherCandidates.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Nominal lain yang terbaca',
+                style: theme.textTheme.labelMedium),
             const SizedBox(height: 4),
             Wrap(
               spacing: 8,
               runSpacing: 4,
               children: [
-                for (final c in AwayDayCategory.values)
+                for (final c in otherCandidates)
                   ChoiceChip(
-                    label: Text(_catLabel[c]!),
-                    selected: _category == c,
-                    onSelected: (_) => setState(() => _category = c),
+                    label: Text(_amountText(c.amount)),
+                    selected: false,
+                    onSelected: (_) =>
+                        setState(() => _amount.text = _amountText(c.amount)),
                   ),
               ],
             ),
-            const SizedBox(height: 12),
-            if (mapped != null)
-              Text('Setara ${_rp(mapped.amountIdr)}',
-                  style: theme.textTheme.titleMedium)
-            else if (rateMissing)
-              Text('Kurs $_currency tidak tersedia.',
-                  style: theme.textTheme.bodyMedium),
-            if (rateMissing) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _manualIdr,
-                onChanged: (_) => setState(() {}),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+          ],
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _currency,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Mata uang',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final currency in awayDayCurrencies)
+                DropdownMenuItem(value: currency, child: Text(currency)),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _currency = value;
+                _manualIdr.clear();
+              });
+            },
+          ),
+          if (draft.currencyGuessed)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Mata uang ditebak, periksa dulu',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
                 ),
-                decoration: const InputDecoration(
-                  labelText: 'Nilai Rupiah (wajib diisi manual)',
-                  prefixText: 'Rp ',
-                  border: OutlineInputBorder(),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Text('Kategori', style: theme.textTheme.labelMedium),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final c in AwayDayCategory.values)
+                ChoiceChip(
+                  label: Text(_catLabel[c]!),
+                  selected: _category == c,
+                  onSelected: (_) => setState(() => _category = c),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (mapped != null)
+            Text('Setara ${_rp(mapped.amountIdr)}',
+                style: theme.textTheme.titleMedium)
+          else if (rateMissing)
+            Text('Kurs $_currency tidak tersedia.',
+                style: theme.textTheme.bodyMedium),
+          if (rateMissing) ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: _manualIdr,
+              onChanged: (_) => setState(() {}),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Nilai Rupiah (wajib diisi manual)',
+                prefixText: 'Rp ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+          if (draft.kind == DocKind.ticket) ...[
+            const SizedBox(height: 12),
+            if (draft.clubs.isNotEmpty) ...[
+              Text('Klub terdeteksi', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final c in draft.clubs)
+                    Chip(
+                      avatar: ClubCrest(
+                        crestUrl: crests[c.tla.toUpperCase()],
+                        tla: c.tla,
+                        color: c.colorValue,
+                        size: 24,
+                      ),
+                      label: Text(c.name),
+                    ),
+                ],
+              ),
+            ],
+            if (linked != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Laga: ${linked.homeShort} vs ${linked.awayShort}, '
+                '${TimeUtils.formatDate(TimeUtils.wib(linked.kickoffUtc))} '
+                '${TimeUtils.formatHm(TimeUtils.wib(linked.kickoffUtc))} WIB',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+            if (draft.clubs.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      _openFixtures(context, ref, draft.clubs.first),
+                  icon: const Icon(Icons.event_note, size: 18),
+                  label: Text('Lihat jadwal ${draft.clubs.first.shortName}'),
                 ),
               ),
             ],
-            if (draft.kind == DocKind.ticket) ...[
-              const SizedBox(height: 12),
-              if (draft.clubs.isNotEmpty) ...[
-                Text('Klub terdeteksi', style: theme.textTheme.labelMedium),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    for (final c in draft.clubs)
-                      Chip(
-                        avatar: ClubCrest(
-                          crestUrl: crests[c.tla.toUpperCase()],
-                          tla: c.tla,
-                          color: c.colorValue,
-                          size: 24,
-                        ),
-                        label: Text(c.name),
-                      ),
-                  ],
-                ),
-              ],
-              if (linked != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Laga: ${linked.homeShort} vs ${linked.awayShort}, '
-                  '${TimeUtils.formatDate(TimeUtils.wib(linked.kickoffUtc))} '
-                  '${TimeUtils.formatHm(TimeUtils.wib(linked.kickoffUtc))} WIB',
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ],
-              if (draft.clubs.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: () =>
-                        _openFixtures(context, ref, draft.clubs.first),
-                    icon: const Icon(Icons.event_note, size: 18),
-                    label: Text('Lihat jadwal ${draft.clubs.first.shortName}'),
-                  ),
-                ),
-              ],
-            ],
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _saving ? null : () => _save(rates),
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Simpan ke Away Day'),
-            ),
           ],
-        ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _saving ? null : () => _save(rates),
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Simpan ke Away Day'),
+          ),
+        ],
       ),
     );
   }
@@ -570,13 +583,13 @@ class _ImagePreviewState extends State<_ImagePreview> {
         final ok = snap.data ?? false;
         if (!ok) {
           return Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(AppSpacing.sm),
             child: Text('Foto tidak lagi tersedia di perangkat.',
                 style: Theme.of(context).textTheme.bodySmall),
           );
         }
         return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: Image.file(
             File(widget.path),
             height: 240,

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
+import '../../../core/ui/pill_badge.dart';
+import '../../../core/ui/section_header.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../football/data/football_repository.dart';
@@ -88,50 +92,55 @@ class PredictionScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Prediksi Skor')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.stars_outlined),
-              title: Text('$points poin'),
-              subtitle: const Text('Hanya poin, tanpa odds atau uang'),
-            ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
+            children: [
+              AppCard(
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.stars_outlined),
+                  title: Text('$points poin'),
+                  subtitle: const Text('Hanya poin, tanpa odds atau uang'),
+                ),
+              ),
+              if (pending.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                const SectionHeader(title: 'Siap dicek'),
+                const SizedBox(height: AppSpacing.xs),
+                for (final e in pending)
+                  _SettleTile(match: e.match, prediction: e.prediction),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              const SectionHeader(title: 'Pilih skor sebelum kickoff'),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Prediksi dikunci dan tidak bisa diubah setelah kickoff.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (isSample)
+                const EmptyState(
+                  icon: Icons.science_outlined,
+                  title: 'Prediksi dinonaktifkan',
+                  message:
+                      'Jadwal yang dipakai masih data contoh. Set FOOTBALL_API_KEY '
+                      'agar prediksi memakai jadwal sungguhan.',
+                )
+              else
+                const _UpcomingPicker(),
+              if (history.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xl),
+                const SectionHeader(title: 'Tebakan tersimpan'),
+                const SizedBox(height: AppSpacing.sm),
+                for (final h in history) _HistoryTile(entry: h),
+              ],
+            ],
           ),
-          if (pending.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Siap dicek', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            for (final e in pending)
-              _SettleTile(match: e.match, prediction: e.prediction),
-          ],
-          const SizedBox(height: 16),
-          Text('Pilih skor sebelum kickoff',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Prediksi dikunci dan tidak bisa diubah setelah kickoff.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          if (isSample)
-            const EmptyState(
-              icon: Icons.science_outlined,
-              title: 'Prediksi dinonaktifkan',
-              message:
-                  'Jadwal yang dipakai masih data contoh. Set FOOTBALL_API_KEY '
-                  'agar prediksi memakai jadwal sungguhan.',
-            )
-          else
-            const _UpcomingPicker(),
-          if (history.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text('Tebakan tersimpan',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final h in history) _HistoryTile(entry: h),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -153,8 +162,8 @@ class _SettleTileState extends ConsumerState<_SettleTile> {
   @override
   Widget build(BuildContext context) {
     final m = widget.match;
-    return Card(
-      color: Theme.of(context).colorScheme.secondaryContainer,
+    return AppCard(
+      padding: EdgeInsets.zero,
       child: ListTile(
         leading: const Icon(Icons.verified_outlined),
         title: Row(children: [
@@ -205,6 +214,7 @@ class _HistoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final p = entry.prediction;
     final m = entry.match;
     final wib = TimeUtils.wib(p.createdAt);
@@ -217,27 +227,47 @@ class _HistoryTile extends StatelessWidget {
             : (m.isFinished
                 ? 'Belum dicek'
                 : 'Menunggu kickoff ${TimeUtils.formatHm(TimeUtils.wib(m.kickoffUtc))} WIB'));
+    final tone = entry.points != null
+        ? (entry.points! > 0 ? PillTone.success : PillTone.neutral)
+        : (m != null && m.isFinished ? PillTone.accent : PillTone.neutral);
 
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-          entry.points != null ? Icons.workspace_premium : Icons.lock_outline),
-      title: Row(children: [
-        if (m != null) ...[
-          ClubCrest(crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
-          const SizedBox(width: 6),
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            if (m != null) ...[
+              ClubCrest(crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
+              const SizedBox(width: AppSpacing.xs),
+            ],
+            Expanded(
+              child: Text(
+                '$title  ${p.homeScore}-${p.awayScore}',
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            if (m != null) ...[
+              const SizedBox(width: AppSpacing.xs),
+              ClubCrest(crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
+            ],
+          ]),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              PillBadge(label: status, tone: tone),
+              Text(
+                '${TimeUtils.formatDate(wib)}, ${TimeUtils.formatHm(wib)} WIB',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
         ],
-        Expanded(
-          child: Text('$title  ${p.homeScore}-${p.awayScore}',
-              overflow: TextOverflow.ellipsis),
-        ),
-        if (m != null) ...[
-          const SizedBox(width: 6),
-          ClubCrest(crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
-        ],
-      ]),
-      subtitle: Text(
-          '${TimeUtils.formatDate(wib)}, ${TimeUtils.formatHm(wib)} WIB • $status'),
+      ),
     );
   }
 }
@@ -329,22 +359,28 @@ class _UpcomingPickerState extends ConsumerState<_UpcomingPicker> {
         ),
         const SizedBox(height: 16),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _Stepper(
-              label: selected.homeShort,
-              crestUrl: selected.homeCrest,
-              tla: selected.homeTla ?? '',
-              value: _home,
-              onChanged: (v) => setState(() => _home = v),
+            Expanded(
+              child: _Stepper(
+                label: selected.homeShort,
+                crestUrl: selected.homeCrest,
+                tla: selected.homeTla ?? '',
+                value: _home,
+                onChanged: (v) => setState(() => _home = v),
+              ),
             ),
-            Text('vs', style: Theme.of(context).textTheme.titleMedium),
-            _Stepper(
-              label: selected.awayShort,
-              crestUrl: selected.awayCrest,
-              tla: selected.awayTla ?? '',
-              value: _away,
-              onChanged: (v) => setState(() => _away = v),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              child: Text('vs', style: Theme.of(context).textTheme.titleMedium),
+            ),
+            Expanded(
+              child: _Stepper(
+                label: selected.awayShort,
+                crestUrl: selected.awayCrest,
+                tla: selected.awayTla ?? '',
+                value: _away,
+                onChanged: (v) => setState(() => _away = v),
+              ),
             ),
           ],
         ),
@@ -408,26 +444,29 @@ class _Stepper extends StatelessWidget {
         ],
         Text(label, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton.filledTonal(
-              tooltip: 'Kurangi skor $label',
-              onPressed: value > 0 ? () => onChanged(value - 1) : null,
-              icon: const Icon(Icons.remove),
-            ),
-            SizedBox(
-              width: 48,
-              child: Text('$value',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall),
-            ),
-            IconButton.filledTonal(
-              tooltip: 'Tambah skor $label',
-              onPressed: value < 9 ? () => onChanged(value + 1) : null,
-              icon: const Icon(Icons.add),
-            ),
-          ],
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton.filledTonal(
+                tooltip: 'Kurangi skor $label',
+                onPressed: value > 0 ? () => onChanged(value - 1) : null,
+                icon: const Icon(Icons.remove),
+              ),
+              SizedBox(
+                width: 48,
+                child: Text('$value',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Tambah skor $label',
+                onPressed: value < 9 ? () => onChanged(value + 1) : null,
+                icon: const Icon(Icons.add),
+              ),
+            ],
+          ),
         ),
       ],
     );

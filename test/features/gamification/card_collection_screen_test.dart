@@ -68,7 +68,7 @@ void main() {
     );
   });
 
-  testWidgets('grid menampilkan crest klub yang dimiliki dan "?" lainnya',
+  testWidgets('grid menampilkan klub dimiliki dan kunci untuk yang belum',
       (tester) async {
     final cards = [
       card('arsenal', rarity: CardRarity.common, blockIndex: 1),
@@ -84,7 +84,9 @@ void main() {
     expect(find.text('CHE'), findsOneWidget);
     expect(find.text('LIV'), findsOneWidget);
     expect(find.text('Epik x2'), findsOneWidget);
-    expect(find.text('?'), findsNWidgets(2));
+    expect(find.byIcon(Icons.lock_outline), findsNWidgets(2));
+    expect(find.text('Everton'), findsOneWidget);
+    expect(find.text('Fulham'), findsOneWidget);
   });
 
   testWidgets('tap kartu milik sendiri membuka sheet bukti keaslian',

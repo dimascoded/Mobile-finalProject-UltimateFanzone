@@ -1,0 +1,6 @@
+# Konfigurasi test runner.
+#
+# Golden screenshot ditandai `@Tags(['screenshots'])` dan hanya mendaftarkan
+# uji saat dijalankan dengan `--update-goldens`, jadi `flutter test` biasa
+# tidak ikut menulis/membandingkan PNG. Buat golden dengan:
+#   flutter test test/qa/screenshots_test.dart --update-goldens --tags screenshots

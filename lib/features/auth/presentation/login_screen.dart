@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/ui/app_card.dart';
+import '../../../core/ui/app_images.dart';
+import '../../../core/ui/scrim_image.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
@@ -42,76 +47,127 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loading = ref.watch(authProvider).isLoading;
     final biometricEnabled = ref.watch(biometricEnabledProvider);
 
+    final theme = Theme.of(context);
+    final fz = context.fz;
+
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(children: [
-              const Icon(Icons.sports_soccer, size: 80),
-              const SizedBox(height: 8),
-              Text('Ultimate Fanzone',
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _password,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                        _obscure ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscure = !_obscure),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const ScrimImage(
+            assetPath: AppImages.bgLogin,
+            borderRadius: 0,
+            scrim: 0.7,
+            showPitchPattern: true,
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: fz.accent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.sports_soccer,
+                            size: 44, color: fz.onAccent),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Ultimate Fanzone',
+                        style: theme.textTheme.headlineMedium
+                            ?.copyWith(color: Colors.white),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Teman suporter Premier League-mu',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: Colors.white70),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextField(
+                              controller: _email,
+                              keyboardType: TextInputType.emailAddress,
+                              decoration:
+                                  const InputDecoration(labelText: 'Email'),
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            TextField(
+                              controller: _password,
+                              obscureText: _obscure,
+                              decoration: InputDecoration(
+                                labelText: 'Password',
+                                suffixIcon: IconButton(
+                                  icon: Icon(_obscure
+                                      ? Icons.visibility
+                                      : Icons.visibility_off),
+                                  onPressed: () =>
+                                      setState(() => _obscure = !_obscure),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.xl),
+                            FilledButton(
+                              onPressed: loading
+                                  ? null
+                                  : () => ref
+                                      .read(authProvider.notifier)
+                                      .login(_email.text, _password.text),
+                              child: loading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Text('Masuk'),
+                            ),
+                            if (biometricEnabled) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              OutlinedButton.icon(
+                                onPressed: loading
+                                    ? null
+                                    : () => ref
+                                        .read(authProvider.notifier)
+                                        .loginWithBiometric(),
+                                icon: const Icon(Icons.fingerprint),
+                                label: const Text('Masuk dengan Biometrik'),
+                              ),
+                            ],
+                            const SizedBox(height: AppSpacing.xs),
+                            // U1: tanpa ini tidak ada cara membuat akun.
+                            TextButton(
+                              onPressed: loading
+                                  ? null
+                                  : () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const RegisterScreen(),
+                                        ),
+                                      ),
+                              child: const Text('Belum punya akun? Daftar'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: loading
-                      ? null
-                      : () => ref
-                          .read(authProvider.notifier)
-                          .login(_email.text, _password.text),
-                  child: loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Masuk'),
-                ),
-              ),
-              if (biometricEnabled) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: loading
-                      ? null
-                      : () =>
-                          ref.read(authProvider.notifier).loginWithBiometric(),
-                  icon: const Icon(Icons.fingerprint),
-                  label: const Text('Masuk dengan Biometrik'),
-                ),
-              ],
-              const SizedBox(height: 4),
-              // U1: tanpa ini tidak ada cara membuat akun dari aplikasi.
-              TextButton(
-                onPressed: loading
-                    ? null
-                    : () => Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        )),
-                child: const Text('Belum punya akun? Daftar'),
-              ),
-            ]),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
