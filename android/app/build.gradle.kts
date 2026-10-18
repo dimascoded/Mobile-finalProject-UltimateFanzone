@@ -65,6 +65,8 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // R8: keep rules aplikasi (mlkit -dontwarn, dll).
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
