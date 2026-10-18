@@ -685,9 +685,18 @@ Future<void> _editBudget(BuildContext context, WidgetRef ref) async {
     ),
   );
   if (saved == true) {
-    await ref
+    final synced = await ref
         .read(awayDayBudgetProvider.notifier)
         .set(double.tryParse(ctl.text) ?? 0);
+    if (!synced && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Anggaran disimpan di perangkat, tetapi belum tersimpan ke akun. Akan dicoba lagi saat masuk.',
+          ),
+        ),
+      );
+    }
   }
 }
 

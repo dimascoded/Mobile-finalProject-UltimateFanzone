@@ -148,9 +148,9 @@ class BudgetNotifier extends StateNotifier<double> {
 
   final AwayDayRepository _repo;
 
-  Future<void> set(double idr) async {
+  Future<bool> set(double idr) async {
     state = idr < 0 ? 0 : idr;
-    await _repo.saveBudget(state);
+    return _repo.saveBudget(state);
   }
 }
 

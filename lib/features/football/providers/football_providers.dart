@@ -10,9 +10,10 @@ class FavoriteTeamNotifier extends StateNotifier<String?> {
   FavoriteTeamNotifier(this._repo) : super(_repo.favoriteKey());
   final ClubRepository _repo;
 
-  Future<void> set(String key) async {
+  Future<bool> set(String key) async {
+    if (_repo.currentUserId == null) return false;
     state = key;
-    await _repo.saveFavorite(key);
+    return _repo.saveFavoriteWithCloudStatus(key);
   }
 }
 

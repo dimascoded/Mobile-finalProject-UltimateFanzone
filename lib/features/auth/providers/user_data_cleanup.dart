@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/hive_service.dart';
 import '../../away_day/providers/away_day_providers.dart';
+import '../../dashboard/providers/dashboard_provider.dart';
+import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../../prediction/providers/prediction_provider.dart';
 import '../data/auth_repository.dart';
+import 'auth_provider.dart';
 
 /// Hapus seluruh data pengguna yang tersimpan di Hive (U4).
 ///
@@ -32,4 +35,16 @@ void invalidateUserDataProviders(Ref ref) {
     ..invalidate(chainProvider)
     // Alamat wallet ikut terbuang karena private key-nya dihapus saat logout.
     ..invalidate(walletAddressProvider);
+  invalidateIdentityProviders(ref);
+}
+
+void invalidateIdentityProviders(Ref ref) {
+  ref
+    ..invalidate(sessionProvider)
+    ..invalidate(userEmailProvider)
+    ..invalidate(displayNameProvider)
+    ..invalidate(effectiveDisplayNameProvider)
+    ..invalidate(profilePhotoProvider)
+    ..invalidate(favoriteKeyProvider)
+    ..invalidate(awayDayBudgetProvider);
 }

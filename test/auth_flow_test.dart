@@ -5,16 +5,17 @@ import 'package:ultimate_fanzone/features/auth/data/auth_repository.dart';
 
 void main() {
   group('U4: data pengguna', () {
-    test('daftar kunci mencakup pengeluaran, prediksi, rantai, foto, saran',
+    test('daftar kunci mencakup data pengguna yang dibersihkan saat logout',
         () {
       const keys = AuthRepository.userDataKeys;
       expect(keys, contains('away_day_expenses'));
-      expect(keys, contains('away_day_budget_idr'));
       expect(keys, contains('score_predictions'));
       expect(keys, contains('passport_chain'));
-      expect(keys, contains('profile_photo_path'));
-      expect(keys, contains('pam_feedback'));
-      expect(keys, contains('favorite_team'));
+      expect(keys, isNot(contains('profile_photo_path')));
+      expect(keys, isNot(contains('profile_display_name')));
+      expect(keys, isNot(contains('away_day_budget_idr')));
+      expect(keys, isNot(contains('favorite_team')));
+      expect(keys, isNot(contains('pam_feedback')));
     });
 
     test('kunci prefs perangkat tidak ikut dihapus', () {
@@ -30,8 +31,8 @@ void main() {
     test('logout menghapus private key wallet', () async {
       FlutterSecureStorage.setMockInitialValues(
           {'wallet_private_key': 'abcdef'});
-      final repo = AuthRepository(
-          const FlutterSecureStorage(), LocalAuthentication());
+      final repo =
+          AuthRepository(const FlutterSecureStorage(), LocalAuthentication());
       await repo.logout();
       const storage = FlutterSecureStorage();
       expect(await storage.read(key: 'wallet_private_key'), isNull);

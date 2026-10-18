@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
+import '../../auth/data/auth_repository.dart';
 
 enum AwayDayCategory { tiket, hotel, transport, merchandise, makanan, lainnya }
 
@@ -66,7 +68,10 @@ class AwayDayExpense {
 
 class AwayDayRepository {
   static const _key = 'away_day_expenses';
-  static const _budgetKey = 'away_day_budget_idr';
+
+  AwayDayRepository([this._auth]);
+
+  final AuthRepository? _auth;
 
   List<AwayDayExpense> load() {
     final raw = HiveService.cache.get(_key);
@@ -97,13 +102,24 @@ class AwayDayRepository {
 
   /// Anggaran harian dalam Rupiah. 0 berarti belum diatur.
   double loadBudget() {
-    final raw = HiveService.cache.get(_budgetKey);
-    if (raw == null) return 0;
-    return double.tryParse(raw) ?? 0;
+    final auth = _auth;
+    if (auth?.currentUserId == null) return 0;
+    final local = auth!.readUserScopedValue('away_day_budget_idr');
+    if (local != null) return double.tryParse(local) ?? 0;
+    final cloud = auth.cloudBudgetIdr();
+    if (cloud == null) return 0;
+    unawaited(
+        auth.writeUserScopedValue('away_day_budget_idr', cloud.toString()));
+    return cloud.toDouble();
   }
 
-  Future<void> saveBudget(double idr) =>
-      HiveService.cache.put(_budgetKey, '$idr');
+  Future<bool> saveBudget(double idr) async {
+    final auth = _auth;
+    if (auth?.currentUserId == null) return false;
+    await auth!.writeUserScopedValue('away_day_budget_idr', '$idr');
+    return auth.saveProfilePrefs(budgetIdr: idr.round());
+  }
 }
 
-final awayDayRepositoryProvider = Provider((ref) => AwayDayRepository());
+final awayDayRepositoryProvider =
+    Provider((ref) => AwayDayRepository(ref.watch(authRepositoryProvider)));

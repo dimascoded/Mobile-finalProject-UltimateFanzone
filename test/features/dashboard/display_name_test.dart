@@ -1,40 +1,66 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
 import 'package:local_auth/local_auth.dart';
 
-import 'package:ultimate_fanzone/core/database/hive_service.dart';
 import 'package:ultimate_fanzone/core/theme/app_theme.dart';
 import 'package:ultimate_fanzone/features/auth/data/auth_repository.dart';
+import 'package:ultimate_fanzone/features/auth/data/identity_store.dart';
 import 'package:ultimate_fanzone/features/auth/providers/auth_provider.dart';
 import 'package:ultimate_fanzone/features/dashboard/presentation/widgets/profile_header.dart';
 import 'package:ultimate_fanzone/features/dashboard/providers/dashboard_provider.dart';
 import 'package:ultimate_fanzone/features/football/providers/football_providers.dart';
+import 'package:ultimate_fanzone/features/prediction/providers/prediction_provider.dart';
 
 /// Repositori palsu: mencatat nama yang disimpan dan mengembalikan nama cloud
 /// buatan, tanpa menyentuh Supabase maupun secure storage.
+class FakeIdentityStore implements IdentityStore {
+  final Map<String, String> values = {};
+
+  @override
+  String? get(String key) => values[key];
+
+  @override
+  Future<void> put(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
+}
+
 class FakeAuthRepository extends AuthRepository {
   FakeAuthRepository({String? cloudName})
       : _cloudName = cloudName,
-        super(const FlutterSecureStorage(), LocalAuthentication());
+        super(
+          const FlutterSecureStorage(),
+          LocalAuthentication(),
+          identityStore: FakeIdentityStore(),
+        );
 
   final String? _cloudName;
   final List<String> savedNames = [];
+  String? _userId = 'fake-user';
+
+  @override
+  String? get currentUserId => _userId;
 
   @override
   String? cloudDisplayName() => _cloudName;
 
   @override
-  Future<void> saveDisplayName(String name) async {
+  Future<bool> saveDisplayName(String name) async {
     savedNames.add(name);
+    return true;
   }
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    _userId = null;
+  }
 }
 
 void main() {
@@ -65,23 +91,6 @@ void main() {
   });
 
   group('DisplayNameNotifier', () {
-    late Directory dir;
-
-    setUpAll(() async {
-      dir = await Directory.systemTemp.createTemp('sgt_display_name');
-      Hive.init(dir.path);
-      HiveService.cache = await Hive.openBox<String>('display_name_box');
-    });
-
-    tearDown(() async {
-      await HiveService.cache.clear();
-    });
-
-    tearDownAll(() async {
-      await Hive.close();
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
-    });
-
     test('set() menyimpan ke Hive, memperbarui state, dan memanggil cloud',
         () async {
       final repo = FakeAuthRepository();
@@ -96,7 +105,8 @@ void main() {
 
       expect(error, isNull);
       expect(container.read(displayNameProvider), 'Budi Santoso');
-      expect(HiveService.cache.get(displayNameHiveKey), 'Budi Santoso');
+      expect(repo.identityStore.get(displayNameHiveKeyFor('fake-user')),
+          'Budi Santoso');
       expect(repo.savedNames, ['Budi Santoso']);
     });
 
@@ -111,14 +121,25 @@ void main() {
 
       expect(error, 'Nama minimal 2 karakter');
       expect(container.read(displayNameProvider), isNull);
-      expect(HiveService.cache.get(displayNameHiveKey), isNull);
+      expect(
+          repo.identityStore.get(displayNameHiveKeyFor('fake-user')), isNull);
       expect(repo.savedNames, isEmpty);
     });
 
     test('logout menginvalidate displayNameProvider', () async {
       final repo = FakeAuthRepository();
       final container = ProviderContainer(
-        overrides: [authRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repo),
+          authProvider.overrideWith(
+            (ref) => AuthNotifier(
+              repo,
+              ref,
+              clearData: () async {},
+              clearOfflineSync: () async {},
+            ),
+          ),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -134,38 +155,21 @@ void main() {
   });
 
   group('effectiveDisplayNameProvider', () {
-    late Directory dir;
-
-    setUpAll(() async {
-      dir = await Directory.systemTemp.createTemp('sgt_effective_name');
-      Hive.init(dir.path);
-      HiveService.cache = await Hive.openBox<String>('effective_name_box');
-    });
-
-    tearDown(() async {
-      await HiveService.cache.clear();
-    });
-
-    tearDownAll(() async {
-      await Hive.close();
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
-    });
-
     Future<ProviderContainer> build({
       String? cloud,
       String? email,
       String? local,
     }) async {
+      final repo = FakeAuthRepository(cloudName: cloud);
       final container = ProviderContainer(
         overrides: [
-          authRepositoryProvider
-              .overrideWithValue(FakeAuthRepository(cloudName: cloud)),
+          authRepositoryProvider.overrideWithValue(repo),
           userEmailProvider.overrideWith((ref) async => email),
         ],
       );
       addTearDown(container.dispose);
       if (local != null) {
-        await HiveService.cache.put(displayNameHiveKey, local);
+        await repo.identityStore.put(displayNameHiveKeyFor('fake-user'), local);
       }
       return container;
     }
@@ -184,7 +188,12 @@ void main() {
       final c = await build(cloud: 'Cloud Name', email: 'budi@mail.com');
       expect(await c.read(effectiveDisplayNameProvider.future), 'Cloud Name');
       // Disalin sekali ke Hive.
-      expect(HiveService.cache.get(displayNameHiveKey), 'Cloud Name');
+      expect(
+          c
+              .read(authRepositoryProvider)
+              .identityStore
+              .get(displayNameHiveKeyFor('fake-user')),
+          'Cloud Name');
     });
 
     test('nama email dipakai bila tidak ada lokal maupun cloud', () async {
@@ -199,23 +208,6 @@ void main() {
   });
 
   group('ProfileHeader widget', () {
-    late Directory dir;
-
-    setUpAll(() async {
-      dir = await Directory.systemTemp.createTemp('sgt_header_widget');
-      Hive.init(dir.path);
-      HiveService.cache = await Hive.openBox<String>('header_widget_box');
-    });
-
-    tearDown(() async {
-      await HiveService.cache.clear();
-    });
-
-    tearDownAll(() async {
-      await Hive.close();
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
-    });
-
     Widget wrap(WidgetTester tester, {ThemeData? theme, double scale = 1.0}) {
       return ProviderScope(
         overrides: [
@@ -223,6 +215,7 @@ void main() {
           userEmailProvider.overrideWith((ref) async => 'budi@mail.com'),
           favoriteClubProvider.overrideWithValue(null),
           clubCrestProvider.overrideWithValue(const <String, String>{}),
+          predictionPointsProvider.overrideWithValue(0),
         ],
         child: MaterialApp(
           theme: theme ?? AppTheme.light,
@@ -242,25 +235,9 @@ void main() {
     }
 
     testWidgets('menampilkan nama yang tersimpan', (tester) async {
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
-          userEmailProvider.overrideWith((ref) async => 'budi@mail.com'),
-          favoriteClubProvider.overrideWithValue(null),
-          clubCrestProvider.overrideWithValue(const <String, String>{}),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: Scaffold(
-            body: ProfileHeader(
-              email: const AsyncData('budi@mail.com'),
-              photoPath: null,
-              onChoosePhoto: () {},
-            ),
-          ),
-        ),
-      ));
-      await tester.pumpAndSettle();
+      await tester.pumpWidget(wrap(tester));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Belum ada nama lokal -> memakai nama email.
       expect(find.text('budi'), findsOneWidget);
@@ -270,16 +247,18 @@ void main() {
         'dialog menolak "a" lalu menerima "Budi" dan memperbarui header',
         (tester) async {
       await tester.pumpWidget(wrap(tester));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Buka dialog ubah nama.
       await tester.tap(find.text('budi'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('Ubah nama'), findsOneWidget);
 
       // 'a' tidak valid -> tombol Simpan nonaktif.
       await tester.enterText(find.byType(TextField), 'a');
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('Nama minimal 2 karakter'), findsOneWidget);
       final simpan = tester.widget<TextButton>(
         find.widgetWithText(TextButton, 'Simpan'),
@@ -288,7 +267,7 @@ void main() {
 
       // 'Budi' valid -> tombol Simpan aktif.
       await tester.enterText(find.byType(TextField), 'Budi');
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.widgetWithText(TextButton, 'Simpan'), findsOneWidget);
       expect(
         tester
@@ -298,10 +277,9 @@ void main() {
       );
 
       await tester.tap(find.widgetWithText(TextButton, 'Simpan'));
-      // Penulisan Hive nyata tidak selesai di zone fakeAsync; jalankan sebentar
-      // di event loop asli agar future set() tuntas dan dialog tertutup.
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('Ubah nama'), findsNothing);
       expect(find.text('Nama diperbarui'), findsOneWidget);
@@ -325,7 +303,8 @@ void main() {
               scale: 1.3,
             ),
           );
-          await tester.pumpAndSettle();
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump(const Duration(milliseconds: 100));
 
           expect(tester.takeException(), isNull);
         },

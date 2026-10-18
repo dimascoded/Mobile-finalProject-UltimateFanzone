@@ -41,8 +41,21 @@ class TeamPickerScreen extends ConsumerWidget {
                     child: AppCard(
                       padding: const EdgeInsets.all(AppSpacing.md),
                       onTap: () async {
-                        await ref.read(favoriteKeyProvider.notifier).set(c.key);
-                        if (context.mounted) Navigator.pop(context);
+                        final saved = await ref
+                            .read(favoriteKeyProvider.notifier)
+                            .set(c.key);
+                        if (!context.mounted) return;
+                        if (!saved) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Tim favorit disimpan di perangkat, tetapi belum tersimpan ke akun. Akan dicoba lagi saat masuk.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.pop(context);
                       },
                       child: Row(
                         children: [

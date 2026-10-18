@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -5,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/hive_service.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/utils/app_config.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../auth/data/identity_store.dart';
 import 'models.dart';
 import 'sample_data.dart';
 
@@ -148,7 +151,28 @@ final footballRepositoryProvider =
 
 // ---- Klub & tim favorit ----
 class ClubRepository {
-  static const _favKey = 'favorite_team';
+  ClubRepository([
+    IdentityStore? identityStore,
+    String? Function()? currentUserId,
+  ])  : _auth = null,
+        _identityStore = identityStore ?? HiveIdentityStore(),
+        _currentUserId = currentUserId ?? _noCurrentUser;
+
+  ClubRepository.forAuth(AuthRepository auth)
+      : _auth = auth,
+        _identityStore = auth.identityStore,
+        _currentUserId = _currentUserIdFor(auth);
+
+  static String? Function() _currentUserIdFor(AuthRepository auth) =>
+      () => auth.currentUserId;
+
+  final AuthRepository? _auth;
+  final IdentityStore _identityStore;
+  final String? Function() _currentUserId;
+
+  static String? _noCurrentUser() => null;
+
+  String? get currentUserId => _currentUserId();
 
   Future<List<PlClub>> load() async {
     final raw = await rootBundle.loadString('assets/data/pl_clubs.json');
@@ -157,8 +181,43 @@ class ClubRepository {
         .toList();
   }
 
-  String? favoriteKey() => HiveService.cache.get(_favKey);
-  Future<void> saveFavorite(String key) => HiveService.cache.put(_favKey, key);
+  String? favoriteKey() {
+    final userId = currentUserId;
+    if (userId == null) return null;
+    final auth = _auth;
+    final local = auth != null
+        ? auth.readUserScopedValue('favorite_team')
+        : _identityStore.get(AuthRepository.favoriteTeamKey(userId));
+    if (local != null) return local;
+    final cloud = auth?.cloudFavoriteTeam();
+    if (cloud != null && auth != null) {
+      unawaited(auth.writeUserScopedValue('favorite_team', cloud));
+    }
+    return cloud;
+  }
+
+  Future<void> saveFavorite(String value) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    final auth = _auth;
+    if (auth != null) {
+      await auth.writeUserScopedValue('favorite_team', value);
+    } else {
+      await _identityStore.put(AuthRepository.favoriteTeamKey(userId), value);
+    }
+  }
+
+  Future<bool> saveFavoriteWithCloudStatus(String value) async {
+    if (currentUserId == null) return false;
+    await saveFavorite(value);
+    final auth = _auth;
+    return auth == null
+        ? true
+        : await auth.saveProfilePrefs(favoriteTeam: value);
+  }
 }
 
-final clubRepositoryProvider = Provider((ref) => ClubRepository());
+final clubRepositoryProvider = Provider((ref) {
+  final auth = ref.watch(authRepositoryProvider);
+  return ClubRepository.forAuth(auth);
+});

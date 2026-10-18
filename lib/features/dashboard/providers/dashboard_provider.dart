@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../core/database/hive_service.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sync/providers/sync_provider.dart';
@@ -29,11 +28,27 @@ final logoutProvider = Provider<Future<void> Function()>((ref) {
 
 // ---------- Foto profil ----------
 class ProfilePhotoNotifier extends StateNotifier<String?> {
-  ProfilePhotoNotifier() : super(HiveService.cache.get(_key));
-  static const _key = 'profile_photo_path';
+  ProfilePhotoNotifier(this._repo, this._fileExists) : super(null) {
+    unawaited(reload());
+  }
+
+  final AuthRepository _repo;
+  final bool Function(String path) _fileExists;
   final _picker = ImagePicker();
 
+  Future<void> reload() async {
+    final userId = _repo.currentUserId;
+    if (userId == null) {
+      state = null;
+      return;
+    }
+    final path = _repo.readUserScopedValue('profile_photo_path');
+    state = path != null && _fileExists(path) ? path : null;
+  }
+
   Future<void> pick(ImageSource source) async {
+    final userId = _repo.currentUserId;
+    if (userId == null) return;
     final x = await _picker.pickImage(
         source: source, maxWidth: 800, imageQuality: 85);
     if (x == null) return;
@@ -44,18 +59,26 @@ class ProfilePhotoNotifier extends StateNotifier<String?> {
     await File(x.path).copy(dest);
     final old = state;
     state = dest;
-    await HiveService.cache.put(_key, dest);
+    await _repo.writeUserScopedValue('profile_photo_path', dest);
     if (old != null && File(old).existsSync()) await File(old).delete();
   }
 }
 
+final profilePhotoFileExistsProvider = Provider<bool Function(String path)>(
+    (ref) => (path) => File(path).existsSync());
+
 final profilePhotoProvider =
     StateNotifierProvider<ProfilePhotoNotifier, String?>(
-        (ref) => ProfilePhotoNotifier());
+        (ref) => ProfilePhotoNotifier(
+              ref.watch(authRepositoryProvider),
+              ref.watch(profilePhotoFileExistsProvider),
+            ));
 
 // ---------- Nama tampilan ----------
 /// Kunci Hive penyimpan nama tampilan lokal.
 const displayNameHiveKey = 'profile_display_name';
+String displayNameHiveKeyFor(String userId) =>
+    AuthRepository.displayNameKey(userId);
 
 /// Validasi nama tampilan. Mengembalikan pesan galat Bahasa Indonesia, atau
 /// null bila valid. Input dibersihkan dulu: whitespace di-trim dan spasi
@@ -73,26 +96,32 @@ String? validateDisplayName(String raw) {
 /// Simpan nama tampilan: lokal (Hive) selalu dulu, lalu best-effort ke
 /// metadata Supabase supaya selamat saat logout/masuk ulang.
 class DisplayNameNotifier extends StateNotifier<String?> {
-  DisplayNameNotifier(this._repo) : super(HiveService.cache.get(_key));
-  static const _key = displayNameHiveKey;
+  DisplayNameNotifier(this._repo) : super(_readForUser(_repo));
   final AuthRepository _repo;
+
+  static String? _readForUser(AuthRepository repo) {
+    return repo.readUserScopedValue(displayNameHiveKey);
+  }
 
   /// Validasi [raw]; bila valid simpan ke Hive + state lalu simpan ke cloud
   /// (fire-and-forget). Mengembalikan pesan galat, atau null bila berhasil.
   Future<String?> set(String raw) async {
     final error = validateDisplayName(raw);
     if (error != null) return error;
+    final userId = _repo.currentUserId;
+    if (userId == null) return 'Sesi tidak ditemukan. Masuk ulang.';
     final cleaned = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
     state = cleaned;
-    await HiveService.cache.put(_key, cleaned);
-    unawaited(_repo.saveDisplayName(cleaned));
+    await _repo.writeUserScopedValue(displayNameHiveKey, cleaned);
+    if (!await _repo.saveDisplayName(cleaned)) {
+      return 'Nama tersimpan di perangkat, tetapi belum tersimpan ke akun. Coba lagi nanti.';
+    }
     return null;
   }
 }
 
-final displayNameProvider =
-    StateNotifierProvider<DisplayNameNotifier, String?>(
-        (ref) => DisplayNameNotifier(ref.watch(authRepositoryProvider)));
+final displayNameProvider = StateNotifierProvider<DisplayNameNotifier, String?>(
+    (ref) => DisplayNameNotifier(ref.watch(authRepositoryProvider)));
 
 /// Nama yang ditampilkan ke pengguna. Urutan resolusi:
 ///   1. nama lokal (hasil edit pengguna),
@@ -100,10 +129,10 @@ final displayNameProvider =
 ///   3. nama yang diturunkan dari email,
 ///   4. 'Profil saya'.
 final effectiveDisplayNameProvider = FutureProvider<String>((ref) async {
+  final repo = ref.watch(authRepositoryProvider);
   final local = ref.watch(displayNameProvider);
   if (local != null && local.isNotEmpty) return local;
 
-  final repo = ref.watch(authRepositoryProvider);
   String? cloud;
   try {
     cloud = repo.cloudDisplayName();
@@ -112,16 +141,15 @@ final effectiveDisplayNameProvider = FutureProvider<String>((ref) async {
   }
   if (cloud != null && cloud.isNotEmpty) {
     // Salin sekali ke Hive supaya start berikutnya langsung lokal.
-    await HiveService.cache.put(displayNameHiveKey, cloud);
+    final userId = repo.currentUserId;
+    if (userId != null) {
+      await repo.writeUserScopedValue(displayNameHiveKey, cloud);
+    }
     return cloud;
   }
 
   final email = await ref.watch(userEmailProvider.future);
-  final derived = email
-          ?.split('@')
-          .first
-          .replaceAll(RegExp(r'[._-]+'), ' ')
-          .trim() ??
-      '';
+  final derived =
+      email?.split('@').first.replaceAll(RegExp(r'[._-]+'), ' ').trim() ?? '';
   return derived.isEmpty ? 'Profil saya' : derived;
 });

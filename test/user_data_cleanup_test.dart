@@ -31,15 +31,14 @@ void main() {
     final box = HiveService.cache;
     await box.putAll({
       'away_day_expenses': '[{"title":"Tiket"}]',
-      'away_day_budget_idr': '500000',
+      AuthRepository.awayDayBudgetKey('user-a'): '500000',
       'score_predictions': '[{"matchId":1}]',
       'passport_chain': '[]',
-      'profile_photo_path': '/tmp/foto.jpg',
-      'pam_feedback': '{"ttpan_pesan":"Bagus"}',
+      AuthRepository.profilePhotoKey('user-a'): '/tmp/foto.jpg',
       'notified_results': '[7001]',
       'penalty_block_day': '2026-08-15',
       'last_sync_at': '1700000000000',
-      'favorite_team': 'arsenal',
+      AuthRepository.favoriteTeamKey('user-a'): 'arsenal',
       'pundit_arsenal': 'teks',
       'pundit_chelsea_at': '2026-08-15T00:00:00Z',
       // Prefs perangkat, bukan data pengguna.
@@ -53,20 +52,19 @@ void main() {
     // Semua data pengguna hilang, termasuk cache Pundit per klub.
     for (final key in [
       'away_day_expenses',
-      'away_day_budget_idr',
       'score_predictions',
       'passport_chain',
-      'profile_photo_path',
-      'pam_feedback',
       'notified_results',
       'penalty_block_day',
       'last_sync_at',
-      'favorite_team',
       'pundit_arsenal',
       'pundit_chelsea_at',
     ]) {
       expect(box.get(key), isNull, reason: '$key seharusnya terhapus');
     }
+    expect(box.get(AuthRepository.awayDayBudgetKey('user-a')), '500000');
+    expect(box.get(AuthRepository.profilePhotoKey('user-a')), '/tmp/foto.jpg');
+    expect(box.get(AuthRepository.favoriteTeamKey('user-a')), 'arsenal');
 
     // Prefs perangkat tetap utuh.
     expect(box.get('theme_mode'), 'dark');

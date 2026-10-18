@@ -31,8 +31,8 @@ class ProfileHeader extends ConsumerWidget {
     final favoriteClub = ref.watch(favoriteClubProvider);
     final predictionRank = rankFor(ref.watch(predictionPointsProvider));
     final crests = ref.watch(clubCrestProvider);
-    final displayName =
-        ref.watch(effectiveDisplayNameProvider).valueOrNull ?? '';
+    final displayNameState = ref.watch(effectiveDisplayNameProvider);
+    final displayName = displayNameState.valueOrNull ?? '';
     final textScaler =
         MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.5);
     final height = 230.0 * textScaler;
@@ -75,65 +75,74 @@ class ProfileHeader extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    Semantics(
-                      button: true,
-                      label: 'Ubah nama',
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _editName(
-                          context,
-                          ref,
-                          displayName.isEmpty ? 'Profil saya' : displayName,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                displayName.isEmpty
-                                    ? 'Profil saya'
-                                    : displayName,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                    if (displayNameState.isLoading)
+                      const SizedBox(
+                        width: 148,
+                        height: 26,
+                        child: LinearProgressIndicator(),
+                      )
+                    else
+                      Semantics(
+                        button: true,
+                        label: 'Ubah nama',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _editName(
+                            context,
+                            ref,
+                            displayName.isEmpty ? 'Profil saya' : displayName,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  displayName.isEmpty
+                                      ? 'Profil saya'
+                                      : displayName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                            const Padding(
-                              padding: EdgeInsets.only(top: 6),
-                              child: Icon(
-                                Icons.edit,
-                                size: 16,
-                                color: Colors.white70,
+                              const SizedBox(width: AppSpacing.xs),
+                              const Padding(
+                                padding: EdgeInsets.only(top: 6),
+                                child: Icon(
+                                  Icons.edit,
+                                  size: 16,
+                                  color: Colors.white70,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: AppSpacing.xs),
                     email.when(
-                      data: (value) => Text(
-                        value ?? '-',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white70,
+                      data: (value) => value == null || value.isEmpty
+                          ? const SizedBox.shrink()
+                          : Text(
+                              value,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: Colors.white70),
                             ),
+                      loading: () => const SizedBox(
+                        width: 112,
+                        height: 12,
+                        child: LinearProgressIndicator(),
                       ),
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text(
-                        'Gagal memuat: $e',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white70,
-                            ),
-                      ),
+                      error: (e, _) => const SizedBox.shrink(),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Wrap(
@@ -252,6 +261,7 @@ class _EditNameDialog extends StatefulWidget {
 
 class _EditNameDialogState extends State<_EditNameDialog> {
   late final TextEditingController _controller;
+  String? _saveError;
 
   @override
   void initState() {
@@ -268,7 +278,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
   Future<void> _save() async {
     final err = await widget.onSave(_controller.text);
     if (err != null) {
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _saveError = err);
       return;
     }
     if (mounted) Navigator.pop(context, true);
@@ -276,7 +286,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final error = validateDisplayName(_controller.text);
+    final error = validateDisplayName(_controller.text) ?? _saveError;
     return AlertDialog(
       title: const Text('Ubah nama'),
       content: TextField(
@@ -287,7 +297,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
           hintText: 'Nama tampilan',
           errorText: error,
         ),
-        onChanged: (_) => setState(() {}),
+        onChanged: (_) => setState(() => _saveError = null),
       ),
       actions: [
         TextButton(

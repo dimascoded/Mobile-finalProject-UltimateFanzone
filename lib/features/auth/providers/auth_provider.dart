@@ -5,7 +5,8 @@ import '../data/auth_repository.dart';
 import 'user_data_cleanup.dart';
 
 class BiometricPreferenceNotifier extends StateNotifier<bool> {
-  BiometricPreferenceNotifier() : super(_load());
+  BiometricPreferenceNotifier({bool? initialState})
+      : super(initialState ?? _load());
 
   static const _key = 'biometric_enabled';
 
@@ -23,9 +24,22 @@ final biometricEnabledProvider =
 );
 
 class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
-  AuthNotifier(this._repo, this._ref) : super(const AsyncData(false));
+  AuthNotifier(this._repo, this._ref,
+      {Future<void> Function()? clearData,
+      Future<void> Function()? clearOfflineSync})
+      : _clearData = clearData ?? clearUserData,
+        _clearOfflineSync = clearOfflineSync ?? OfflineSyncDatabase.clear,
+        super(const AsyncData(false));
   final AuthRepository _repo;
   final Ref _ref;
+  final Future<void> Function() _clearData;
+  final Future<void> Function() _clearOfflineSync;
+
+  Future<void> _afterIdentitySuccess() async {
+    if (state.valueOrNull != true) return;
+    await _repo.retryPendingPrefs();
+    invalidateIdentityProviders(_ref);
+  }
 
   Future<void> login(String email, String password) async {
     state = const AsyncLoading();
@@ -33,6 +47,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
       await _repo.login(email, password);
       return true;
     });
+    await _afterIdentitySuccess();
   }
 
   /// U1: daftar lalu langsung masuk.
@@ -42,6 +57,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
       await _repo.register(email, password, confirm);
       return true;
     });
+    await _afterIdentitySuccess();
   }
 
   Future<void> loginWithBiometric() async {
@@ -52,6 +68,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
       }
       return _repo.authenticateBiometric();
     });
+    await _afterIdentitySuccess();
   }
 
   /// Dipakai LockScreen: perangkat tanpa biometrik langsung lolos (sesi sudah valid).
@@ -62,6 +79,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
       if (!await _repo.canUseBiometric()) return true;
       return _repo.authenticateBiometric();
     });
+    await _afterIdentitySuccess();
   }
 
   /// U4: keluar dari akun dan bersihkan semua jejak data pengguna.
@@ -73,15 +91,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
   /// izin tidak dihapus karena bukan data pribadi.
   Future<void> logout() async {
     await _repo.logout();
-    await clearUserData();
-    await OfflineSyncDatabase.clear();
+    await _clearData();
+    await _clearOfflineSync();
     invalidateUserDataProviders(_ref);
-    // Sesi dan email ikut kedaluwarsa supaya layar startup tidak mengira
-    // pengguna masih masuk.
-    _ref
-      ..invalidate(sessionProvider)
-      ..invalidate(userEmailProvider);
     state = const AsyncData(false);
+    invalidateIdentityProviders(_ref);
   }
 }
 
@@ -89,8 +103,12 @@ final authProvider = StateNotifierProvider<AuthNotifier, AsyncValue<bool>>(
     (ref) => AuthNotifier(ref.watch(authRepositoryProvider), ref));
 
 /// Dipakai saat startup untuk memutuskan Login vs Dashboard.
-final sessionProvider = FutureProvider<bool>(
-    (ref) => ref.watch(authRepositoryProvider).hasSession());
+final sessionProvider = FutureProvider<bool>((ref) async {
+  final repo = ref.watch(authRepositoryProvider);
+  final hasSession = await repo.hasSession();
+  if (hasSession) await repo.retryPendingPrefs();
+  return hasSession;
+});
 
 final userEmailProvider = FutureProvider<String?>(
     (ref) => ref.watch(authRepositoryProvider).userEmail());
