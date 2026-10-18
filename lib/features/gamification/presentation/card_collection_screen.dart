@@ -32,6 +32,7 @@ String cardSourceLabel(String source) => switch (source) {
       'penalty' => 'Dari Adu Penalti',
       'reflex' => 'Dari Refleks Kiper',
       'prediction' => 'Dari prediksi yang tepat',
+      'rank' => 'Dari peringkat prediksi',
       'stamp' => 'Dari kunjungan stadion',
       _ => source.isEmpty ? 'Sumber tidak diketahui' : 'Dari $source',
     };
@@ -66,24 +67,29 @@ String shortOwner(String owner) => owner.length <= 10
     ? owner
     : '${owner.substring(0, 6)}…${owner.substring(owner.length - 4)}';
 
-class CardCollectionScreen extends ConsumerWidget {
+class CardCollectionScreen extends ConsumerStatefulWidget {
   const CardCollectionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CardCollectionScreen> createState() =>
+      _CardCollectionScreenState();
+}
+
+class _CardCollectionScreenState extends ConsumerState<CardCollectionScreen> {
+  CardRarity? _selectedRarity;
+
+  @override
+  Widget build(BuildContext context) {
     final clubsAsync = ref.watch(clubsProvider);
     final cards = ref.watch(cardCollectionProvider);
     final rarityCounts = ref.watch(cardRarityCountsProvider);
     final valid = ref.watch(chainValidProvider);
     final crests = ref.watch(clubCrestProvider);
+    final entries = ref.watch(collectionEntriesProvider);
 
     final clubs = clubsAsync.valueOrNull ?? const <PlClub>[];
-    final byClub = <String, List<ClubCard>>{};
-    for (final c in cards) {
-      byClub.putIfAbsent(c.clubKey, () => <ClubCard>[]).add(c);
-    }
-    final clubKeys = {for (final c in clubs) c.key};
-    final collected = byClub.keys.where(clubKeys.contains).length;
+    final clubByKey = {for (final c in clubs) c.key: c};
+    final ownedClubsSet = {for (final c in cards) c.clubKey};
 
     final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.5);
 
@@ -94,15 +100,43 @@ class CardCollectionScreen extends ConsumerWidget {
       );
     }
 
+    final totalCards = cards.length;
+    final collectedClubs = ownedClubsSet.length;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Koleksi Kartu')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
           _Header(
-            collected: collected,
+            collected: collectedClubs,
             total: clubs.length,
             counts: rarityCounts,
+            totalCards: totalCards,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _FilterChip(
+                  label: 'Semua',
+                  selected: _selectedRarity == null,
+                  onSelected: () => setState(() => _selectedRarity = null),
+                  count: entries.length,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                for (final rarity in CardRarity.values) ...[
+                  _FilterChip(
+                    label: rarityLabel(rarity),
+                    selected: _selectedRarity == rarity,
+                    onSelected: () => setState(() => _selectedRarity = rarity),
+                    count: rarityCounts[rarity] ?? 0,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.lg),
           if (cards.isEmpty)
@@ -110,25 +144,63 @@ class CardCollectionScreen extends ConsumerWidget {
           else
             LayoutBuilder(builder: (context, constraints) {
               final columns = constraints.maxWidth > 600 ? 3 : 2;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: clubs.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: AppSpacing.md,
-                  mainAxisSpacing: AppSpacing.md,
-                  mainAxisExtent: 196 * textScale,
-                ),
-                itemBuilder: (context, i) {
-                  final club = clubs[i];
-                  return _ClubTile(
-                    club: club,
-                    cards: byClub[club.key] ?? const <ClubCard>[],
-                    crestUrl: crests[club.tla.toUpperCase()],
-                  );
-                },
-              );
+              final filteredEntries = _selectedRarity == null
+                  ? entries
+                  : entries.where((e) => e.rarity == _selectedRarity).toList();
+              return _selectedRarity == null
+                  ? GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filteredEntries.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: AppSpacing.md,
+                        mainAxisSpacing: AppSpacing.md,
+                        mainAxisExtent: 196 * textScale,
+                      ),
+                      itemBuilder: (context, i) {
+                        final entry = filteredEntries[i];
+                        final club = clubByKey[entry.clubKey];
+                        if (club == null) return const SizedBox.shrink();
+                        return _CollectionEntryTile(
+                          club: club,
+                          entry: entry,
+                          crestUrl: crests[club.tla.toUpperCase()],
+                          owned: true,
+                        );
+                      },
+                    )
+                  : GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: clubs.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: AppSpacing.md,
+                        mainAxisSpacing: AppSpacing.md,
+                        mainAxisExtent: 196 * textScale,
+                      ),
+                      itemBuilder: (context, i) {
+                        final club = clubs[i];
+                        final entry = entries.firstWhere(
+                          (e) =>
+                              e.clubKey == club.key &&
+                              e.rarity == _selectedRarity,
+                          orElse: () => CollectionEntry(
+                            clubKey: club.key,
+                            rarity: _selectedRarity!,
+                            cards: const <ClubCard>[],
+                          ),
+                        );
+                        final owned = entry.cards.isNotEmpty;
+                        return _CollectionEntryTile(
+                          club: club,
+                          entry: entry,
+                          crestUrl: crests[club.tla.toUpperCase()],
+                          owned: owned,
+                        );
+                      },
+                    );
             }),
           const SizedBox(height: AppSpacing.lg),
           _ChainFooter(valid: valid),
@@ -143,11 +215,13 @@ class _Header extends StatelessWidget {
     required this.collected,
     required this.total,
     required this.counts,
+    required this.totalCards,
   });
 
   final int collected;
   final int total;
   final Map<CardRarity, int> counts;
+  final int totalCards;
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +238,11 @@ class _Header extends StatelessWidget {
                 .textTheme
                 .titleMedium
                 ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '$totalCards kartu',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: AppSpacing.md),
           ClipRRect(
@@ -234,113 +313,123 @@ class _RarityChip extends StatelessWidget {
   }
 }
 
-class _ClubTile extends StatelessWidget {
-  const _ClubTile({
-    required this.club,
-    required this.cards,
-    required this.crestUrl,
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    required this.count,
   });
 
-  final PlClub club;
-  final List<ClubCard> cards;
-  final String? crestUrl;
-
-  CardRarity get _highestRarity {
-    var rarity = cards.first.rarity;
-    for (final c in cards) {
-      if (c.rarity.index > rarity.index) rarity = c.rarity;
-    }
-    return rarity;
-  }
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
-    final owned = cards.isNotEmpty;
+    return ChoiceChip(
+      label: Text('$label ($count)'),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      showCheckmark: false,
+    );
+  }
+}
+
+class _CollectionEntryTile extends StatelessWidget {
+  const _CollectionEntryTile({
+    required this.club,
+    required this.entry,
+    required this.crestUrl,
+    required this.owned,
+  });
+
+  final PlClub club;
+  final CollectionEntry entry;
+  final String? crestUrl;
+  final bool owned;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return AppCard(
-      onTap: owned ? () => _showDetails(context, club, cards, crestUrl) : null,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: owned
-            ? _ownedContent(context, scheme)
-            : _unownedContent(context, scheme),
+    final rarity = entry.rarity;
+    final color = rarityColor(rarity);
+    final count = entry.count;
+    return Opacity(
+      opacity: owned ? 1.0 : 0.5,
+      child: AppCard(
+        onTap: owned
+            ? () => _showEntryDetails(context, club, entry, crestUrl)
+            : null,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: owned ? color : scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Stack(
+                    children: [
+                      ClubCrest(
+                        crestUrl: crestUrl,
+                        tla: club.tla,
+                        color: club.colorValue,
+                        size: 64,
+                      ),
+                      if (!owned)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Icon(
+                            Icons.lock_outline,
+                            size: 20,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    club.shortName.isNotEmpty ? club.shortName : club.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text(
+                      count > 1
+                          ? '${rarityLabel(rarity)} x$count'
+                          : rarityLabel(rarity),
+                      style: TextStyle(
+                        color: rarity == CardRarity.legendary
+                            ? Colors.black
+                            : Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
       ),
     );
   }
-
-  List<Widget> _ownedContent(BuildContext context, ColorScheme scheme) {
-    final rarity = _highestRarity;
-    final color = rarityColor(rarity);
-    return [
-      ClubCrest(
-        crestUrl: crestUrl,
-        tla: club.tla,
-        color: club.colorValue,
-        size: 64,
-      ),
-      const SizedBox(height: AppSpacing.sm),
-      Text(
-        club.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.titleSmall,
-      ),
-      const SizedBox(height: AppSpacing.sm),
-      Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm,
-          vertical: AppSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        child: Text(
-          cards.length > 1
-              ? '${rarityLabel(rarity)} x${cards.length}'
-              : rarityLabel(rarity),
-          style: TextStyle(
-            color: rarity == CardRarity.legendary ? Colors.black : Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _unownedContent(BuildContext context, ColorScheme scheme) => [
-        Opacity(
-          opacity: 0.5,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ClubCrest(
-                crestUrl: crestUrl,
-                tla: club.tla,
-                color: club.colorValue,
-                size: 64,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Icon(
-                Icons.lock_outline,
-                size: 24,
-                color: scheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                club.shortName.isNotEmpty ? club.shortName : club.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      ];
 }
 
 class _EmptyState extends StatelessWidget {
@@ -388,20 +477,27 @@ class _ChainFooter extends StatelessWidget {
             size: 20,
           ),
           const SizedBox(width: AppSpacing.sm),
-          Text(valid ? 'Riwayat aman' : 'Riwayat tidak cocok'),
+          Flexible(
+            child: Text(
+              valid ? 'Riwayat aman' : 'Riwayat tidak cocok',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-void _showDetails(
-    BuildContext context, PlClub club, List<ClubCard> cards, String? crestUrl) {
-  final highest = cards.first;
-  final rarity = cards.fold(
-    highest.rarity,
-    (r, c) => c.rarity.index > r.index ? c.rarity : r,
-  );
+void _showEntryDetails(
+  BuildContext context,
+  PlClub club,
+  CollectionEntry entry,
+  String? crestUrl,
+) {
+  final cards = entry.cards;
+  final newest = entry.newest;
+  final rarity = entry.rarity;
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -433,9 +529,11 @@ void _showDetails(
             const SizedBox(height: 12),
             Text('Kelangkaan: ${rarityLabel(rarity)}'),
             const SizedBox(height: 4),
-            Text(cardSourceLabel(highest.source)),
+            Text('Jumlah: ${entry.count} kartu'),
             const SizedBox(height: 4),
-            Text('Didapat ${formatEarnedDate(highest.earnedAt)}'),
+            Text('Sumber terbaru: ${cardSourceLabel(newest.source)}'),
+            const SizedBox(height: 4),
+            Text('Didapat terbaru: ${formatEarnedDate(newest.earnedAt)}'),
             const Divider(height: 32),
             Text(
               'Bukti keaslian',
@@ -446,19 +544,19 @@ void _showDetails(
             ),
             const SizedBox(height: 8),
             Text(
-              'ID Pemilik: ${shortOwner(highest.owner)}',
+              'ID Pemilik: ${shortOwner(newest.owner)}',
               style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                     color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                   ),
             ),
             const SizedBox(height: 8),
-            Text('Catatan #${highest.blockIndex}'),
+            Text('Catatan #${newest.blockIndex}'),
             const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
                   child: SelectableText(
-                    shortHash(highest.blockHash),
+                    shortHash(newest.blockHash),
                     style: const TextStyle(fontFamily: 'monospace'),
                   ),
                 ),
@@ -467,7 +565,7 @@ void _showDetails(
                   icon: const Icon(Icons.copy),
                   onPressed: () async {
                     await Clipboard.setData(
-                        ClipboardData(text: highest.blockHash));
+                        ClipboardData(text: newest.blockHash));
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(content: Text('Kode unik disalin')),
@@ -477,6 +575,26 @@ void _showDetails(
                 ),
               ],
             ),
+            if (cards.length > 1) ...[
+              const Divider(height: 32),
+              Text(
+                'Sumber lainnya',
+                style: Theme.of(ctx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              ...cards.skip(1).map(
+                    (c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '${cardSourceLabel(c.source)} (${formatEarnedDate(c.earnedAt)})',
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+            ],
             const SizedBox(height: 12),
             Text(
               'Klub dan kelangkaan kartu ini ditentukan dari kode unik '

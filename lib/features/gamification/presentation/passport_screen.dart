@@ -48,8 +48,6 @@ class PassportScreen extends ConsumerWidget {
     final demoMode = ref.watch(demoModeProvider);
     final busy = ref.watch(stampProvider).isLoading;
     final distance = ref.watch(stampDistanceProvider);
-    final owned = ref.watch(ownedClubsProvider);
-
     if (club == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Paspor Suporter')),
@@ -262,8 +260,10 @@ class PassportScreen extends ConsumerWidget {
             ),
             child: ListTile(
               leading: const Icon(Icons.style_outlined),
-              title: Text('Koleksi Kartu (${owned.length})'),
-              subtitle: const Text('Lihat klub yang sudah kamu kumpulkan'),
+              title: Text(
+                  'Koleksi Kartu (${ref.watch(cardCollectionProvider).length})'),
+              subtitle: Text(
+                  '${ref.watch(ownedClubsProvider).length} klub terkumpul'),
               trailing: const Icon(Icons.chevron_right),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,

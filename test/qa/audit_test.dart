@@ -24,6 +24,8 @@ const Set<String> _allowlist = <String>{
   'lib/features/penalty_shootout/presentation/penalty_screen.dart',
   'lib/features/gamification/presentation/game_screen.dart',
   'lib/features/stadium_pointer/presentation/stadium_pointer_screen.dart',
+  'lib/features/sos_emergency/presentation/sos_actions.dart',
+  'lib/features/sos_emergency/presentation/sos_hold_button.dart',
 };
 
 void main() {

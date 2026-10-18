@@ -9,6 +9,7 @@ import '../../football/data/football_repository.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
+import '../data/prediction_rank.dart';
 import '../data/prediction_repository.dart';
 import '../data/reveal_verifier.dart';
 
@@ -164,6 +165,7 @@ class SettledPrediction {
     required this.realAway,
     required this.valid,
     required this.points,
+    this.rankUp,
   });
 
   final Prediction prediction;
@@ -172,6 +174,7 @@ class SettledPrediction {
   /// Hash terbuka sama dengan commit? Kalau tidak, prediksi tidak sah.
   final bool valid;
   final int points;
+  final PredictionRank? rankUp;
 }
 
 /// Prediksi yang laganya sudah selesai tapi blok result-nya belum ditulis.
@@ -215,6 +218,7 @@ class SettleAction {
     final verdict = verifyReveal(chain: chain, prediction: p, match: m);
     if (!verdict.valid || !m.hasScore) return null;
 
+    final pointsBefore = _ref.read(predictionPointsProvider);
     final walletFuture = _ref.read(walletAddressProvider.future);
     final chainNotifier = _ref.read(chainProvider.notifier);
     final owner = await walletFuture;
@@ -242,12 +246,25 @@ class SettleAction {
             ref: 'prediction:${p.matchId}',
           );
     }
+    final pointsAfter = pointsBefore + verdict.points;
+    final crossedRanks = ranksCrossed(pointsBefore, pointsAfter);
+    for (final rank in crossedRanks) {
+      try {
+        await _ref.read(cardMinterProvider).mintCard(
+              source: 'rank',
+              ref: 'rank:${rank.key}',
+            );
+      } catch (_) {
+        // Rank rewards must not interrupt a valid settle.
+      }
+    }
     return SettledPrediction(
       prediction: p,
       realHome: m.homeScore!,
       realAway: m.awayScore!,
       valid: true,
       points: verdict.points,
+      rankUp: crossedRanks.isEmpty ? null : crossedRanks.last,
     );
   }
 }

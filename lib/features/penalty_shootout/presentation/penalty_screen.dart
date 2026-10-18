@@ -107,8 +107,8 @@ class _PenaltyScreenState extends ConsumerState<PenaltyScreen>
                         state: state,
                         progress:
                             Curves.easeInOutCubic.transform(_execution.value),
-                        onTap: state.phase == Phase.aiming
-                            ? notifier.lockNow
+                        onZoneTap: state.demo && state.phase == Phase.aiming
+                            ? notifier.selectZone
                             : null,
                         onPanEnd: (details) => _handlePanEnd(details, notifier),
                       ),
@@ -124,9 +124,16 @@ class _PenaltyScreenState extends ConsumerState<PenaltyScreen>
                       ),
                   ],
                 ),
-                if (state.phase == Phase.swinging) ...[
+                if (state.phase == Phase.swinging ||
+                    ((state.phase == Phase.resolved ||
+                            state.phase == Phase.finished) &&
+                        state.last != null)) ...[
                   const SizedBox(height: 16),
-                  _PowerMeter(shake: state.shake),
+                  _PowerMeter(
+                    shake: state.shake,
+                    band:
+                        state.phase == Phase.swinging ? null : state.last?.band,
+                  ),
                 ],
                 if (state.demo) ...[
                   const SizedBox(height: 12),
@@ -260,11 +267,9 @@ class _PhaseInstruction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = switch (state.phase) {
-      Phase.aiming =>
-        'Miringkan HP untuk membidik, tahan 0,5 detik untuk mengunci',
-      Phase.locked => 'Arah terkunci. Tekan Ayun lalu ayunkan HP',
-      Phase.swinging =>
-        'Ayun ${state.swingSecondsLeft.toStringAsFixed(1)} dtk • puncak ${state.shake.toStringAsFixed(1)}',
+      Phase.aiming => 'Miringkan HP untuk membidik, lalu ayunkan untuk '
+          'menendang. Makin kencang ayunannya, makin kuat tendangannya.',
+      Phase.swinging => 'Mengukur kekuatan ayunan...',
       Phase.resolved => 'Hasil tendangan',
       Phase.finished => 'Sesi selesai',
     };
@@ -282,31 +287,28 @@ class _GoalBoard extends StatelessWidget {
   const _GoalBoard({
     required this.state,
     required this.progress,
-    required this.onTap,
+    required this.onZoneTap,
     required this.onPanEnd,
   });
 
   final PenaltyState state;
   final double progress;
-  final VoidCallback? onTap;
+  final ValueChanged<KickZone>? onZoneTap;
   final GestureDragEndCallback onPanEnd;
 
   @override
   Widget build(BuildContext context) {
     final selectedZone = switch (state.phase) {
       Phase.aiming => state.zone,
-      Phase.locked || Phase.swinging => state.lockedZone ?? state.zone,
+      Phase.swinging => state.zone,
       Phase.resolved || Phase.finished => state.last?.zone ?? state.zone,
     };
-    final isLocked =
-        state.phase == Phase.locked || state.phase == Phase.swinging;
     final executing =
         (state.phase == Phase.resolved || state.phase == Phase.finished) &&
             state.last != null;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
       onPanEnd: onPanEnd,
       child: AspectRatio(
         aspectRatio: 1.55,
@@ -361,7 +363,9 @@ class _GoalBoard extends StatelessWidget {
                                 child: _ZoneCell(
                                   zone: zone,
                                   selected: selectedZone == zone,
-                                  locked: isLocked && selectedZone == zone,
+                                  onTap: onZoneTap == null
+                                      ? null
+                                      : () => onZoneTap!(zone),
                                   outcome: executing && state.last?.zone == zone
                                       ? state.last?.outcome
                                       : null,
@@ -382,7 +386,9 @@ class _GoalBoard extends StatelessWidget {
                                 child: _ZoneCell(
                                   zone: zone,
                                   selected: selectedZone == zone,
-                                  locked: isLocked && selectedZone == zone,
+                                  onTap: onZoneTap == null
+                                      ? null
+                                      : () => onZoneTap!(zone),
                                   outcome: executing && state.last?.zone == zone
                                       ? state.last?.outcome
                                       : null,
@@ -459,13 +465,13 @@ class _ZoneCell extends StatelessWidget {
   const _ZoneCell({
     required this.zone,
     required this.selected,
-    required this.locked,
+    required this.onTap,
     required this.outcome,
   });
 
   final KickZone zone;
   final bool selected;
-  final bool locked;
+  final VoidCallback? onTap;
   final ShotOutcome? outcome;
 
   @override
@@ -476,11 +482,7 @@ class _ZoneCell extends StatelessWidget {
     final Color background;
     final Color borderColor;
     final double borderWidth;
-    if (selected && locked) {
-      background = scheme.primary.withValues(alpha: 0.55);
-      borderColor = Colors.white;
-      borderWidth = 3;
-    } else if (selected) {
+    if (selected) {
       background = scheme.primary.withValues(alpha: 0.30);
       borderColor = fz.accent;
       borderWidth = 3;
@@ -494,40 +496,42 @@ class _ZoneCell extends StatelessWidget {
       borderWidth = 1;
     }
 
-    return Container(
-      margin: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: background,
-        border: Border.all(color: borderColor, width: borderWidth),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (locked)
-              const Icon(Icons.lock, size: 17, color: Colors.white)
-            else if (outcome != null)
-              Icon(_outcomeIcon(outcome!), size: 17, color: Colors.white),
-            if (locked || outcome != null) const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                _zoneLabel(zone),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  shadows: const [
-                    Shadow(color: Colors.black54, blurRadius: 3),
-                  ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: background,
+          border: Border.all(color: borderColor, width: borderWidth),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (outcome != null)
+                Icon(_outcomeIcon(outcome!), size: 17, color: Colors.white),
+              if (outcome != null) const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _zoneLabel(zone),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    shadows: const [
+                      Shadow(color: Colors.black54, blurRadius: 3),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -577,9 +581,10 @@ class _KeeperMarker extends StatelessWidget {
 }
 
 class _PowerMeter extends StatelessWidget {
-  const _PowerMeter({required this.shake});
+  const _PowerMeter({required this.shake, this.band});
 
   final double shake;
+  final PowerBand? band;
 
   @override
   Widget build(BuildContext context) {
@@ -587,49 +592,106 @@ class _PowerMeter extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Puncak ayunan ${shake.toStringAsFixed(1)}',
-            style: theme.textTheme.labelLarge),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          runSpacing: 4,
+          children: [
+            Text('Puncak ayunan ${shake.toStringAsFixed(1)} m/s²',
+                style: theme.textTheme.labelLarge),
+            if (band != null)
+              Text(_bandLabel(band!), style: theme.textTheme.labelLarge),
+          ],
+        ),
         const SizedBox(height: 6),
         LayoutBuilder(
-          builder: (context, constraints) => SizedBox(
-            height: 18,
-            child: Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: LinearProgressIndicator(
-                    value: (shake / 20).clamp(0.0, 1.0),
-                    minHeight: 12,
-                    color: theme.colorScheme.primary,
-                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  ),
-                ),
-                for (final threshold in [4.0, 8.0, 16.0])
-                  Positioned(
-                    left: constraints.maxWidth * threshold / 20 - 1,
-                    child: Container(
-                      width: 2,
-                      height: 18,
-                      color: theme.colorScheme.onSurface,
+          builder: (context, constraints) {
+            const scale = tooHardPowerThreshold + sweetPowerThreshold;
+            return SizedBox(
+              height: 18,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  Positioned.fill(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: sweetPowerThreshold.toInt(),
+                          child: _meterSegment(
+                            theme.colorScheme.tertiary,
+                            isFirst: true,
+                          ),
+                        ),
+                        Expanded(
+                          flex: (tooHardPowerThreshold - sweetPowerThreshold)
+                              .toInt(),
+                          child: _meterSegment(theme.colorScheme.primary),
+                        ),
+                        Expanded(
+                          flex: sweetPowerThreshold.toInt(),
+                          child: _meterSegment(
+                            theme.colorScheme.error,
+                            isLast: true,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-              ],
-            ),
-          ),
+                  for (final threshold in [
+                    weakPowerThreshold,
+                    sweetPowerThreshold,
+                    tooHardPowerThreshold,
+                  ])
+                    Positioned(
+                      left: constraints.maxWidth * threshold / scale - 1,
+                      child: Container(
+                        width: 2,
+                        height: 18,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  Positioned(
+                    left: (constraints.maxWidth * shake / scale - 2)
+                        .clamp(0.0, constraints.maxWidth - 4),
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.black87),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         const SizedBox(height: 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Lemah <4', style: theme.textTheme.labelSmall),
-            Text('Sweet 8–16', style: theme.textTheme.labelSmall),
-            Text('Terlalu keras >16', style: theme.textTheme.labelSmall),
+            Text('Lemah', style: theme.textTheme.labelSmall),
+            Text('Pas', style: theme.textTheme.labelSmall),
+            Text('Terlalu keras', style: theme.textTheme.labelSmall),
           ],
         ),
       ],
     );
   }
+
+  Widget _meterSegment(Color color,
+          {bool isFirst = false, bool isLast = false}) =>
+      DecoratedBox(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.horizontal(
+            left: isFirst ? const Radius.circular(8) : Radius.zero,
+            right: isLast ? const Radius.circular(8) : Radius.zero,
+          ),
+        ),
+      );
 }
 
 class _ResultOverlay extends StatelessWidget {
@@ -647,7 +709,7 @@ class _ResultOverlay extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -746,31 +808,19 @@ class _PhaseControls extends StatelessWidget {
       );
     }
 
-    if (state.phase == Phase.locked) {
-      return SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: notifier.startSwing,
-          icon: const Icon(Icons.sports_soccer),
-          label: const Text('Ayun'),
-        ),
-      );
-    }
-
-    if (state.phase == Phase.swinging) {
-      return SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: notifier.cancelSwing,
-          icon: const Icon(Icons.close),
-          label: const Text('Batal'),
-        ),
-      );
-    }
-
     if (state.phase == Phase.aiming) {
+      if (state.demo) {
+        return SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: notifier.demoKick,
+            icon: const Icon(Icons.sports_soccer),
+            label: const Text('Tendang'),
+          ),
+        );
+      }
       return Text(
-        'Bidik salah satu zona gawang atau geser cepat untuk menendang.',
+        'Geser cepat di gawang untuk tendangan alternatif.',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodySmall,
       );

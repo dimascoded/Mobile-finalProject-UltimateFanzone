@@ -42,12 +42,6 @@ class ProfileTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final email = ref.watch(userEmailProvider);
     final photo = ref.watch(profilePhotoProvider);
-    final displayName = email.valueOrNull
-            ?.split('@')
-            .first
-            .replaceAll(RegExp(r'[._-]+'), ' ')
-            .trim() ??
-        '';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 104),
@@ -60,7 +54,6 @@ class ProfileTab extends ConsumerWidget {
                 email: email,
                 photoPath: photo,
                 onChoosePhoto: () => _choosePhoto(context, ref),
-                displayName: displayName,
               ),
               const SizedBox(height: AppSpacing.xl),
               const ProfileStats(),

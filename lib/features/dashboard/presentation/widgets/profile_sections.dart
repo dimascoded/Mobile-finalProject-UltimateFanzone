@@ -48,7 +48,6 @@ class ProfileStats extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stamps = ref.watch(stampsProvider);
-    final ownedClubs = ref.watch(ownedClubsProvider);
     final chain = ref.watch(chainProvider);
     final achievements = chain.where((b) => b.type == 'achievement').length;
 
@@ -72,9 +71,9 @@ class ProfileStats extends ConsumerWidget {
         Expanded(
           child: StatTile(
             icon: const Icon(Icons.style_outlined),
-            value: '${ownedClubs.length}',
+            value: '${ref.watch(cardCollectionProvider).length}',
             label: 'Kartu',
-            detail: 'Card Collection',
+            detail: '${ref.watch(ownedClubsProvider).length} klub',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -111,8 +110,6 @@ class ProfileSections extends ConsumerWidget {
     final kickoffLeads = ref.watch(kickoffLeadsProvider);
     final sync = ref.watch(syncProvider);
     final lastSync = ref.watch(lastSyncedAtProvider);
-    final ownedClubs = ref.watch(ownedClubsProvider);
-
     return Column(
       children: [
         SettingsSection(
@@ -134,7 +131,8 @@ class ProfileSections extends ConsumerWidget {
             SettingsTile(
               icon: const Icon(Icons.style_outlined),
               title: 'Koleksi Kartu',
-              subtitle: '${ownedClubs.length} klub terkumpul',
+              subtitle:
+                  '${ref.watch(cardCollectionProvider).length} kartu • ${ref.watch(ownedClubsProvider).length} klub',
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,

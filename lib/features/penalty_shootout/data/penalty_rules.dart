@@ -29,6 +29,7 @@ enum ShotOutcome { goal, saved, overBar }
 const double weakPowerThreshold = 4;
 const double sweetPowerThreshold = 8;
 const double tooHardPowerThreshold = 16;
+const double kickTriggerThreshold = 5;
 const double aimColumnThreshold = 0.12;
 const double aimTopThreshold = 0.15;
 

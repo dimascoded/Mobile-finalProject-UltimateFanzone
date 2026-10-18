@@ -8,14 +8,14 @@ import '../../../core/database/hive_service.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../data/penalty_rules.dart';
 
-enum Phase { aiming, locked, swinging, resolved, finished }
+enum Phase { aiming, swinging, resolved, finished }
 
-const swingWindow = Duration(milliseconds: 1500);
 const peakSettleDelay = Duration(milliseconds: 350);
 const sensorThrottle = Duration(milliseconds: 66);
-const aimLockDelay = Duration(milliseconds: 500);
+const kickCooldown = Duration(milliseconds: 600);
+const aimHistoryWindow = Duration(milliseconds: 500);
+const aimLatchOffset = Duration(milliseconds: 200);
 const _sensorWatchdogDelay = Duration(seconds: 1);
-const _swingTickInterval = Duration(milliseconds: 50);
 const _mintDayKey = 'penalty_block_day';
 const _maximumFlickSpeed = 1.0;
 const _maximumFlickShake = 20.0;
@@ -24,7 +24,6 @@ class PenaltyState {
   const PenaltyState({
     this.phase = Phase.aiming,
     this.zone = KickZone.bottomMid,
-    this.lockedZone,
     this.shake = 0,
     this.results = const [],
     this.last,
@@ -32,12 +31,10 @@ class PenaltyState {
     this.demo = false,
     this.minted = false,
     this.suddenDeath = false,
-    this.swingSecondsLeft = 0,
   });
 
   final Phase phase;
   final KickZone zone;
-  final KickZone? lockedZone;
   final double shake;
   final List<KickResult> results;
   final KickResult? last;
@@ -45,7 +42,6 @@ class PenaltyState {
   final bool demo;
   final bool minted;
   final bool suddenDeath;
-  final double swingSecondsLeft;
 
   int get goals =>
       results.where((result) => result.outcome == ShotOutcome.goal).length;
@@ -57,8 +53,6 @@ class PenaltyState {
   PenaltyState copyWith({
     Phase? phase,
     KickZone? zone,
-    KickZone? lockedZone,
-    bool clearLockedZone = false,
     double? shake,
     List<KickResult>? results,
     KickResult? last,
@@ -67,12 +61,10 @@ class PenaltyState {
     bool? demo,
     bool? minted,
     bool? suddenDeath,
-    double? swingSecondsLeft,
   }) =>
       PenaltyState(
         phase: phase ?? this.phase,
         zone: zone ?? this.zone,
-        lockedZone: clearLockedZone ? null : (lockedZone ?? this.lockedZone),
         shake: shake ?? this.shake,
         results: results ?? this.results,
         last: clearLast ? null : (last ?? this.last),
@@ -80,7 +72,6 @@ class PenaltyState {
         demo: demo ?? this.demo,
         minted: minted ?? this.minted,
         suddenDeath: suddenDeath ?? this.suddenDeath,
-        swingSecondsLeft: swingSecondsLeft ?? this.swingSecondsLeft,
       );
 }
 
@@ -90,10 +81,18 @@ final penaltyProvider =
 );
 
 class PenaltyNotifier extends StateNotifier<PenaltyState> {
-  PenaltyNotifier(this._ref) : super(const PenaltyState()) {
-    _accelSub = accelerometerEventStream(
-      samplingPeriod: const Duration(milliseconds: 20),
-    ).listen(
+  PenaltyNotifier(
+    this._ref, {
+    Stream<AccelerometerEvent> Function()? accelerometer,
+    DateTime Function()? clock,
+  })  : _clock = clock ?? DateTime.now,
+        super(const PenaltyState()) {
+    _aimingEnteredAt = _clock();
+    _accelSub = (accelerometer ??
+            () => accelerometerEventStream(
+                  samplingPeriod: const Duration(milliseconds: 20),
+                ))()
+        .listen(
       _onAccel,
       onError: (Object _) {
         if (!mounted) return;
@@ -108,22 +107,20 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
   }
 
   final Ref _ref;
+  final DateTime Function() _clock;
   final Random _rnd = Random();
   StreamSubscription<AccelerometerEvent>? _accelSub;
 
   Timer? _sensorWatchdog;
-  Timer? _aimLockTimer;
   Timer? _peakTimer;
-  Timer? _swingTimer;
 
   bool _sensorSeen = false;
   bool _needsPitchBaseline = true;
-  bool _swingTriggered = false;
   double? _pitchBaseline;
   double _peak = 0;
-  KickZone? _candidateZone;
-  KickZone? _demoKickZone;
-  DateTime? _swingStartedAt;
+  KickZone? _latchedZone;
+  DateTime _aimingEnteredAt = DateTime.fromMillisecondsSinceEpoch(0);
+  final List<({DateTime timestamp, KickZone zone})> _aimHistory = [];
   DateTime _lastSensorEmit = DateTime.fromMillisecondsSinceEpoch(0);
 
   void _onAccel(AccelerometerEvent event) {
@@ -146,156 +143,67 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
         roll: roll,
         pitchDelta: pitch - (_pitchBaseline ?? pitch),
       );
-      changed = _trackAimZone(aimZone);
+      changed = aimZone != state.zone;
+      if (changed) state = state.copyWith(zone: aimZone);
+      _recordAim(_clock(), aimZone);
+      if (shake > kickTriggerThreshold &&
+          _clock().difference(_aimingEnteredAt) >= kickCooldown) {
+        _beginSwing(zone: _latchedAim(_clock()), initialPeak: shake);
+        changed = true;
+      }
     } else if (state.phase == Phase.swinging) {
       if (shake > _peak) {
         _peak = shake;
         changed = true;
       }
-      if (shake > 4 && !_swingTriggered) {
-        _swingTriggered = true;
-        _schedulePeakKick();
-      }
     }
 
     final demoChanged = state.demo;
-    final now = DateTime.now();
+    final now = _clock();
     if (now.difference(_lastSensorEmit) < sensorThrottle) return;
     _lastSensorEmit = now;
     if (changed || demoChanged) {
       state = state.copyWith(
-        zone: aimZone,
         shake: state.phase == Phase.swinging ? _peak : state.shake,
         demo: false,
       );
     }
   }
 
-  bool _trackAimZone(KickZone zone) {
-    if (_candidateZone == zone) return false;
-    _candidateZone = zone;
-    _aimLockTimer?.cancel();
-    _aimLockTimer = Timer(aimLockDelay, () {
-      if (!mounted || state.phase != Phase.aiming || _candidateZone != zone) {
-        return;
-      }
-      _lock(zone);
-    });
-    return true;
+  void _recordAim(DateTime timestamp, KickZone zone) {
+    _aimHistory.add((timestamp: timestamp, zone: zone));
+    final cutoff = timestamp.subtract(aimHistoryWindow);
+    _aimHistory.removeWhere((sample) => sample.timestamp.isBefore(cutoff));
   }
 
-  void _lock(KickZone zone) {
+  KickZone _latchedAim(DateTime triggerTime) {
+    if (_aimHistory.isEmpty) return state.zone;
+    final target = triggerTime.subtract(aimLatchOffset);
+    final priorSamples = _aimHistory
+        .where((sample) => !sample.timestamp.isAfter(target))
+        .toList(growable: false);
+    if (priorSamples.isNotEmpty) return priorSamples.last.zone;
+    return _aimHistory.first.zone;
+  }
+
+  void _beginSwing({required KickZone zone, required double initialPeak}) {
     if (state.phase != Phase.aiming) return;
-    _aimLockTimer?.cancel();
-    _aimLockTimer = null;
-    state = state.copyWith(
-      phase: Phase.locked,
-      zone: zone,
-      lockedZone: zone,
-      shake: 0,
-      swingSecondsLeft: 0,
-    );
-  }
-
-  /// Lock the current crosshair zone when the player taps the screen.
-  void lockNow() {
-    if (state.phase != Phase.aiming) return;
-    _lock(_candidateZone ?? state.zone);
-  }
-
-  /// Start the swing-detection window from a locked zone.
-  void startSwing() {
-    if (state.phase != Phase.locked || state.lockedZone == null) return;
-    _cancelSwingTimers();
-    _peak = 0;
-    _swingTriggered = false;
-    _demoKickZone = null;
-    _swingStartedAt = DateTime.now();
-
-    if (state.demo) {
-      final shot = demoShot(_rnd);
-      _demoKickZone = zoneFromAim(
-        roll: shot.roll,
-        pitchDelta: shot.pitchDelta,
-      );
-      _peak = shot.shake;
-      _swingTriggered = true;
-      state = state.copyWith(
-        phase: Phase.swinging,
-        zone: _demoKickZone!,
-        lockedZone: _demoKickZone,
-        shake: _peak,
-        swingSecondsLeft: swingWindow.inMilliseconds / 1000,
-      );
-      _schedulePeakKick();
-    } else {
-      state = state.copyWith(
-        phase: Phase.swinging,
-        shake: 0,
-        swingSecondsLeft: swingWindow.inMilliseconds / 1000,
-      );
-    }
-
-    _swingTimer = Timer.periodic(_swingTickInterval, (_) => _tickSwing());
-  }
-
-  void _tickSwing() {
-    if (!mounted || state.phase != Phase.swinging) {
-      _swingTimer?.cancel();
-      _swingTimer = null;
-      return;
-    }
-    final elapsed =
-        DateTime.now().difference(_swingStartedAt ?? DateTime.now());
-    final left = swingWindow - elapsed;
-    if (left <= Duration.zero) {
-      if (!_swingTriggered) {
-        cancelSwing();
-        return;
-      }
-      _swingTimer?.cancel();
-      _swingTimer = null;
-      state = state.copyWith(swingSecondsLeft: 0, shake: _peak);
-      return;
-    }
-    state = state.copyWith(
-      swingSecondsLeft: left.inMilliseconds / 1000,
-      shake: _peak,
-    );
-  }
-
-  void _schedulePeakKick() {
+    _peakTimer?.cancel();
+    _latchedZone = zone;
+    _peak = initialPeak;
+    state = state.copyWith(phase: Phase.swinging, zone: zone, shake: _peak);
     _peakTimer?.cancel();
     _peakTimer = Timer(peakSettleDelay, () {
       _peakTimer = null;
       if (!mounted || state.phase != Phase.swinging) return;
-      final zone = _demoKickZone ?? state.lockedZone ?? state.zone;
-      unawaited(_kick(zone: zone, peak: _peak));
+      unawaited(_kick(zone: _latchedZone ?? state.zone, peak: _peak));
     });
   }
 
-  void _returnToAiming() {
-    _cancelSwingTimers();
-    _aimLockTimer?.cancel();
-    _aimLockTimer = null;
-    _needsPitchBaseline = true;
-    _pitchBaseline = null;
-    _candidateZone = null;
-    _peak = 0;
-    _swingTriggered = false;
-    _swingStartedAt = null;
-    state = state.copyWith(
-      phase: Phase.aiming,
-      clearLockedZone: true,
-      shake: 0,
-      swingSecondsLeft: 0,
-    );
-  }
-
-  /// Cancel the active swing and return to aiming without changing the session.
-  void cancelSwing() {
-    if (state.phase != Phase.swinging) return;
-    _returnToAiming();
+  /// Select a zone when no accelerometer is available.
+  void selectZone(KickZone zone) {
+    if (!state.demo || state.phase != Phase.aiming) return;
+    state = state.copyWith(zone: zone);
   }
 
   /// Gesture fallback; `speed` is normalized from 0 (slow) to 1 (fast).
@@ -304,48 +212,53 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     required double dy,
     required double speed,
   }) async {
-    if (state.phase != Phase.aiming && state.phase != Phase.locked) return;
+    if (state.phase != Phase.aiming) return;
     _cancelSwingTimers();
     final zone = zoneFromAim(roll: dx, pitchDelta: dy);
     final shake = speed.clamp(0.0, _maximumFlickSpeed) * _maximumFlickShake;
+    _latchedZone = zone;
+    _peak = shake;
     state = state.copyWith(
       phase: Phase.swinging,
       zone: zone,
-      lockedZone: zone,
       shake: shake,
     );
     await _kick(zone: zone, peak: shake);
+  }
+
+  /// Kick the selected zone with demo power when sensors are unavailable.
+  void demoKick() {
+    if (!state.demo || state.phase != Phase.aiming) return;
+    final shot = demoShot(_rnd);
+    _latchedZone = state.zone;
+    _peak = shot.shake;
+    state = state.copyWith(phase: Phase.swinging, shake: _peak);
+    _peakTimer?.cancel();
+    _peakTimer = Timer(peakSettleDelay, () {
+      _peakTimer = null;
+      if (!mounted || state.phase != Phase.swinging) return;
+      unawaited(_kick(zone: _latchedZone!, peak: _peak));
+    });
   }
 
   /// Continue to the next attempt. The last result is cleared only here.
   void next() {
     if (state.phase != Phase.resolved) return;
     _cancelSwingTimers();
-    _needsPitchBaseline = true;
-    _pitchBaseline = null;
-    _candidateZone = null;
+    _enterAiming();
     _peak = 0;
-    _swingTriggered = false;
-    _demoKickZone = null;
     state = state.copyWith(
       phase: Phase.aiming,
-      clearLockedZone: true,
       clearLast: true,
       shake: 0,
-      swingSecondsLeft: 0,
     );
   }
 
   /// Start a fresh session. `last` remains visible until `next()` clears it.
   void reset() {
     _cancelAllTimers();
-    _needsPitchBaseline = true;
-    _pitchBaseline = null;
-    _candidateZone = null;
+    _enterAiming();
     _peak = 0;
-    _swingTriggered = false;
-    _demoKickZone = null;
-    _swingStartedAt = null;
     state = PenaltyState(
       phase: Phase.aiming,
       zone: KickZone.bottomMid,
@@ -373,13 +286,11 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     state = state.copyWith(
       phase: finished ? Phase.finished : Phase.resolved,
       zone: zone,
-      lockedZone: zone,
       results: results,
       last: result,
       shake: peak,
       score: sessionScore(results),
       suddenDeath: suddenDeath,
-      swingSecondsLeft: 0,
     );
     if (finished) await _mintAchievement();
   }
@@ -387,22 +298,25 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
   void _cancelSwingTimers() {
     _peakTimer?.cancel();
     _peakTimer = null;
-    _swingTimer?.cancel();
-    _swingTimer = null;
-    _swingStartedAt = null;
   }
 
   void _cancelAllTimers() {
     _cancelSwingTimers();
-    _aimLockTimer?.cancel();
-    _aimLockTimer = null;
     _sensorWatchdog?.cancel();
     _sensorWatchdog = null;
   }
 
+  void _enterAiming() {
+    _needsPitchBaseline = true;
+    _pitchBaseline = null;
+    _latchedZone = null;
+    _aimingEnteredAt = _clock();
+    _aimHistory.clear();
+  }
+
   Future<void> _mintAchievement() async {
     if (state.minted || state.goals <= 0) return;
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = _clock().toIso8601String().substring(0, 10);
     if (HiveService.cache.get(_mintDayKey) == today) {
       if (mounted) state = state.copyWith(minted: true);
       return;

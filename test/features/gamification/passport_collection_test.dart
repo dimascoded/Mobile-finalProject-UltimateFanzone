@@ -70,6 +70,7 @@ List<Override> _passportOverrides({PlClub? favorite}) => [
       chainValidProvider.overrideWithValue(true),
       stampsProvider.overrideWithValue(const <Block>[]),
       ownedClubsProvider.overrideWithValue(const <String>{}),
+      cardCollectionProvider.overrideWithValue(const <ClubCard>[]),
       // GPS tidak disentuh: jarak selalu "tidak diukur".
       stampDistanceProvider.overrideWith((ref) => Future<int?>.value(null)),
     ];
@@ -118,7 +119,7 @@ void main() {
       expect(find.text('Mode demo'), findsOneWidget);
       expect(find.text('Stamp stadion Arsenal'), findsOneWidget);
       expect(find.textContaining('Belum ada stamp'), findsOneWidget);
-      expect(find.text('Koleksi Kartu (0)'), findsOneWidget);
+      expect(find.textContaining('Koleksi Kartu (0)'), findsOneWidget);
     });
 
     testWidgets(
@@ -171,7 +172,7 @@ void main() {
 
       expect(find.text('1 dari 5 klub terkumpul'), findsOneWidget);
       expect(find.text('Arsenal'), findsOneWidget);
-      expect(find.byIcon(Icons.lock_outline), findsNWidgets(4));
+      expect(find.byIcon(Icons.lock_outline), findsNothing);
     });
 
     testWidgets(

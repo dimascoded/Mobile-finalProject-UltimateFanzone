@@ -12,6 +12,7 @@ import '../../football/data/models.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
+import '../data/prediction_rank.dart';
 import '../data/prediction_repository.dart';
 import '../providers/prediction_provider.dart';
 
@@ -85,6 +86,8 @@ class PredictionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final points = ref.watch(predictionPointsProvider);
+    final rank = rankFor(points);
+    final next = nextRank(points);
     final pending = ref.watch(unsettledPredictionsProvider);
     final history = ref.watch(predictionHistoryProvider);
     final snapshot = ref.watch(matchesProvider).valueOrNull;
@@ -100,11 +103,71 @@ class PredictionScreen extends ConsumerWidget {
                 AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
             children: [
               AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        PillBadge(label: rank.name, tone: PillTone.accent),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            '$points poin',
+                            textAlign: TextAlign.end,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    LinearProgressIndicator(value: progressToNext(points)),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      next == null
+                          ? 'Peringkat tertinggi'
+                          : '${next.min - points} poin lagi menuju ${next.name}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Setiap naik peringkat kamu dapat 1 Kartu Klub',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppCard(
                 padding: EdgeInsets.zero,
-                child: ListTile(
-                  leading: const Icon(Icons.stars_outlined),
-                  title: Text('$points poin'),
-                  subtitle: const Text('Hanya poin, tanpa odds atau uang'),
+                child: ExpansionTile(
+                  title: const Text('Cara dapat poin'),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        AppSpacing.md,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          'Tebakan pas: 3 poin',
+                          'Meleset 1 gol: 2 poin',
+                          'Meleset 2 gol: 1 poin',
+                          'Arah hasil benar (menang/seri/kalah): +1 poin',
+                          'Maksimal 4 poin per laga',
+                          'Tanpa taruhan atau uang',
+                        ]
+                            .map((line) => Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: AppSpacing.xs),
+                                  child: Text(line),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (pending.isNotEmpty) ...[
@@ -193,9 +256,11 @@ class _SettleTileState extends ConsumerState<_SettleTile> {
                       content: Text(
                         r == null
                             ? 'Gagal membuka prediksi'
-                            : r.valid
-                                ? 'Prediksi sah! +${r.points} poin'
-                                : 'Prediksi tidak sah, 0 poin',
+                            : r.rankUp != null
+                                ? 'Naik peringkat: ${r.rankUp!.name}! Kamu dapat 1 Kartu Klub.'
+                                : r.valid
+                                    ? 'Prediksi sah! +${r.points} poin'
+                                    : 'Prediksi tidak sah, 0 poin',
                       ),
                     ),
                   );

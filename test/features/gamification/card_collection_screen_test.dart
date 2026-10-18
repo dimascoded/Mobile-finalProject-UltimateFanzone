@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide shortHash;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ultimate_fanzone/core/theme/app_theme.dart';
 import 'package:ultimate_fanzone/features/football/data/models.dart';
 import 'package:ultimate_fanzone/features/football/providers/football_providers.dart';
 import 'package:ultimate_fanzone/features/gamification/domain/club_card.dart';
@@ -47,14 +48,29 @@ final _clubs = <PlClub>[
   club('fulham', 'Fulham', 'FUL'),
 ];
 
-Widget wrap(List<ClubCard> cards, {Widget? child}) => ProviderScope(
+Widget wrap(
+  List<ClubCard> cards, {
+  Widget? child,
+  ThemeData? theme,
+  double textScale = 1.0,
+}) =>
+    ProviderScope(
       overrides: [
         clubsProvider.overrideWith((ref) async => _clubs),
         clubCrestProvider.overrideWithValue(const <String, String>{}),
         chainValidProvider.overrideWithValue(true),
         cardCollectionProvider.overrideWithValue(cards),
       ],
-      child: MaterialApp(home: child ?? const CardCollectionScreen()),
+      child: MaterialApp(
+        theme: theme,
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child ?? const CardCollectionScreen(),
+          ),
+        ),
+      ),
     );
 
 void main() {
@@ -80,14 +96,66 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('3 dari 5 klub terkumpul'), findsOneWidget);
-    expect(find.text('ARS'), findsOneWidget);
+    expect(find.text('ARS'), findsAtLeastNWidgets(1));
     expect(find.text('CHE'), findsOneWidget);
     expect(find.text('LIV'), findsOneWidget);
-    expect(find.text('Epik x2'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline), findsNWidgets(2));
-    expect(find.text('Everton'), findsOneWidget);
-    expect(find.text('Fulham'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsNothing);
   });
+
+  testWidgets('satu klub beberapa rarity tampil sebagai kartu terpisah',
+      (tester) async {
+    final cards = [
+      card('arsenal', rarity: CardRarity.common, blockIndex: 1),
+      card('arsenal', rarity: CardRarity.epic, blockIndex: 2),
+    ];
+    await tester.pumpWidget(wrap(cards));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ARS'), findsNWidgets(2));
+    expect(find.text('Biasa'), findsOneWidget);
+    expect(find.text('Epik'), findsOneWidget);
+  });
+
+  testWidgets('pilih chip Epik menampilkan semua klub, yang belum terkunci',
+      (tester) async {
+    final cards = [
+      card('arsenal', rarity: CardRarity.common, blockIndex: 1),
+      card('arsenal', rarity: CardRarity.epic, blockIndex: 2),
+    ];
+    await tester.pumpWidget(wrap(cards));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Epik (1)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ARS'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsNWidgets(4));
+    expect(find.text('Biasa'), findsNothing);
+  });
+
+  for (final theme in {'light': AppTheme.light, 'dark': AppTheme.dark}.entries) {
+    testWidgets('320dp + textScaler 1.3 ${theme.key} tanpa exception',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        wrap(
+          [
+            card('arsenal', rarity: CardRarity.common, blockIndex: 1),
+            card('arsenal', rarity: CardRarity.epic, blockIndex: 2),
+            card('chelsea', rarity: CardRarity.rare, blockIndex: 3),
+          ],
+          theme: theme.value,
+          textScale: 1.3,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('tap kartu milik sendiri membuka sheet bukti keaslian',
       (tester) async {
@@ -96,7 +164,7 @@ void main() {
     await tester.pumpWidget(wrap(cards));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Arsenal'));
+    await tester.tap(find.text('Arsenal').first);
     await tester.pumpAndSettle();
 
     expect(find.text('Bukti keaslian'), findsOneWidget);

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:ultimate_fanzone/core/database/hive_service.dart';
 import 'package:ultimate_fanzone/core/theme/app_theme.dart';
 import 'package:ultimate_fanzone/core/ui/app_images.dart';
@@ -65,8 +66,25 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(_app(const PenaltyScreen(), brightness));
+      late PenaltyNotifier notifier;
+      await tester.pumpWidget(
+        _app(
+          const PenaltyScreen(),
+          brightness,
+          onPenaltyNotifier: (value) => notifier = value,
+        ),
+      );
       await tester.pumpAndSettle();
+      expect(notifier.state.demo, isTrue);
+
+      expect(
+        find.text(
+          'Miringkan HP untuk membidik, lalu ayunkan untuk menendang. '
+          'Makin kencang ayunannya, makin kuat tendangannya.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('kunci'), findsNothing);
 
       for (final label in zoneLabels) {
         expect(find.text(label), findsOneWidget);
@@ -76,7 +94,20 @@ void main() {
       _expectGoalImageVisibleThroughCells(tester, zoneLabels);
       await tester.tap(find.text('Kiri atas'));
       await tester.pump();
-      expect(find.text('Ayun'), findsOneWidget);
+      expect(notifier.state.zone, KickZone.topLeft);
+      await tester.scrollUntilVisible(
+        find.text('Tendang'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Tendang'), findsOneWidget);
+      await tester.tap(find.text('Tendang'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(notifier.state.last?.zone, KickZone.topLeft);
+      expect(find.text('Lemah'), findsWidgets);
+      expect(find.text('Pas'), findsWidgets);
+      expect(find.text('Terlalu keras'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -102,9 +133,21 @@ void main() {
   }
 }
 
-Widget _app(Widget screen, Brightness brightness) => ProviderScope(
+Widget _app(
+  Widget screen,
+  Brightness brightness, {
+  void Function(PenaltyNotifier)? onPenaltyNotifier,
+}) =>
+    ProviderScope(
       overrides: [
-        penaltyProvider.overrideWith((ref) => PenaltyNotifier(ref)),
+        penaltyProvider.overrideWith((ref) {
+          final notifier = PenaltyNotifier(
+            ref,
+            accelerometer: () => const Stream<AccelerometerEvent>.empty(),
+          );
+          onPenaltyNotifier?.call(notifier);
+          return notifier;
+        }),
         reflexProvider.overrideWith((ref) => _FixedReflexNotifier(ref)),
       ],
       child: MaterialApp(

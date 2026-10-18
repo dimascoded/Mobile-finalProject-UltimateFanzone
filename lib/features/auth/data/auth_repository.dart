@@ -198,6 +198,32 @@ class AuthRepository {
     return supa.Supabase.instance.client.auth.currentUser?.email;
   }
 
+  /// Simpan nama tampilan ke metadata Supabase (best-effort).
+  ///
+  /// Bila Supabase belum dikonfigurasi, tidak ada sesi, atau request gagal,
+  /// method tetap selesai normal tanpa melempar — nama lokal di Hive tetap
+  /// menjadi sumber kebenaran utama.
+  Future<void> saveDisplayName(String name) async {
+    if (!_usesSupabase) return;
+    if (supa.Supabase.instance.client.auth.currentUser == null) return;
+    try {
+      await supa.Supabase.instance.client.auth.updateUser(
+        supa.UserAttributes(data: {'display_name': name}),
+      );
+    } catch (_) {
+      // Best-effort: abaikan semua galat.
+    }
+  }
+
+  /// Baca nama tampilan dari metadata pengguna Supabase yang sedang masuk.
+  /// Mengembalikan null bila Supabase tidak dikonfigurasi atau tidak ada nama.
+  String? cloudDisplayName() {
+    if (!_usesSupabase) return null;
+    final meta = supa.Supabase.instance.client.auth.currentUser?.userMetadata;
+    final value = meta?['display_name'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
   /// Token JWT Supabase untuk endpoint yang butuh Authorization header.
   Future<String?> currentToken() async {
     if (!_usesSupabase) return null;
@@ -251,6 +277,7 @@ class AuthRepository {
     'score_predictions', // prediksi skor
     'passport_chain', // rantai blok + stamp
     'profile_photo_path', // foto profil
+    'profile_display_name', // nama tampilan lokal
     'pam_feedback', // kesan dan saran
     'notified_results', // daftar laga yang sudah dinotifikasi
     'penalty_block_day', // harian penalty

@@ -63,7 +63,7 @@ class HomeStats extends ConsumerWidget {
               child: StatTile(
                 label: 'Kartu Klub',
                 value: '${cards.length}',
-                detail: 'terkumpul',
+                detail: '${ref.watch(ownedClubsProvider).length} klub',
                 onTap: () => go(const CardCollectionScreen()),
               ),
             ),
