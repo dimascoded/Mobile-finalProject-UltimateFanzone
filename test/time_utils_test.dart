@@ -42,6 +42,18 @@ void main() {
       expect(TimeUtils.isDst(u(2026, 1, 15, 12), 'eu'), isFalse);
       expect(TimeUtils.isDst(u(2026, 7, 15, 12), 'eu'), isTrue);
     });
+
+    test('london menghasilkan jam sipil Inggris di batas DST', () {
+      // Spring forward: 01:00 UTC 29 Mar langsung melompat ke 02:00 BST.
+      expect(TimeUtils.london(u(2026, 3, 29, 0, 59)), u(2026, 3, 29, 0, 59));
+      expect(TimeUtils.london(u(2026, 3, 29, 1, 0)), u(2026, 3, 29, 2, 0));
+      // Masih BST sehari sebelum fall back.
+      expect(TimeUtils.london(u(2026, 10, 24, 12)), u(2026, 10, 24, 13));
+      // Fall back: 01:00 UTC 25 Okt sudah GMT, jadi 01:00 lokal.
+      expect(TimeUtils.london(u(2026, 10, 25, 1)), u(2026, 10, 25, 1));
+      // Musim dingin tanpa DST.
+      expect(TimeUtils.london(u(2026, 12, 1, 12)), u(2026, 12, 1, 12));
+    });
   });
 
   group('DST Amerika (New York, offset dasar -5)', () {

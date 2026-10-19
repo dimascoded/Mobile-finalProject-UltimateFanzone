@@ -195,24 +195,17 @@ final awayDaySummaryProvider = Provider<AwayDaySummary>((ref) {
 final awayDayClockZoneProvider =
     StateProvider.autoDispose<String>((ref) => 'WIB');
 
-final awayDayClockCityProvider =
-    StateProvider.autoDispose<String?>((ref) => null);
-
-/// Kota Indonesia yang dipilih untuk menampilkan waktu surya lokalnya.
+/// Kota Indonesia yang dipilih; memilih kota menetapkan zona waktunya.
 final awayDayClockIndoCityProvider =
     StateProvider.autoDispose<String?>((ref) => null);
 
-/// Semua klub Premier League basing di Inggris, jadi zona yang relevan adalah
+/// Semua klub Premier League berbasis di Inggris, jadi zona yang relevan adalah
 /// WIB, WITA, WIT, dan London (Europe/London, DST ikut dihitung oleh TimeUtils).
-///
-/// Kunci 'UTC' menyimpan momen UTC mentah supaya perhitungan waktu surya lokal
-/// (berbasis bujur) bisa memakai acuan yang sama.
 final worldClockProvider =
     StreamProvider.autoDispose<Map<String, DateTime>>((ref) async* {
   while (true) {
     final utc = TimeUtils.nowUtc();
     yield {
-      'UTC': utc,
       'WIB': TimeUtils.wib(utc),
       'WITA': TimeUtils.wita(utc),
       'WIT': TimeUtils.wit(utc),

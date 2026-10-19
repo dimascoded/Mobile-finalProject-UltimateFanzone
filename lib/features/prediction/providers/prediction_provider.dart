@@ -16,7 +16,8 @@ import '../data/reveal_verifier.dart';
 /// Prediksi aktif milik pengguna. Salt + skor disimpan LOKAL di Hive karena
 /// belum boleh bocor sebelum kickoff. Yang masuk blockchain hanya commit-nya.
 class PredictionStore {
-  static const _key = 'score_predictions';
+  static const collection = 'score_predictions';
+  static const _key = collection;
 
   /// Parse per-item (R2): satu prediksi rusak dilewati, bukan membuat seluruh
   /// daftar hilang karena `catch -> []`.
@@ -76,6 +77,36 @@ class PredictionsNotifier extends StateNotifier<List<Prediction>> {
     await _store.save(state);
   }
 
+  /// Hapus satu prediksi yang tidak lagi bisa dibuka atau diprediksi ulang.
+  ///
+  /// Hanya boleh bila kickoff sudah lewat (atau jadwalnya tidak diketahui,
+  /// [kickoffUtc] null). Laga yang belum kickoff masih bisa ditebak, jadi
+  /// penghapusan ditolak dan prediksi tetap ada. [nowUtc] diinjeksi supaya
+  /// perilakunya bisa diuji tanpa jam asli.
+  ///
+  /// Poin dan kartu yang sudah didapat TIDAK terpengaruh: keduanya hidup di
+  /// blok result/card, bukan di baris prediksi ini.
+  Future<bool> remove(
+    int matchId, {
+    required DateTime? kickoffUtc,
+    required DateTime nowUtc,
+  }) async {
+    if (kickoffUtc != null && !kickoffUtc.isBefore(nowUtc)) return false;
+
+    final before = state.length;
+    state = state.where((e) => e.matchId != matchId).toList();
+    if (state.length == before) return false;
+
+    // Antre agar baris cloud ikut terhapus pada sinkronisasi berikutnya
+    // (mekanisme yang sama seperti pengeluaran Away Day).
+    await OfflineSyncDatabase.queueDeletion(
+      PredictionStore.collection,
+      '$matchId',
+    );
+    await _store.save(state);
+    return true;
+  }
+
   /// Terapkan hasil merge sinkronisasi (S1): daftar gabungan dari server dan
   /// perangkat ini langsung disimpan ke Hive.
   Future<void> replaceAll(List<Prediction> list) async {
@@ -116,6 +147,18 @@ class PredictionAction {
     final notifier = _ref.read(predictionsProvider.notifier);
     final existing = notifier.forMatch(match.id);
     if (existing != null) return CommitResult(existing, true);
+
+    // Jangan pernah mining blok commit kedua untuk laga yang sama. Kalau rantai
+    // sudah punya commit tapi data tebakan (salt) tidak ada di perangkat ini,
+    // prediksi baru tidak akan pernah bisa dibuka: verifyReveal selalu memakai
+    // blok commit PERTAMA (findCommitBlock), yang commit-nya dibuat dengan salt
+    // lama. Sinkronkan dulu agar prediksi asli (beserta salt-nya) kembali.
+    final chainBlocks = _ref.read(chainProvider);
+    if (findCommitBlock(chainBlocks, match.id) != null) {
+      throw Exception(
+          'Laga ini sudah pernah diprediksi dan tebakan tidak bisa dibuat '
+          'ulang.');
+    }
 
     final salt = _newSalt();
     final commit = Prediction.computeCommit(
@@ -213,59 +256,93 @@ class SettleAction {
   /// R1: kebenaran dihitung dari BLOK RANTAI lewat [verifyReveal], bukan dari
   /// nilai yang tersimpan di Hive. Mengubah skor/salt/commit di Hive tidak
   /// membuat reveal jadi sah.
-  Future<SettledPrediction?> settle(FootballMatch m, Prediction p) async {
+  ///
+  /// Pembungkus tipis [settleDetailed] supaya pemanggil lama tetap kompil.
+  Future<SettledPrediction?> settle(FootballMatch m, Prediction p) async =>
+      (await settleDetailed(m, p)).settled;
+
+  /// Versi rinci [settle]: selalu mengembalikan alasan saat gagal, sehingga UI
+  /// bisa menjelaskan kenapa sebuah prediksi belum bisa dibuka.
+  Future<({SettledPrediction? settled, String? reason, String? debug})>
+      settleDetailed(
+    FootballMatch m,
+    Prediction p,
+  ) async {
+    if (!m.hasScore) {
+      return (
+        settled: null,
+        reason: 'Skor resmi belum tersedia',
+        debug: null
+      );
+    }
+
     final chain = _ref.read(chainProvider);
     final verdict = verifyReveal(chain: chain, prediction: p, match: m);
-    if (!verdict.valid || !m.hasScore) return null;
+    if (!verdict.valid) {
+      return (settled: null, reason: verdict.reason, debug: verdict.debug);
+    }
 
-    final pointsBefore = _ref.read(predictionPointsProvider);
-    final walletFuture = _ref.read(walletAddressProvider.future);
-    final chainNotifier = _ref.read(chainProvider.notifier);
-    final owner = await walletFuture;
-    await chainNotifier.mint(
-      Prediction.blockTypeResult,
-      Prediction.resultData(
-        matchId: p.matchId,
-        salt: p.salt,
-        predHome: p.homeScore,
-        predAway: p.awayScore,
-        realHome: m.homeScore!,
-        realAway: m.awayScore!,
-        points: verdict.points,
-      ),
-      owner,
-    );
-    // Kartu milestone hanya bila tebakan benar: skor tepat atau arah hasil
-    // (menang/seri/kalah) sesuai, sama seperti bonus arah di scorePoints.
-    final exact = p.homeScore == m.homeScore! && p.awayScore == m.awayScore!;
-    final outcomeMatches = p.homeScore.compareTo(p.awayScore) ==
-        m.homeScore!.compareTo(m.awayScore!);
-    if (exact || outcomeMatches) {
-      await _ref.read(cardMinterProvider).mintCard(
-            source: 'prediction',
-            ref: 'prediction:${p.matchId}',
-          );
-    }
-    final pointsAfter = pointsBefore + verdict.points;
-    final crossedRanks = ranksCrossed(pointsBefore, pointsAfter);
-    for (final rank in crossedRanks) {
-      try {
+    try {
+      final pointsBefore = _ref.read(predictionPointsProvider);
+      final walletFuture = _ref.read(walletAddressProvider.future);
+      final chainNotifier = _ref.read(chainProvider.notifier);
+      final owner = await walletFuture;
+      await chainNotifier.mint(
+        Prediction.blockTypeResult,
+        Prediction.resultData(
+          matchId: p.matchId,
+          salt: p.salt,
+          predHome: p.homeScore,
+          predAway: p.awayScore,
+          realHome: m.homeScore!,
+          realAway: m.awayScore!,
+          points: verdict.points,
+        ),
+        owner,
+      );
+      // Kartu milestone hanya bila tebakan benar: skor tepat atau arah hasil
+      // (menang/seri/kalah) sesuai, sama seperti bonus arah di scorePoints.
+      final exact = p.homeScore == m.homeScore! && p.awayScore == m.awayScore!;
+      final outcomeMatches = p.homeScore.compareTo(p.awayScore) ==
+          m.homeScore!.compareTo(m.awayScore!);
+      if (exact || outcomeMatches) {
         await _ref.read(cardMinterProvider).mintCard(
-              source: 'rank',
-              ref: 'rank:${rank.key}',
+              source: 'prediction',
+              ref: 'prediction:${p.matchId}',
             );
-      } catch (_) {
-        // Rank rewards must not interrupt a valid settle.
       }
+      final pointsAfter = pointsBefore + verdict.points;
+      final crossedRanks = ranksCrossed(pointsBefore, pointsAfter);
+      for (final rank in crossedRanks) {
+        try {
+          await _ref.read(cardMinterProvider).mintCard(
+                source: 'rank',
+                ref: 'rank:${rank.key}',
+              );
+        } catch (_) {
+          // Rank rewards must not interrupt a valid settle.
+        }
+      }
+      return (
+        settled: SettledPrediction(
+          prediction: p,
+          realHome: m.homeScore!,
+          realAway: m.awayScore!,
+          valid: true,
+          points: verdict.points,
+          rankUp: crossedRanks.isEmpty ? null : crossedRanks.last,
+        ),
+        reason: null,
+        debug: null,
+      );
+    } catch (e) {
+      final message = e.toString().replaceFirst('Exception: ', '');
+      return (
+        settled: null,
+        reason: 'Gagal menulis blok: $message',
+        debug: null
+      );
     }
-    return SettledPrediction(
-      prediction: p,
-      realHome: m.homeScore!,
-      realAway: m.awayScore!,
-      valid: true,
-      points: verdict.points,
-      rankUp: crossedRanks.isEmpty ? null : crossedRanks.last,
-    );
   }
 }
 

@@ -26,11 +26,13 @@ class SyncResult {
     this.droppedLocalBlocks = 0,
     this.adoptedChain = false,
     this.unauthorized = false,
+    List<({String collection, String itemId})>? appliedDeletions,
   })  : // S1: kembalikan daftar hasil merge, bukan hanya jumlah, supaya
         // SyncNotifier benar-benar menerapkannya ke Hive.
         expenses = expenses ?? const [],
         predictions = predictions ?? const [],
-        remoteChain = remoteChain ?? const [];
+        remoteChain = remoteChain ?? const [],
+        appliedDeletions = appliedDeletions ?? const [];
 
   final int pushedExpenses, pushedChain, pushedPredictions;
   final int mergedExpenses, mergedPredictions;
@@ -53,6 +55,10 @@ class SyncResult {
 
   /// true = server menjawab 401, sesi harus diakhiri (S3).
   final bool unauthorized;
+
+  /// Deletion yang benar-benar berhasil diterapkan ke cloud pada siklus ini.
+  /// Hanya entri ini yang boleh ditandai tersinkron; sisanya tetap mengantre.
+  final List<({String collection, String itemId})> appliedDeletions;
 }
 
 /// Galat sinkronisasi yang membawa pesan ramah dan penanda 401 (S3).
@@ -174,10 +180,15 @@ class SyncRepository {
       throw SyncException('Masuk ke akun dulu sebelum mencadangkan.');
     }
 
-    if (deletions.isNotEmpty) {
+    final partitioned = partitionDeletions(deletions);
+    final predictionDeletions = deletions
+        .where((d) => d.collection == kPredictionCollection)
+        .toList();
+
+    if (partitioned.expenseDeletions.isNotEmpty) {
       await client.from('sync_tombstones').upsert(
         [
-          for (final deletion in deletions)
+          for (final deletion in partitioned.expenseDeletions)
             {
               'user_id': userId,
               'collection': deletion.collection,
@@ -194,7 +205,7 @@ class SyncRepository {
       userId,
     );
     final deletedExpenseIds = remoteTombstones
-        .where((row) => row['collection'] == 'away_day_expenses')
+        .where((row) => row['collection'] == kExpenseCollection)
         .map((row) => row['item_id'] as String)
         .toSet();
     if (deletedExpenseIds.isNotEmpty) {
@@ -203,6 +214,24 @@ class SyncRepository {
           .delete()
           .eq('user_id', userId)
           .inFilter('id', deletedExpenseIds.toList());
+    }
+
+    // Prediksi yang tidak bisa lagi dibuka/diprediksi ulang: hapus barisnya
+    // LANGSUNG. `sync_tombstones` tidak dipakai karena CHECK constraint-nya
+    // hanya mengizinkan 'away_day_expenses'. Bila gagal, lempar supaya antrean
+    // deletion ini tidak ditandai tersinkron dan dicoba lagi pada sinkronisasi
+    // berikutnya.
+    final deletedPredictionIds = partitioned.predictionMatchIds;
+    if (deletedPredictionIds.isNotEmpty) {
+      try {
+        await client
+            .from('score_predictions')
+            .delete()
+            .eq('user_id', userId)
+            .inFilter('match_id', deletedPredictionIds.toList());
+      } catch (e) {
+        throw SyncException('Gagal menghapus prediksi di cloud: $e');
+      }
     }
 
     final remoteExpenseRows =
@@ -251,17 +280,21 @@ class SyncRepository {
         await _selectAll(client, 'score_predictions', userId);
     final normalizedRemotePredictions = <Map<String, dynamic>>[
       for (final row in remotePredictionRows)
-        {
-          'matchId': row['match_id'],
-          'homeScore': row['home_score'],
-          'awayScore': row['away_score'],
-          'salt': row['salt'],
-          'commit': row['commit_hash'],
-          'createdAt': row['created_at'],
-        },
+        if (!deletedPredictionIds.contains((row['match_id'] as num?)?.toInt()))
+          {
+            'matchId': row['match_id'],
+            'homeScore': row['home_score'],
+            'awayScore': row['away_score'],
+            'salt': row['salt'],
+            'commit': row['commit_hash'],
+            'createdAt': row['created_at'],
+          },
     ];
-    final mergedPredictions =
-        mergePredictions(predictions, normalizedRemotePredictions);
+    final mergedPredictions = mergePredictions(
+      predictions,
+      normalizedRemotePredictions,
+      deletedMatchIds: deletedPredictionIds,
+    );
     // Setiap baris kini membawa skor dan `salt`, jadi tidak ada lagi cabang
     // commit-only: semua baris lewat upsert biasa (merge) supaya `home_score`,
     // `away_score`, dan `salt` ikut tersimpan dan bisa memulihkan prediksi yang
@@ -355,6 +388,7 @@ class SyncRepository {
       predictions: mergedPredictions,
       remoteChain: remoteChain,
       chainOutcome: outcome,
+      appliedDeletions: [...partitioned.expenseDeletions, ...predictionDeletions],
     );
   }
 

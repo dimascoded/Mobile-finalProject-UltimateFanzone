@@ -110,7 +110,14 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
   List<FootballMatch> _upcoming(PlClub club) {
     final data =
         _ref.read(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
-    final list = data.where((m) => !m.isFinished && m.involves(club)).toList()
+    final now = DateTime.now().toUtc();
+    final list = data
+        .where((m) {
+          final phase = m.phaseAt(now);
+          final soon = phase == MatchPhase.upcoming || phase == MatchPhase.live;
+          return soon && m.involves(club);
+        })
+        .toList()
       ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
     return list.take(3).toList();
   }

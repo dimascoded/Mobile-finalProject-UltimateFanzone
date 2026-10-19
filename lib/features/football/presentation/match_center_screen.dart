@@ -162,6 +162,7 @@ class _MatchTile extends ConsumerWidget {
     final fav = ref.watch(favoriteClubProvider);
     final homeFav = fav != null && fav.isTeam(match.homeName, match.homeTla);
     final awayFav = fav != null && fav.isTeam(match.awayName, match.awayTla);
+    final phase = match.phaseAt(DateTime.now().toUtc());
     FontWeight w(bool b) => b ? FontWeight.bold : FontWeight.normal;
 
     return AppCard(
@@ -175,10 +176,14 @@ class _MatchTile extends ConsumerWidget {
           children: [
             Text(match.matchday == null ? '' : 'Pekan ${match.matchday}',
                 style: theme.textTheme.bodySmall),
-            if (match.isOngoing)
+            if (phase == MatchPhase.live)
               const PillBadge(label: 'Berlangsung', tone: PillTone.accent),
-            if (match.isFinished) const PillBadge(label: 'Selesai'),
-            if (!match.isFinished && isDiniHari(match.kickoffUtc))
+            if (phase == MatchPhase.awaitingResult)
+              const PillBadge(label: 'Menunggu hasil resmi', tone: PillTone.accent),
+            if (phase == MatchPhase.finished) const PillBadge(label: 'Selesai'),
+            if (phase == MatchPhase.cancelled)
+              const PillBadge(label: 'Diundur/dibatalkan'),
+            if (phase == MatchPhase.upcoming && isDiniHari(match.kickoffUtc))
               const PillBadge(
                 label: 'Dini hari',
                 icon: Icon(Icons.nightlight, size: 14),

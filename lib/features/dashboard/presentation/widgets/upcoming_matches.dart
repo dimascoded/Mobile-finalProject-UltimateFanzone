@@ -24,9 +24,12 @@ class UpcomingMatches extends ConsumerWidget {
     final heroId = ref.watch(nextMatchProvider).valueOrNull?.id;
     final crests = ref.watch(clubCrestProvider);
 
-    final cutoff = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+    final now = DateTime.now().toUtc();
     final list = data
-        .where((m) => !m.isFinished && m.kickoffUtc.isAfter(cutoff))
+        .where((m) {
+          final phase = m.phaseAt(now);
+          return phase == MatchPhase.upcoming || phase == MatchPhase.live;
+        })
         .toList()
       ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
 

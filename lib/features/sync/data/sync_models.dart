@@ -135,6 +135,35 @@ List<AwayDayExpense> mergeExpenses(
   return out;
 }
 
+/// Koleksi cloud untuk prediksi skor (deletion lewat hapus baris langsung,
+/// sebab `sync_tombstones` hanya menerima `away_day_expenses`).
+const kPredictionCollection = 'score_predictions';
+
+/// Koleksi cloud untuk pengeluaran (deletion lewat `sync_tombstones`).
+const kExpenseCollection = 'away_day_expenses';
+
+/// Pisahkan antrean penghapusan lokal per koleksi.
+///
+/// `score_predictions` tidak bisa memakai `sync_tombstones` (CHECK constraint di
+/// schema hanya mengizinkan `away_day_expenses`), jadi id laga dikembalikan
+/// terpisah untuk dihapus langsung dari tabelnya.
+({Set<int> predictionMatchIds, List<({String collection, String itemId})>
+    expenseDeletions}) partitionDeletions(
+  List<({String collection, String itemId})> deletions,
+) {
+  final matchIds = <int>{};
+  final expenseDeletions = <({String collection, String itemId})>[];
+  for (final d in deletions) {
+    if (d.collection == kPredictionCollection) {
+      final id = int.tryParse(d.itemId);
+      if (id != null) matchIds.add(id);
+    } else if (d.collection == kExpenseCollection) {
+      expenseDeletions.add(d);
+    }
+  }
+  return (predictionMatchIds: matchIds, expenseDeletions: expenseDeletions);
+}
+
 /// Sama seperti [mergeExpenses], satu prediksi per matchId.
 ///
 /// Baris cloud kini membawa `salt` dan `commit`, jadi [Prediction.fromJson]
@@ -142,14 +171,21 @@ List<AwayDayExpense> mergeExpenses(
 /// masih commit-only (tanpa `salt`) TETAP dilewati: tanpa salt prediksi itu tidak
 /// akan pernah bisa direveal, jadi mengadopsinya hanya menambah data yang tidak
 /// bisa dipakai. Prediksi lokal selalu menang untuk matchId yang sama.
+///
+/// [deletedMatchIds] berisi matchId yang baru saja dihapus pengguna. Baris remote
+/// (sisa cadangan yang belum sempat terhapus) maupun prediksi lokal untuk id itu
+/// TIDAK dimasukkan, sehingga prediksi yang dihapus tidak "bangkit" lagi dan
+/// tidak ikut dikirim ulang.
 List<Prediction> mergePredictions(
   List<Prediction> local,
-  List<Map<String, dynamic>> remote,
-) {
+  List<Map<String, dynamic>> remote, {
+  Set<int> deletedMatchIds = const {},
+}) {
   final byMatch = <int, Prediction>{};
   for (final r in remote) {
     try {
       final p = Prediction.fromJson(r);
+      if (deletedMatchIds.contains(p.matchId)) continue;
       byMatch[p.matchId] = p;
     } catch (_) {
       continue; // commit-only lama atau baris rusak: lewati
@@ -157,6 +193,7 @@ List<Prediction> mergePredictions(
   }
   final out = <Prediction>[...byMatch.values];
   for (final l in local) {
+    if (deletedMatchIds.contains(l.matchId)) continue;
     final i = out.indexWhere((p) => p.matchId == l.matchId);
     if (i >= 0) {
       out[i] = l;

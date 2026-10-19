@@ -74,6 +74,25 @@ class FootballMatch {
       status == 'IN_PLAY' || status == 'PAUSED' || status == 'LIVE';
   bool get hasScore => homeScore != null && awayScore != null;
 
+  /// Fase laga pada [nowUtc]. Dipakai untuk memutuskan label status dan filter
+  /// "mendatang" tanpa bergantung pada jam perangkat secara implisit.
+  MatchPhase phaseAt(DateTime nowUtc) {
+    if (status == 'POSTPONED' ||
+        status == 'CANCELLED' ||
+        status == 'SUSPENDED') {
+      return MatchPhase.cancelled;
+    }
+    if (status == 'FINISHED' || status == 'AWARDED') {
+      return MatchPhase.finished;
+    }
+    if (isOngoing) return MatchPhase.live;
+    if (kickoffUtc.isAfter(nowUtc)) return MatchPhase.upcoming;
+    final elapsed = nowUtc.difference(kickoffUtc);
+    return elapsed < const Duration(minutes: 150)
+        ? MatchPhase.live
+        : MatchPhase.awaitingResult;
+  }
+
   bool involves(PlClub c) =>
       c.isTeam(homeName, homeTla) || c.isTeam(awayName, awayTla);
 
@@ -107,6 +126,9 @@ class FootballMatch {
     }
   }
 }
+
+/// Fase laga relatif terhadap waktu sekarang (lihat [FootballMatch.phaseAt]).
+enum MatchPhase { upcoming, live, awaitingResult, finished, cancelled }
 
 class StandingRow {
   const StandingRow({

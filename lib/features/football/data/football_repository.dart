@@ -30,6 +30,13 @@ class FootballRepository {
   final Dio _dio;
 
   static const _ttl = Duration(minutes: 15);
+
+  /// TTL pendek saat ada laga yang baru saja kickoff tapi belum FINISHED, supaya
+  /// skor tidak basi selama jendela pertandingan.
+  static const _recentLiveTtl = Duration(minutes: 3);
+
+  /// Seberapa lama setelah kickoff sebuah laga dianggap "baru mulai".
+  static const _recentLiveWindow = Duration(hours: 4);
   static const _keys = ['fd_matches', 'fd_standings', 'fd_scorers'];
 
   Future<FootballResult<List<FootballMatch>>> matches() => _load(
@@ -84,6 +91,28 @@ class FootballRepository {
     }
   }
 
+  /// True bila cache matches memuat laga dengan kickoff dalam 4 jam terakhir
+  /// yang belum FINISHED (skornya masih mungkin berubah).
+  static bool _hasRecentlyStartedMatch(String? raw) {
+    if (raw == null) return false;
+    try {
+      final body = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      final list = (body['matches'] as List?) ?? const [];
+      final now = DateTime.now().toUtc();
+      for (final e in list) {
+        final m = FootballMatch.tryParse(Map<String, dynamic>.from(e as Map));
+        if (m == null || m.isFinished) continue;
+        final elapsed = now.difference(m.kickoffUtc);
+        if (elapsed >= Duration.zero && elapsed <= _recentLiveWindow) {
+          return true;
+        }
+      }
+    } catch (_) {
+      // Cache rusak: biarkan _load menangani lewat jalur biasa.
+    }
+    return false;
+  }
+
   Future<FootballResult<T>> _load<T>({
     required String key,
     required String path,
@@ -94,8 +123,11 @@ class FootballRepository {
     final atMs = int.tryParse(HiveService.cache.get('${key}_at') ?? '');
     final fetchedAt =
         atMs == null ? null : DateTime.fromMillisecondsSinceEpoch(atMs);
+    final ttl = key == 'fd_matches' && _hasRecentlyStartedMatch(raw)
+        ? _recentLiveTtl
+        : _ttl;
     final fresh =
-        fetchedAt != null && DateTime.now().difference(fetchedAt) < _ttl;
+        fetchedAt != null && DateTime.now().difference(fetchedAt) < ttl;
 
     FootballResult<T>? fromCache() => raw == null
         ? null

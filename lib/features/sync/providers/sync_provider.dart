@@ -129,8 +129,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       if (AppConfig.supabaseConfigured) {
         await OfflineSyncDatabase.markSynced(pendingRevisions);
-        await OfflineSyncDatabase.markDeletionsSynced(pendingDeletions);
       }
+      // Hanya deletion yang benar-benar diterapkan ke cloud yang dibersihkan;
+      // yang gagal tetap mengantre untuk siklus berikutnya (tanpa loop).
+      await OfflineSyncDatabase.markDeletionsSynced(result.appliedDeletions);
 
       // S2: adopsi rantai cloud "cloud wins" saat rekonsiliasi memutuskan
       // demikian. Blok lokal yang tidak ada di cloud dibuang, TIDAK

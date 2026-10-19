@@ -86,6 +86,7 @@ final filteredMatchesProvider =
   final filter = ref.watch(matchFilterProvider);
   final q = ref.watch(matchQueryProvider).toLowerCase().trim();
   final fav = ref.watch(favoriteClubProvider);
+  final now = DateTime.now().toUtc();
 
   return ref.watch(matchesProvider).whenData((r) {
     final list = r.data.where((m) {
@@ -94,11 +95,14 @@ final filteredMatchesProvider =
           !m.awayName.toLowerCase().contains(q)) {
         return false;
       }
+      final phase = m.phaseAt(now);
       switch (filter) {
         case MatchFilter.upcoming:
-          return !m.isFinished;
+          return phase == MatchPhase.upcoming || phase == MatchPhase.live;
         case MatchFilter.finished:
-          return m.isFinished;
+          return phase == MatchPhase.finished ||
+              phase == MatchPhase.awaitingResult ||
+              phase == MatchPhase.cancelled;
         case MatchFilter.favorite:
           return fav != null && m.involves(fav);
         case MatchFilter.all:
@@ -117,10 +121,13 @@ final nextMatchProvider = Provider<AsyncValue<FootballMatch?>>((ref) {
   final fav = ref.watch(favoriteClubProvider);
   return ref.watch(matchesProvider).whenData<FootballMatch?>((r) {
     if (fav == null) return null;
-    final cutoff = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+    final now = DateTime.now().toUtc();
     final list = r.data
-        .where((m) =>
-            !m.isFinished && m.kickoffUtc.isAfter(cutoff) && m.involves(fav))
+        .where((m) {
+          final phase = m.phaseAt(now);
+          final soon = phase == MatchPhase.upcoming || phase == MatchPhase.live;
+          return soon && m.involves(fav);
+        })
         .toList()
       ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
     return list.isEmpty ? null : list.first;

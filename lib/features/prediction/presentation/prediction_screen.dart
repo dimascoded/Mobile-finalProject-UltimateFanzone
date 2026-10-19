@@ -12,8 +12,10 @@ import '../../football/data/models.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
+import '../../sync/providers/sync_provider.dart';
 import '../data/prediction_rank.dart';
 import '../data/prediction_repository.dart';
+import '../data/reveal_verifier.dart';
 import '../providers/prediction_provider.dart';
 
 /// Berapa-manyakismatch yang ditampilkan sekaligus (UI3).
@@ -41,9 +43,7 @@ List<FootballMatch> upcomingMatches(List<FootballMatch> matches, PlClub? fav) {
   final now = DateTime.now().toUtc();
   final list = matches
       .where((m) =>
-          !m.isFinished &&
-          !isCancelledMatch(m) &&
-          m.kickoffUtc.isAfter(now) &&
+          m.phaseAt(now) == MatchPhase.upcoming &&
           (fav == null || m.involves(fav)))
       .toList()
     ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
@@ -78,6 +78,51 @@ final predictionHistoryProvider = Provider<
   out.sort((a, b) => b.prediction.createdAt.compareTo(a.prediction.createdAt));
   return out;
 });
+
+/// Dialog konfirmasi hapus prediksi. Mengembalikan true bila user menekan
+/// "Hapus".
+Future<bool> _confirmDeletePrediction(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      content: const Text(
+        'Hapus prediksi ini? Poin dan kartu yang sudah kamu dapat tidak '
+        'berubah, dan laga ini tidak bisa diprediksi ulang.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Hapus'),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
+/// Konfirmasi lalu hapus satu prediksi. Poin/kartu yang sudah didapat tetap;
+/// yang hilang hanya baris prediksi (dan baris cloud-nya saat sync berikutnya).
+Future<void> _deletePrediction(
+  BuildContext context,
+  WidgetRef ref, {
+  required int matchId,
+  required DateTime? kickoffUtc,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  if (!await _confirmDeletePrediction(context)) return;
+  final removed = await ref.read(predictionsProvider.notifier).remove(
+        matchId,
+        kickoffUtc: kickoffUtc,
+        nowUtc: DateTime.now().toUtc(),
+      );
+  messenger.showSnackBar(SnackBar(
+    content: Text(removed ? 'Prediksi dihapus' : 'Prediksi tidak bisa dihapus'),
+  ));
+}
 
 /// Layar Prediksi Skor.
 class PredictionScreen extends ConsumerWidget {
@@ -221,67 +266,190 @@ class _SettleTile extends ConsumerStatefulWidget {
 
 class _SettleTileState extends ConsumerState<_SettleTile> {
   bool _busy = false;
+  bool _syncing = false;
+  bool _missingCommit = false;
+  bool _saltLost = false;
+  String? _debug;
+
+  Future<void> _check() async {
+    setState(() {
+      _busy = true;
+      _missingCommit = false;
+      _saltLost = false;
+      _debug = null;
+    });
+    var failed = false;
+    var hashMismatch = false;
+    String? message;
+    String? debug;
+    try {
+      final r = await ref
+          .read(settleActionProvider)
+          .settleDetailed(widget.match, widget.prediction);
+      final settled = r.settled;
+      if (settled != null) {
+        message = settled.rankUp != null
+            ? 'Naik peringkat: ${settled.rankUp!.name}! Kamu dapat 1 Kartu Klub.'
+            : settled.valid
+                ? 'Prediksi sah! +${settled.points} poin'
+                : 'Prediksi tidak sah, 0 poin';
+      } else {
+        failed = true;
+        message = r.reason ?? 'Gagal membuka prediksi';
+        debug = r.debug;
+        hashMismatch = r.reason == kHashMismatchReason;
+        debugPrint('Cek hasil gagal: $message${debug == null ? '' : ' | $debug'}');
+      }
+    } catch (e) {
+      failed = true;
+      message = e.toString().replaceFirst('Exception: ', '');
+      debugPrint('Cek hasil error: $message');
+    } finally {
+      // Selalu lepas status sibuk, termasuk saat minting/penulisan blok gagal.
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    setState(() {
+      _debug = debug;
+      _missingCommit = failed && message == kNoCommitReason;
+      _saltLost = failed && hashMismatch;
+    });
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _sync() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _syncing = true);
+    try {
+      await ref.read(syncProvider.notifier).run();
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Sinkronisasi selesai, coba cek lagi.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  Future<void> _delete() => _deletePrediction(
+        context,
+        ref,
+        matchId: widget.match.id,
+        kickoffUtc: widget.match.kickoffUtc,
+      );
 
   @override
   Widget build(BuildContext context) {
     final m = widget.match;
     return AppCard(
       padding: EdgeInsets.zero,
-      child: ListTile(
-        leading: const Icon(Icons.verified_outlined),
-        title: Row(children: [
-          ClubCrest(crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text('${m.homeShort} vs ${m.awayShort} selesai',
-                overflow: TextOverflow.ellipsis),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.verified_outlined),
+            title: Row(children: [
+              ClubCrest(crestUrl: m.homeCrest, tla: m.homeTla ?? '', size: 20),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('${m.homeShort} vs ${m.awayShort} selesai',
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 6),
+              ClubCrest(crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
+            ]),
+            subtitle: Text(
+                'Skor resmi ${m.homeScore}-${m.awayScore} - cek hasil untuk dapat poin'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!_saltLost)
+                  FilledButton(
+                    onPressed: _busy ? null : _check,
+                    child: const Text('Cek hasil'),
+                  ),
+                IconButton(
+                  tooltip: 'Hapus prediksi',
+                  onPressed: _busy ? null : _delete,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 6),
-          ClubCrest(crestUrl: m.awayCrest, tla: m.awayTla ?? '', size: 20),
-        ]),
-        subtitle: Text(
-            'Skor resmi ${m.homeScore}-${m.awayScore} - cek hasil untuk dapat poin'),
-        trailing: FilledButton(
-          onPressed: _busy
-              ? null
-              : () async {
-                  setState(() => _busy = true);
-                  final r = await ref
-                      .read(settleActionProvider)
-                      .settle(m, widget.prediction);
-                  if (!context.mounted) return;
-                  setState(() => _busy = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        r == null
-                            ? 'Gagal membuka prediksi'
-                            : r.rankUp != null
-                                ? 'Naik peringkat: ${r.rankUp!.name}! Kamu dapat 1 Kartu Klub.'
-                                : r.valid
-                                    ? 'Prediksi sah! +${r.points} poin'
-                                    : 'Prediksi tidak sah, 0 poin',
+          if (_missingCommit)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Bukti commit tidak ditemukan di rantai perangkat ini; '
+                    'coba Sinkronkan lalu cek lagi',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _syncing ? null : _sync,
+                      icon: const Icon(Icons.sync),
+                      label: const Text('Sinkronkan'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_saltLost || _debug != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_saltLost)
+                    Text(
+                      'Salt tebakan hilang, prediksi ini tidak bisa dibuka',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (_debug != null) ...[
+                    if (_saltLost) const SizedBox(height: AppSpacing.xs),
+                    Text(_debug!, style: Theme.of(context).textTheme.labelSmall),
+                  ],
+                  if (_saltLost) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _delete,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Hapus prediksi'),
                       ),
                     ),
-                  );
-                },
-          child: const Text('Cek hasil'),
-        ),
+                  ],
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _HistoryTile extends StatelessWidget {
+class _HistoryTile extends ConsumerWidget {
   const _HistoryTile({required this.entry});
 
   final ({FootballMatch? match, Prediction prediction, int? points}) entry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final m = entry.match;
+    final phase = m?.phaseAt(DateTime.now().toUtc());
+    final canDelete = m != null && m.kickoffUtc.isBefore(DateTime.now().toUtc());
     final theme = Theme.of(context);
     final p = entry.prediction;
-    final m = entry.match;
     final wib = TimeUtils.wib(p.createdAt);
     final title =
         m == null ? 'Laga #${p.matchId}' : '${m.homeShort} vs ${m.awayShort}';
@@ -289,12 +457,19 @@ class _HistoryTile extends StatelessWidget {
         ? 'Selesai • +${entry.points} poin'
         : (m == null
             ? 'Menunggu jadwal'
-            : (m.isFinished
-                ? 'Belum dicek'
-                : 'Menunggu kickoff ${TimeUtils.formatHm(TimeUtils.wib(m.kickoffUtc))} WIB'));
+            : switch (phase!) {
+                MatchPhase.upcoming =>
+                  'Menunggu kickoff ${TimeUtils.formatHm(TimeUtils.wib(m.kickoffUtc))} WIB',
+                MatchPhase.live => 'Sedang berlangsung',
+                MatchPhase.awaitingResult => 'Menunggu hasil resmi',
+                MatchPhase.finished => 'Belum dicek',
+                MatchPhase.cancelled => 'Laga diundur/dibatalkan',
+              });
     final tone = entry.points != null
         ? (entry.points! > 0 ? PillTone.success : PillTone.neutral)
-        : (m != null && m.isFinished ? PillTone.accent : PillTone.neutral);
+        : (phase == MatchPhase.finished || phase == MatchPhase.awaitingResult
+            ? PillTone.accent
+            : PillTone.neutral);
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -329,6 +504,18 @@ class _HistoryTile extends StatelessWidget {
                 '${TimeUtils.formatDate(wib)}, ${TimeUtils.formatHm(wib)} WIB',
                 style: theme.textTheme.bodySmall,
               ),
+              if (canDelete)
+                IconButton(
+                  tooltip: 'Hapus prediksi',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _deletePrediction(
+                    context,
+                    ref,
+                    matchId: p.matchId,
+                    kickoffUtc: m.kickoffUtc,
+                  ),
+                  icon: const Icon(Icons.delete_outline),
+                ),
             ],
           ),
         ],

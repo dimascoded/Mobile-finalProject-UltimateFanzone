@@ -2,6 +2,12 @@ import '../../football/data/models.dart';
 import '../../gamification/data/blockchain.dart';
 import 'prediction_repository.dart';
 
+/// Alasan saat blok commit tidak ditemukan di rantai perangkat ini.
+const String kNoCommitReason = 'Tidak ada blok commit untuk laga ini di rantai.';
+
+/// Alasan saat hash hasil buka tidak sama dengan commit di blok rantai.
+const String kHashMismatchReason = 'Hash tidak cocok dengan commit di rantai.';
+
 /// Hasil pemeriksaan reveal terhadap blok rantai.
 class RevealVerdict {
   const RevealVerdict({
@@ -9,6 +15,7 @@ class RevealVerdict {
     required this.points,
     required this.reason,
     this.commitBlock,
+    this.debug,
   });
 
   /// True hanya bila blok commit ada, commit-nya cocok dengan hash yang dihitung
@@ -23,6 +30,20 @@ class RevealVerdict {
 
   /// Blok commit yang dipakai sebagai sumber kebenaran.
   final Block? commitBlock;
+
+  /// Keterangan diagnostik saat reveal gagal (mis. jumlah blok commit untuk
+  /// laga ini). Tidak memengaruhi keputusan valid/tidak valid.
+  final String? debug;
+}
+
+/// Hitung berapa banyak blok `prediction_commit` untuk sebuah laga.
+int countCommitBlocks(List<Block> chain, int matchId) {
+  var count = 0;
+  for (final b in chain) {
+    if (b.type != Prediction.blockTypeCommit) continue;
+    if ((b.data['match'] as num?)?.toInt() == matchId) count++;
+  }
+  return count;
 }
 
 /// Ambil blok `prediction_commit` pertama untuk sebuah laga.
@@ -70,7 +91,7 @@ RevealVerdict verifyReveal({
     return const RevealVerdict(
       valid: false,
       points: 0,
-      reason: 'Tidak ada blok commit untuk laga ini di rantai.',
+      reason: kNoCommitReason,
     );
   }
 
@@ -111,11 +132,23 @@ RevealVerdict verifyReveal({
     expectedCommit: blockCommit,
   );
   if (!hashMatches) {
+    final blockCount = countCommitBlocks(chain, prediction.matchId);
+    final predPrefix = prediction.commit.length > 8
+        ? prediction.commit.substring(0, 8)
+        : prediction.commit;
+    final blockPrefix =
+        blockCommit.length > 8 ? blockCommit.substring(0, 8) : blockCommit;
+    final debug = 'match=${prediction.matchId} '
+        'blok_commit=$blockCount '
+        'pred=$predPrefix blok=$blockPrefix '
+        'at=${block.data['at']} '
+        'commit_sama=${prediction.commit == blockCommit}';
     return RevealVerdict(
       valid: false,
       points: 0,
-      reason: 'Hash tidak cocok dengan commit di rantai.',
+      reason: kHashMismatchReason,
       commitBlock: block,
+      debug: debug,
     );
   }
 

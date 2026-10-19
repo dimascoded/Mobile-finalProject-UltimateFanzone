@@ -92,7 +92,7 @@ List<FootballMatch> reminderTargets(
   final now = DateTime.now().toUtc();
   final pool = matches
       .where((m) =>
-          !m.isFinished && m.involves(favorite) && m.kickoffUtc.isAfter(now))
+          m.phaseAt(now) == MatchPhase.upcoming && m.involves(favorite))
       .toList()
     ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
   return pool.take(maxKickoffReminders).toList();

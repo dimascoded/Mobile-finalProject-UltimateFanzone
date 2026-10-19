@@ -238,10 +238,7 @@ class _WorldClock extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedZone = ref.watch(awayDayClockZoneProvider);
-    final selectedCity = ref.watch(awayDayClockCityProvider);
     final selectedIndoCity = ref.watch(awayDayClockIndoCityProvider);
-    final clubs = ref.watch(clubsProvider);
-    final theme = Theme.of(context);
 
     return AppCard(
       child: Column(
@@ -259,186 +256,91 @@ class _WorldClock extends ConsumerWidget {
             loading: () =>
                 const SizedBox(height: 40, child: LinearProgressIndicator()),
             error: (e, _) => Text('Gagal: $e'),
-            data: (times) => clubs.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('Gagal memuat lokasi klub: $e'),
-              data: (clubList) {
-                if (clubList.isEmpty) {
-                  return const Text('Daftar lokasi klub tidak tersedia.');
-                }
-                final cities = clubList
-                    .map((club) => club.city.trim())
-                    .where((city) => city.isNotEmpty)
-                    .toSet()
-                    .toList()
-                  ..sort();
-                final favoriteCity = ref.watch(favoriteClubProvider)?.city;
-                final city = cities.contains(selectedCity)
-                    ? selectedCity!
-                    : cities.contains(favoriteCity)
-                        ? favoriteCity!
-                        : cities.first;
+            data: (times) {
+              final favorite = ref.watch(favoriteClubProvider);
+              final indonesiaTime = times[selectedZone] ?? times['WIB']!;
+              final londonTime = times['London']!;
+              final cityName =
+                  selectedIndoCity ?? indonesianCities.first.name;
 
-                final longitudes = cityLongitudes(clubList);
-                final indoCity = indonesianCities.firstWhere(
-                  (c) => c.name == selectedIndoCity,
-                  orElse: () => indonesianCities.first,
-                );
-
-                final utc = times['UTC'] ?? TimeUtils.nowUtc();
-                final indonesiaTime = times[selectedZone] ?? times['WIB']!;
-                final londonTime = times['London']!;
-
-                final indoSolar = solarTime(utc, indoCity.lng);
-                final englishLng = longitudes[city];
-                final englishSolar =
-                    englishLng == null ? null : solarTime(utc, englishLng);
-                final englishDiff = englishSolar?.difference(londonTime);
-
-                final westToEast = longitudes.entries.toList()
-                  ..sort((a, b) => a.value.compareTo(b.value));
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('clock-zone-$selectedZone'),
-                      initialValue: selectedZone,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        labelText: 'Zona waktu Indonesia',
-                        prefixIcon: Icon(Icons.schedule),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'WIB', child: Text('WIB')),
-                        DropdownMenuItem(value: 'WITA', child: Text('WITA')),
-                        DropdownMenuItem(value: 'WIT', child: Text('WIT')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          ref.read(awayDayClockZoneProvider.notifier).state =
-                              value;
-                        }
-                      },
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('clock-zone-$selectedZone'),
+                    initialValue: selectedZone,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Zona waktu Indonesia',
+                      prefixIcon: Icon(Icons.schedule),
                     ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('clock-indo-$selectedIndoCity'),
-                      initialValue:
-                          selectedIndoCity ?? indonesianCities.first.name,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        labelText: 'Kota di Indonesia',
-                        prefixIcon: Icon(Icons.location_on),
-                      ),
-                      items: [
-                        for (final c in indonesianCities)
-                          DropdownMenuItem(value: c.name, child: Text(c.name)),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        final picked =
-                            indonesianCities.firstWhere((c) => c.name == value);
-                        ref.read(awayDayClockIndoCityProvider.notifier).state =
-                            value;
+                    items: const [
+                      DropdownMenuItem(value: 'WIB', child: Text('WIB')),
+                      DropdownMenuItem(value: 'WITA', child: Text('WITA')),
+                      DropdownMenuItem(value: 'WIT', child: Text('WIT')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
                         ref.read(awayDayClockZoneProvider.notifier).state =
-                            picked.zone;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('clock-city-$city'),
-                      initialValue: city,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        labelText: 'Lokasi tim Premier League',
-                        prefixIcon: Icon(Icons.location_city),
-                      ),
-                      items: [
-                        for (final location in cities)
-                          DropdownMenuItem(
-                            value: location,
-                            child: Text(location),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        ref.read(awayDayClockCityProvider.notifier).state =
                             value;
-                      },
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('clock-indo-$selectedIndoCity'),
+                    initialValue:
+                        selectedIndoCity ?? indonesianCities.first.name,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Kota di Indonesia',
+                      prefixIcon: Icon(Icons.location_on),
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ClockReadout(
-                            label: selectedZone,
-                            time: indonesiaTime,
-                            detail: 'Waktu sipil Indonesia',
-                          ),
+                    items: [
+                      for (final c in indonesianCities)
+                        DropdownMenuItem(value: c.name, child: Text(c.name)),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      final picked =
+                          indonesianCities.firstWhere((c) => c.name == value);
+                      ref.read(awayDayClockIndoCityProvider.notifier).state =
+                          value;
+                      ref.read(awayDayClockZoneProvider.notifier).state =
+                          picked.zone;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ClockReadout(
+                          key: const ValueKey('clock-readout-indo'),
+                          label: cityName,
+                          time: indonesiaTime,
+                          detail: selectedZone,
+                          showSeconds: true,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _ClockReadout(
-                            label: 'London',
-                            time: londonTime,
-                            detail: 'Jam resmi London',
-                          ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _ClockReadout(
+                          key: const ValueKey('clock-readout-london'),
+                          label: favorite?.city ?? 'London',
+                          time: londonTime,
+                          detail: favorite == null
+                              ? 'Pilih klub favorit untuk memakai nama kotanya'
+                              : 'Jam resmi Inggris (London)',
+                          showSeconds: true,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ClockReadout(
-                            label: indoCity.name,
-                            time: indoSolar,
-                            detail: 'Waktu surya lokal',
-                            showSeconds: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _ClockReadout(
-                            label: city,
-                            time: englishSolar ?? londonTime,
-                            detail: englishDiff == null
-                                ? 'Waktu surya lokal'
-                                : 'Surya ${formatOffset(englishDiff)} dari London',
-                            showSeconds: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Waktu surya lokal dihitung dari bujur kota, hanya untuk '
-                      'perbandingan. Jadwal laga memakai jam resmi.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      childrenPadding: EdgeInsets.zero,
-                      title: Text('Semua kota klub',
-                          style: Theme.of(context).textTheme.labelMedium),
-                      children: [
-                        for (final entry in westToEast)
-                          _CitySolarRow(
-                            city: entry.key,
-                            solar: solarTime(utc, entry.value),
-                            offset: solarTime(utc, entry.value)
-                                .difference(londonTime),
-                          ),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -448,6 +350,7 @@ class _WorldClock extends ConsumerWidget {
 
 class _ClockReadout extends StatelessWidget {
   const _ClockReadout({
+    super.key,
     required this.label,
     required this.time,
     required this.detail,
@@ -488,36 +391,6 @@ class _ClockReadout extends StatelessWidget {
               style: theme.textTheme.labelSmall,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CitySolarRow extends StatelessWidget {
-  const _CitySolarRow({
-    required this.city,
-    required this.solar,
-    required this.offset,
-  });
-
-  final String city;
-  final DateTime solar;
-  final Duration offset;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(city, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text('Selisih dari London: ${formatOffset(offset)}',
-          style: theme.textTheme.labelSmall),
-      trailing: Text(
-        TimeUtils.format(solar),
-        style: theme.textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.w700,
         ),
       ),
     );
