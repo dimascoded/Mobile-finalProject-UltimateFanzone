@@ -144,28 +144,118 @@ void main() {
     );
   });
 
-  testWidgets('kota Indonesia WIT tampil dengan namanya dan jam WIT',
+  testWidgets('kartu zona menampilkan WIB, WITA, WIT dari waktu UTC tetap',
       (tester) async {
-    await _pump(tester, favorite: null, indoCity: 'Jayapura', zone: 'WIT');
+    await _pump(tester, favorite: null, zone: 'WIB');
 
+    final zone = _readout('zone');
     expect(
-      find.descendant(of: _readout('indo'), matching: find.text('Jayapura')),
+      find.descendant(of: zone, matching: find.text('WIB')),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: _readout('indo'),
+        of: zone,
+        matching: find.text(TimeUtils.format(TimeUtils.wib(_now))),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: zone, matching: find.text('Waktu sipil Indonesia')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('dropdown zona mengganti hanya kartu zona, bukan kartu kota',
+      (tester) async {
+    await _pump(tester, favorite: null, indoCity: 'Jakarta', zone: 'WIB');
+
+    await tester.tap(find.byKey(const ValueKey('clock-zone-WIB')));
+    await tester.pump();
+    await tester.tap(find.text('WIT').last);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final zone = _readout('zone');
+    expect(
+      find.descendant(of: zone, matching: find.text('WIT')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: zone,
+        matching: find.text(TimeUtils.format(TimeUtils.wit(_now))),
+      ),
+      findsOneWidget,
+    );
+
+    // Kartu kota tetap memakai zona kota itu sendiri (Jakarta = WIB).
+    final city = _readout('indo-city');
+    expect(
+      find.descendant(of: city, matching: find.text('Jakarta')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: city,
+        matching: find.text(TimeUtils.format(TimeUtils.wib(_now))),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: city, matching: find.text('WIB')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('kota Indonesia WIT tampil dengan namanya, jam WIT, zona WIT',
+      (tester) async {
+    await _pump(tester, favorite: null, indoCity: 'Jayapura');
+
+    final city = _readout('indo-city');
+    expect(
+      find.descendant(of: city, matching: find.text('Jayapura')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: city,
         matching: find.text(TimeUtils.format(TimeUtils.wit(_now))),
       ),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: _readout('indo'), matching: find.text('WIT')),
+      find.descendant(of: city, matching: find.text('WIT')),
       findsOneWidget,
     );
   });
 
-  testWidgets('kartu hanya punya dua readout tanpa surya/Selisih',
+  testWidgets('pilih kota WIB mengubah kartu kota ke jam WIB', (tester) async {
+    await _pump(tester, favorite: null, indoCity: 'Jayapura');
+
+    await tester.tap(find.byKey(const ValueKey('clock-indo-Jayapura')));
+    await tester.pump();
+    await tester.tap(find.text('Jakarta').last);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final city = _readout('indo-city');
+    expect(
+      find.descendant(of: city, matching: find.text('Jakarta')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: city,
+        matching: find.text(TimeUtils.format(TimeUtils.wib(_now))),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: city, matching: find.text('WIB')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('kartu hanya punya tiga readout tanpa surya/Selisih',
       (tester) async {
     await _pump(tester, favorite: _manCity);
 
@@ -173,8 +263,21 @@ void main() {
       (w) => w.key is ValueKey<String> &&
           (w.key as ValueKey<String>).value.startsWith('clock-readout-'),
     );
-    expect(readouts, findsNWidgets(2));
+    expect(readouts, findsNWidgets(3));
     expect(_hasText(tester, 'surya'), isFalse);
     expect(_hasText(tester, 'Selisih'), isFalse);
+    expect(find.text('Zona waktu Indonesia'), findsOneWidget);
+    expect(find.text('Kota di Indonesia'), findsOneWidget);
+  });
+
+  testWidgets('tanpa overflow pada lebar 360dp', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    addTearDown(tester.view.reset);
+    await _pump(tester, favorite: _manCity, indoCity: 'Jayapura');
+
+    expect(tester.takeException(), isNull);
+    expect(_readout('zone'), findsOneWidget);
+    expect(_readout('indo-city'), findsOneWidget);
+    expect(_readout('london'), findsOneWidget);
   });
 }

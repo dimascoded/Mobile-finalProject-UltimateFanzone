@@ -260,8 +260,10 @@ class _WorldClock extends ConsumerWidget {
               final favorite = ref.watch(favoriteClubProvider);
               final indonesiaTime = times[selectedZone] ?? times['WIB']!;
               final londonTime = times['London']!;
-              final cityName =
-                  selectedIndoCity ?? indonesianCities.first.name;
+              final indoCity = indonesianCities.firstWhere(
+                (c) => c.name == selectedIndoCity,
+                orElse: () => indonesianCities.first,
+              );
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -317,10 +319,10 @@ class _WorldClock extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: _ClockReadout(
-                          key: const ValueKey('clock-readout-indo'),
-                          label: cityName,
+                          key: const ValueKey('clock-readout-zone'),
+                          label: selectedZone,
                           time: indonesiaTime,
-                          detail: selectedZone,
+                          detail: 'Waktu sipil Indonesia',
                           showSeconds: true,
                         ),
                       ),
@@ -337,6 +339,14 @@ class _WorldClock extends ConsumerWidget {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  _ClockReadout(
+                    key: const ValueKey('clock-readout-indo-city'),
+                    label: indoCity.name,
+                    time: times[indoCity.zone] ?? times['WIB']!,
+                    detail: indoCity.zone,
+                    showSeconds: true,
                   ),
                 ],
               );
