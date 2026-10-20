@@ -9,7 +9,9 @@ import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
 import '../../../core/network/connectivity_provider.dart';
 import '../../../core/utils/app_config.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../auth/providers/user_data_cleanup.dart';
 import '../../away_day/providers/away_day_providers.dart';
 import '../../gamification/data/blockchain.dart';
 import '../../gamification/providers/gamification_providers.dart';
@@ -165,6 +167,14 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
 
       await _ref.read(lastSyncedAtProvider.notifier).markNow();
+      // H2: sinkron sukses berarti user id terkonfirmasi masih aktif → klaim
+      // sebagai pemilik data lokal, supaya pergantian akun terdeteksi oleh
+      // login berikutnya walau sesi lama masih hidup di perangkat.
+      final authRepo = _ref.read(authRepositoryProvider);
+      final syncedUserId = authRepo.currentUserId;
+      if (syncedUserId != null) {
+        await writeDataOwnerId(authRepo.identityStore, syncedUserId);
+      }
       state = SyncState(
           result: SyncResult(
         pushedExpenses: result.pushedExpenses,

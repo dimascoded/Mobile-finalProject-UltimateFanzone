@@ -41,10 +41,35 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
     invalidateIdentityProviders(_ref);
   }
 
+  /// Ganti akun (H1): bersihkan data akun sebelumnya SEBELUM state di-set
+  /// sukses, supaya Dashboard tidak sempat memuat/menyinkronkan data akun lama
+  /// yang masih tersimpan di Hive, OfflineSyncDatabase, dan provider memori.
+  ///
+  /// Provider data konten di-invalidate di sini (masih di dalam guard);
+  /// invalidasi identitas (email, nama, foto, favorit) tetap berjalan di
+  /// [_afterIdentitySuccess] tepat setelah state sukses — satu gelombang saja,
+  /// sama seperti perilaku sebelum fitur ganti akun ada.
+  ///
+  /// Kebijakan: pemilik data tidak diketahui (null) dianggap asing dan ikut
+  /// di-wipe — data yatim tidak pernah diasumsikan milik akun yang baru. Akun
+  /// dengan id yang SAMA mempertahankan data lokal agar kontinuitas offline
+  /// tetap ada. H4: tanpa user id (mis. register yang belum punya sesi) tidak
+  /// ada yang bisa dilakukan, jadi dilewati.
+  Future<void> _wipeIfAccountChanged() async {
+    final userId = _repo.currentUserId;
+    if (userId == null) return;
+    if (readDataOwnerId(_repo.identityStore) == userId) return;
+    await _clearData();
+    await _clearOfflineSync();
+    invalidateUserContentProviders(_ref);
+    await writeDataOwnerId(_repo.identityStore, userId);
+  }
+
   Future<void> login(String email, String password) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await _repo.login(email, password);
+      await _wipeIfAccountChanged();
       return true;
     });
     await _afterIdentitySuccess();
@@ -55,6 +80,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await _repo.register(email, password, confirm);
+      await _wipeIfAccountChanged();
       return true;
     });
     await _afterIdentitySuccess();
@@ -103,10 +129,17 @@ final authProvider = StateNotifierProvider<AuthNotifier, AsyncValue<bool>>(
     (ref) => AuthNotifier(ref.watch(authRepositoryProvider), ref));
 
 /// Dipakai saat startup untuk memutuskan Login vs Dashboard.
+///
+/// Saat ada sesi, user id aktif diklaim sebagai pemilik data lokal (H2), supaya
+/// login akun berikutnya bisa membedakan akun yang sama vs akun berbeda.
 final sessionProvider = FutureProvider<bool>((ref) async {
   final repo = ref.watch(authRepositoryProvider);
   final hasSession = await repo.hasSession();
-  if (hasSession) await repo.retryPendingPrefs();
+  if (hasSession) {
+    await repo.retryPendingPrefs();
+    final userId = repo.currentUserId;
+    if (userId != null) await writeDataOwnerId(repo.identityStore, userId);
+  }
   return hasSession;
 });
 

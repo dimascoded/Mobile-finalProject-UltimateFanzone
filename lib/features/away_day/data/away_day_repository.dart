@@ -29,6 +29,32 @@ class AwayDayExpense {
 
   String get id => date.toIso8601String();
 
+  /// Salinan dengan field yang boleh diubah saat edit.
+  ///
+  /// `date` TIDAK punya parameter supaya `id` (turunan `date`) tidak pernah
+  /// berubah — edit selalu menimpa expense yang sama, bukan membuat baris baru.
+  AwayDayExpense copyWith({
+    String? title,
+    double? amountGbp,
+    double? amountIdr,
+    String? currencyCode,
+    double? amountForeign,
+    AwayDayCategory? category,
+    String? clubKey,
+    bool clearClubKey = false,
+  }) {
+    return AwayDayExpense(
+      title: title ?? this.title,
+      amountGbp: amountGbp ?? this.amountGbp,
+      amountIdr: amountIdr ?? this.amountIdr,
+      currencyCode: currencyCode ?? this.currencyCode,
+      amountForeign: amountForeign ?? this.amountForeign,
+      category: category ?? this.category,
+      date: date,
+      clubKey: clearClubKey ? null : (clubKey ?? this.clubKey),
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'title': title,
         'amountGbp': amountGbp,

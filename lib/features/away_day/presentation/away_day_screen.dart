@@ -501,6 +501,7 @@ class _Tile extends ConsumerWidget {
         child: AppCard(
           padding: EdgeInsets.zero,
           child: ListTile(
+            onTap: () => _showEditSheet(context, ref, expense),
             leading: club != null
                 ? ClubCrest(
                     crestUrl: crests[club.tla.toUpperCase()],
@@ -598,13 +599,37 @@ Future<void> _showAddSheet(BuildContext context, WidgetRef ref) async {
   );
 }
 
+/// Buka form yang sama dalam mode edit: field terisi dari [expense] dan
+/// menyimpan lewat `update()` — `date`/`id` tidak pernah berubah.
+Future<void> _showEditSheet(
+    BuildContext context, WidgetRef ref, AwayDayExpense expense) async {
+  final snap = ref.read(ratesProvider).valueOrNull;
+  final clubs = ref.read(clubsProvider).valueOrNull ?? const [];
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: _AddForm(rates: snap?.rates, clubs: clubs, initial: expense),
+    ),
+  );
+}
+
 class _AddForm extends ConsumerStatefulWidget {
-  const _AddForm(
-      {required this.rates, required this.favKey, required this.clubs});
+  const _AddForm({
+    required this.rates,
+    required this.clubs,
+    this.favKey,
+    this.initial,
+  });
 
   final Map<String, double>? rates;
   final String? favKey;
   final List clubs;
+
+  /// Null = mode Catat; terisi = mode Ubah (pre-fill, simpan ke id yang sama).
+  final AwayDayExpense? initial;
 
   @override
   ConsumerState<_AddForm> createState() => _AddFormState();
@@ -618,12 +643,34 @@ class _AddFormState extends ConsumerState<_AddForm> {
   String? _clubKey;
   String _currency = 'GBP';
 
+  /// false di mode edit sampai pengguna menyentuh jumlah/mata uang, supaya
+  /// penyegaran kurs tidak menimpa nilai Rupiah yang tersimpan.
+  bool _moneyTouched = true;
+
   @override
   void initState() {
     super.initState();
-    _clubKey =
-        widget.clubs.any((c) => c.key == widget.favKey) ? widget.favKey : null;
-    _foreign.addListener(_syncFromForeign);
+    final initial = widget.initial;
+    if (initial != null) {
+      _moneyTouched = false;
+      _title.text = initial.title;
+      _currency = initial.currencyCode;
+      _foreign.text = initial.amountForeign.toString();
+      _idr.text = initial.amountIdr.round().toString();
+      _cat = initial.category;
+      // Klub: kalau daftar klub kosong (dropdown disembunyikan) pertahankan
+      // klub asli; kalau dropdown tampil tapi klub tidak dikenal, jatuh ke
+      // null ("Umum") supaya tidak ada assertion error di DropdownButton.
+      _clubKey = widget.clubs.any((c) => c.key == initial.clubKey)
+          ? initial.clubKey
+          : (widget.clubs.isEmpty ? initial.clubKey : null);
+    } else {
+      _clubKey =
+          widget.clubs.any((c) => c.key == widget.favKey) ? widget.favKey : null;
+    }
+    // Listener dipasang SETELAH field diisi awal, jadi inisialisasi tidak
+    // memicu recompute (nilai tersimpan tetap sampai pengguna menyentuh).
+    _foreign.addListener(_onForeignEdited);
   }
 
   @override
@@ -632,6 +679,11 @@ class _AddFormState extends ConsumerState<_AddForm> {
     _foreign.dispose();
     _idr.dispose();
     super.dispose();
+  }
+
+  void _onForeignEdited() {
+    _moneyTouched = true;
+    _syncFromForeign();
   }
 
   void _syncFromForeign([Map<String, double>? rates]) {
@@ -658,7 +710,11 @@ class _AddFormState extends ConsumerState<_AddForm> {
     final rateMissing = _currency != 'IDR' && perIdr == null;
     ref.listen(ratesProvider, (_, next) {
       final latestRates = next.valueOrNull?.rates;
-      if (latestRates != null) _syncFromForeign(latestRates);
+      if (latestRates == null) return;
+      // Mode edit: jangan sentuh Rupiah tersimpan sampai pengguna menyentuh
+      // jumlah/mata uangnya (_moneyTouched).
+      if (!_moneyTouched) return;
+      _syncFromForeign(latestRates);
     });
 
     return SingleChildScrollView(
@@ -668,7 +724,10 @@ class _AddFormState extends ConsumerState<_AddForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Catat pengeluaran',
+            Text(
+                widget.initial == null
+                    ? 'Catat pengeluaran'
+                    : 'Ubah pengeluaran',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             TextField(
@@ -697,6 +756,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
               onChanged: (value) {
                 if (value == null) return;
                 setState(() {
+                  _moneyTouched = true;
                   _currency = value;
                   _foreign.clear();
                   _idr.clear();
@@ -812,7 +872,9 @@ class _AddFormState extends ConsumerState<_AddForm> {
             FilledButton.icon(
               onPressed: _submit,
               icon: const Icon(Icons.check),
-              label: const Text('Simpan'),
+              label: Text(widget.initial == null
+                  ? 'Simpan'
+                  : 'Simpan perubahan'),
             ),
           ],
         ),
@@ -835,7 +897,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
     return null;
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final rates = ref.read(ratesProvider).valueOrNull?.rates ?? widget.rates;
     final rateMissing = _currency != 'IDR' && rates?[_currency] == null;
     final problem = validate(rateMissing: rateMissing);
@@ -846,6 +908,39 @@ class _AddFormState extends ConsumerState<_AddForm> {
       return;
     }
     final amountForeign = parseAmount(_foreign.text) ?? 0;
+    final initial = widget.initial;
+    if (initial != null) {
+      // Mode edit: kalau mata uang dan jumlah asal tidak berubah, pertahankan
+      // amountIdr & amountGbp tersimpan bit-for-bit (jangan konversi ulang
+      // dengan kurs hari ini). Kalau berubah, hitung ulang seperti mode Catat.
+      final moneyUnchanged =
+          _currency == initial.currencyCode &&
+              amountForeign == initial.amountForeign;
+      final amountIdr = moneyUnchanged
+          ? initial.amountIdr
+          : (_currency == 'IDR'
+              ? amountForeign
+              : parseAmount(_idr.text) ?? 0);
+      final amountGbp = moneyUnchanged
+          ? initial.amountGbp
+          : (idrToForeign(amountIdr, 'GBP', rates) ?? 0);
+      final messenger = ScaffoldMessenger.of(context);
+      final ok = await ref.read(awayDayProvider.notifier).update(
+            initial.id,
+            title: _title.text.trim(),
+            amountGbp: amountGbp,
+            amountIdr: amountIdr,
+            category: _cat,
+            currencyCode: _currency,
+            amountForeign: amountForeign,
+            clubKey: _clubKey,
+          );
+      if (!ok || !mounted) return;
+      Navigator.of(context).pop();
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Pengeluaran diperbarui')));
+      return;
+    }
     final amountIdr =
         _currency == 'IDR' ? amountForeign : parseAmount(_idr.text) ?? 0;
     ref.read(awayDayProvider.notifier).add(

@@ -71,6 +71,40 @@ class AwayDayNotifier extends StateNotifier<List<AwayDayExpense>> {
     await _repo.save(state);
   }
 
+  /// Perbarui pengeluaran yang sudah ada IN PLACE: posisi di daftar, `date`,
+  /// dan `id` tidak berubah (tidak ada antrean hapus, tidak ada baris baru).
+  ///
+  /// Persist lewat jalur yang sama dengan [add] (`_repo.save`), supaya revisi
+  /// koleksi naik dan sinkronisasi ikut mengirim perubahannya. Mengembalikan
+  /// false kalau `id` tidak ditemukan (tidak ada perubahan apa pun).
+  Future<bool> update(
+    String id, {
+    required String title,
+    required double amountGbp,
+    required double amountIdr,
+    required AwayDayCategory category,
+    required String currencyCode,
+    required double amountForeign,
+    String? clubKey,
+  }) async {
+    final index = state.indexWhere((e) => e.id == id);
+    if (index < 0) return false;
+    final next = [...state];
+    next[index] = state[index].copyWith(
+      title: title,
+      amountGbp: amountGbp,
+      amountIdr: amountIdr,
+      category: category,
+      currencyCode: currencyCode,
+      amountForeign: amountForeign,
+      clubKey: clubKey,
+      clearClubKey: clubKey == null,
+    );
+    state = next;
+    await _repo.save(state);
+    return true;
+  }
+
   Future<void> remove(String id) async {
     state = state.where((e) => e.id != id).toList();
     await OfflineSyncDatabase.queueDeletion('away_day_expenses', id);
