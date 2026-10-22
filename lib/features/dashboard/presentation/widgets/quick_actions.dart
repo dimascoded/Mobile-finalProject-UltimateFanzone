@@ -6,6 +6,13 @@ import '../../../prediction/presentation/prediction_screen.dart';
 import '../../../pundit/presentation/pundit_screen.dart';
 import '../../../stadium_pointer/presentation/stadium_pointer_screen.dart';
 
+// STRUKTUR UI — QuickActions
+// Ukuran: Row tanpa Scaffold; empat Expanded(_QuickAction) evenly.
+// [1] _QuickAction — tombol lingkaran 56px berisi ikon dengan label maksimal
+//                    dua baris di bawahnya, membuka halaman fitur lewat
+//                    Navigator.push
+// Tabel/kolom: tanpa tabel; deretan empat pintasan satu baris.
+// Sumber data: tanpa provider; daftar statis _actions.
 /// Empat pintasan cepat ke fitur utama Home.
 class QuickActions extends StatelessWidget {
   const QuickActions({super.key});

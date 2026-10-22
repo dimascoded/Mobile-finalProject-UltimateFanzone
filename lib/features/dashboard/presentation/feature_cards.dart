@@ -33,6 +33,18 @@ Widget _semantics(MenuItem item, Widget child) => Semantics(
 void _open(BuildContext context, MenuItem item) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => item.page));
 
+// STRUKTUR UI — FeaturedFeatureCard / FeatureCard
+// Ukuran: AppCard tanpa Scaffold; FeaturedFeatureCard memakai Row baris penuh,
+//         FeatureCard memakai Column untuk dipakai di dalam grid.
+// [1] _featureIcon        — ikon bundar 48px dengan gradien primary ke aksen
+// [2] _semantics           — pembungkus Semantics tombol berlabel
+//                           "label. deskripsi" untuk aksesibilitas
+// [3] FeaturedFeatureCard — kartu baris penuh: ikon, label plus PillBadge
+//                           badge, deskripsi, dan chevron kanan
+// [4] FeatureCard         — kartu grid: ikon dan badge di atas, label, lalu
+//                           deskripsi
+// Tabel/kolom: tanpa tabel; dua varian kartu fitur.
+// Sumber data: tanpa provider; isi diambil dari parameter MenuItem.
 /// Kartu fitur utama berbentuk baris penuh.
 class FeaturedFeatureCard extends StatelessWidget {
   const FeaturedFeatureCard({super.key, required this.item});

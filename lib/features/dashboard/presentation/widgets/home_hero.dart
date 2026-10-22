@@ -13,6 +13,18 @@ import '../../../football/presentation/team_picker_screen.dart';
 import '../../../football/providers/football_providers.dart';
 import '../../../prediction/presentation/prediction_screen.dart';
 
+// STRUKTUR UI — HomeHero
+// Ukuran: widget di dalam ScrimImage (tinggi 260 * textScale) dengan Stack
+// dan Padding; konten club memakai SingleChildScrollView, tanpa batas lebar
+// [1] Latar hero — ScrimImage dengan gradien warna klub sebagai fallback
+// [2] Baris identitas klub — crest, nama klub, stadion dan kota, tombol ganti tim
+// [3] Blok laga berikutnya — badge المنزل/tandang, nama lawan, KickoffTimes, hitung mundur, tombol Prediksi
+// [4] Status jadwal — state loading (spinner), error (coba lagi), atau "Belum ada laga mendatang"
+// [5] _EmptyHero — pesan "Pilih tim favoritmu" plus tombol pilih tim
+// Tabel/kolom: tanpa tabel; daftar kartu satu kolom
+// Sumber data: favoriteClubProvider, nextMatchProvider, tickProvider,
+// clubCrestProvider, matchesProvider
+
 /// Hero Home "Malam Laga": tim favorit, laga berikutnya, dan pintasan prediksi.
 ///
 /// Semua teks berada di atas scrim gelap supaya tetap terbaca walau foto header

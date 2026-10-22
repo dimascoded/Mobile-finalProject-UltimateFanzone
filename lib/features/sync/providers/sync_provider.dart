@@ -20,27 +20,39 @@ import '../data/chain_reconcile.dart';
 import '../data/sync_repository.dart';
 
 /// Waktu sinkronisasi terakhir (epoch milidetik), disimpan di Hive.
+///
+/// Key Hive `app_cache` yang dipakai adalah `last_sync_at`; nilainya juga
+/// termasuk [AuthRepository.userDataKeys] sehingga ikut terhapus saat logout.
 class LastSyncStore {
   static const _key = 'last_sync_at';
 
+  /// Baca waktu sinkronisasi terakhir, atau null bila belum pernah sinkron.
   DateTime? load() {
     final raw = HiveService.cache.get(_key);
     final ms = int.tryParse(raw ?? '');
     return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
   }
 
+  /// Simpan waktu sinkronisasi terakhir ke Hive `app_cache`.
   Future<void> save(DateTime at) =>
       HiveService.cache.put(_key, '${at.millisecondsSinceEpoch}');
 }
 
+/// Penyedia tunggal [LastSyncStore].
 final lastSyncStoreProvider = Provider((ref) => LastSyncStore());
 
 /// S3: waktu sinkronisasi terakhir disimpan sebagai state Riverpod supaya
 /// Profil ikut berubah begitu sinkronisasi selesai, tanpa perlu rebuild manual.
+///
+/// State-nya `DateTime?`; null berarti belum pernah sinkron. Nilai awal
+/// dibaca dari Hive `app_cache` (kunci `last_sync_at`).
 class LastSyncedAtNotifier extends StateNotifier<DateTime?> {
   LastSyncedAtNotifier(this._store) : super(_store.load());
   final LastSyncStore _store;
 
+  /// Tandai waktu sinkronisasi sekarang dan simpan ke Hive.
+  ///
+  /// Efek samping: menulis kunci `last_sync_at` di Hive `app_cache`.
   Future<void> markNow() async {
     final at = DateTime.now();
     await _store.save(at);
@@ -48,12 +60,21 @@ class LastSyncedAtNotifier extends StateNotifier<DateTime?> {
   }
 }
 
+/// Waktu sinkronisasi terakhir yang diketahui aplikasi.
+///
+/// StateProvider biasa (bukan `autoDispose`) karena dibaca layar Profil dan
+/// perlu bertahan antar-m navigasi; sumber penyimpanan ada di
+/// [LastSyncedAtNotifier].
 final lastSyncedAtProvider =
     StateNotifierProvider<LastSyncedAtNotifier, DateTime?>(
   (ref) => LastSyncedAtNotifier(ref.watch(lastSyncStoreProvider)),
 );
 
 /// Status sinkronisasi yang ditampilkan di Profil.
+///
+/// State-nya `SyncState` immutable yang merangkum: sedang berjalan
+/// (`busy`), hasil sinkronisasi terakhir (`result`), pesan galat (`error`),
+/// dan apakah server menolak token (`unauthorized`).
 class SyncState {
   const SyncState({
     this.busy = false,
@@ -72,6 +93,26 @@ class SyncState {
   bool get ok => error == null && result != null;
 }
 
+/// Notifier sinkronisasi manual + otomatis.
+///
+/// State-nya [SyncState]. Tanggung jawab notifier ini:
+///
+/// - mendorong data lokal (pengeluaran, rantai, prediksi) dan revisi
+///   SQLite ke server lewat [SyncRepository.sync];
+/// - mengadopsi hasil merge server untuk pengeluaran dan prediksi (hanya bila
+///   isinya benar-benar berbeda, supaya tidak memicu rebuild berulang);
+/// - merekonsiliasi rantai paspor dengan aturan "cloud wins" — BLOK LOKAL
+///   HANYA ditimpa bila rantai remote valid ([Blockchain.isValid]) dan
+///   rekonsiliasi memutuskan `adoptRemote`; blok lokal yang tidak ada di
+///   cloud dihitung sebagai blok terbuang dan TIDAK pernah ditambang ulang;
+/// - mencatat waktu sinkronisasi terakhir dan mengklaim user id sebagai
+///   pemilik data lokal (kunci Hive `last_user_id`);
+/// - ketika server membalas 401, MEMUTUSKAN SESI lewat
+///   [AuthNotifier.logout] sehingga UI kembali ke layar login.
+///
+/// Notifier tidak `autoDispose` (sinkronisasi harus bisa dipicu dari mana
+/// saja), jadi tidak wajib cek `mounted` setelah `await` (aturan §3.5 hanya
+/// berlaku untuk notifier `autoDispose`).
 class SyncNotifier extends StateNotifier<SyncState> {
   SyncNotifier(this._ref) : super(const SyncState());
 
@@ -84,6 +125,12 @@ class SyncNotifier extends StateNotifier<SyncState> {
   /// Batas re-run berurutan dari satu panggilan awal, supaya tidak looping.
   static const _maxReruns = 3;
 
+  /// Jalankan sinkronisasi satu siklus.
+  ///
+  /// Bila sedang berjalan, panggilan ini tidak menggandakan proses; ia
+  /// menandai permintaan re-run sehingga siklus berikutnya dijalankan lagi
+  /// (maksimal 3 kali berurutan dari satu pemanggilan awal). Efek samping:
+  /// seluruh operasi sinkronisasi pada [SyncNotifier._runOnce].
   Future<void> run() async {
     if (state.busy) {
       _rerun = true;
@@ -102,6 +149,20 @@ class SyncNotifier extends StateNotifier<SyncState> {
     }
   }
 
+  /// Satu siklus sinkronisasi penuh.
+  ///
+  /// Mengirim revisi SQLite yang belum tersinkron (collections
+  /// `away_day_expenses`, `passport_chain`, `score_predictions`) beserta
+  /// antrean penghapusan, lalu mengadopsi hasil merge server. Rantai lokal
+  /// hanya ditimpa bila rantai remote valid ([Blockchain.isValid]) dan
+  /// rekonsiliasi memutuskan `adoptRemote`; blok lokal yang dibuang tidak
+  /// pernah ditambang ulang. Galat 401 memicu logout, galat lain hanya
+  /// mengisi [SyncState.error].
+  ///
+  /// Efek samping: menulis Hive `app_cache` (`away_day_expenses`,
+  /// `score_predictions`, `passport_chain`, `last_sync_at`,
+  /// `last_user_id`), memperbarui baris SQLite `sync_documents` dan
+  /// `sync_deletions`, serta dapat memanggil [AuthNotifier.logout].
   Future<void> _runOnce() async {
     state = const SyncState(busy: true);
     try {
@@ -209,6 +270,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 }
 
+/// Status sinkronisasi terakhir yang ditampilkan di Profil.
+///
+/// StateProvider biasa (bukan `autoDispose`) karena dibaca layar Profil dan
+/// harus tetap menampilkan hasil/error sinkronisasi terakhir; sumber
+/// perilakunya ada di [SyncNotifier].
 final syncProvider =
     StateNotifierProvider<SyncNotifier, SyncState>((ref) => SyncNotifier(ref));
 
@@ -218,6 +284,8 @@ final syncProvider =
 /// Semua dibungkus try/catch supaya lingkungan tanpa Supabase (mis. unit test)
 /// dianggap "tanpa sesi" alih-alih melempar. Test meng-override provider ini
 /// sehingga tidak perlu menyentuh Supabase.
+///
+/// Tanpa efek samping; hanya membaca state sesi.
 final sessionAvailableProvider = Provider<bool>((ref) {
   if (!AppConfig.supabaseConfigured) return false;
   try {
@@ -230,6 +298,8 @@ final sessionAvailableProvider = Provider<bool>((ref) {
 /// Apakah pesan galat berarti "tidak ada sesi" (jalur Supabase maupun HTTP).
 ///
 /// Retry 30 detik percuma tanpa sesi, jadi timer retry dilewati untuk pesan ini.
+///
+/// Fungsi murni, tanpa efek samping.
 bool _isNoSessionError(String message) =>
     message.contains('Masuk ke akun dulu') || message.contains('Belum login');
 
@@ -239,6 +309,13 @@ bool _isNoSessionError(String message) =>
 /// dibuang (timer debounce/retry, listener, timer periodik, lifecycle) sehingga
 /// tidak ada percobaan sync maupun loop retry selagi aplikasi di layar login.
 /// Saat login berikutnya Dashboard ter-mount lagi dan body ini dijalankan ulang.
+///
+/// Efek samping: menjadwalkan sinkronisasi (debounce 300 ms untuk sinkron
+/// pertama, 900 ms untuk perubahan berikutnya), memasang timer periodik 5
+/// menit, memasang [AppLifecycleListener] untuk sinkron saat aplikasi kembali
+/// ke depan, dan mencoba sinkron ulang 30 detik setelah gagal — kecuali
+/// galatnya berarti "tidak ada sesi", yang membuat retry dihentikan agar
+/// tidak terjadi loop.
 final automaticSyncProvider = Provider.autoDispose<void>((ref) {
   // Tanpa Supabase/sesi tidak ada yang bisa disinkronkan. Ini juga mematikan
   // auto-sync pada build non-Supabase, sama seperti perilaku sebelumnya.

@@ -26,6 +26,15 @@ Color _fallbackStart(BuildContext context, FeatureSection section) {
   };
 }
 
+// STRUKTUR UI — FeatureMenuTab
+// Ukuran: ListView > Center > ConstrainedBox(maxWidth 720) > Column; grid
+//         2/3/4 kolom menurut lebar layar, tinggi kartu 176 * textScaler.
+// [1] SectionHeaderBanner — banner bergambar tinggi 170 * textScaler berisi
+//                          judul grup, deskripsi, dan PillBadge jumlah fitur
+// [2] FeaturedFeatureCard — kartu unggulan baris penuh, hanya di layar sempit
+// [3] GridView.builder   — kisi FeatureCard untuk sisa item grup
+// Tabel/kolom: tanpa tabel; grid fitur dua sampai empat kolom.
+// Sumber data: tanpa provider; daftar item diambil dari registry menuGroups.
 /// Tab menu dengan header bergambar dan kartu fitur.
 class FeatureMenuTab extends StatelessWidget {
   const FeatureMenuTab({required this.section, super.key});

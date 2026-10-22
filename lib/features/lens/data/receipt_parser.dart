@@ -6,15 +6,26 @@ import 'price_parser.dart';
 enum DocKind { ticket, receipt }
 
 /// Satu kandidat nominal beserta [line] asal dan [score]-nya.
+///
+/// [score] adalah skor relevansi (higher is better): baris bertanda "total"
+/// mendapat nilai tertinggi, baris pajak/cash mendapat penalti.
 class AmountCandidate {
+  /// Membuat kandidat nominal.
   const AmountCandidate(this.amount, this.line, this.score);
+
+  /// Nilai nominal hasil parse.
   final double amount;
+
+  /// Baris teks asal.
   final String line;
+
+  /// Skor relevansi baris terhadap nominal total.
   final double score;
 }
 
 /// Hasil parsing dokumen OCR. Semua field murni data (tanpa Flutter).
 class ReceiptDraft {
+  /// Membuat draf hasil parsing.
   const ReceiptDraft({
     required this.kind,
     required this.title,
@@ -28,15 +39,34 @@ class ReceiptDraft {
     required this.matchId,
   });
 
+  /// Jenis dokumen yang terdeteksi (tiket atau struk).
   final DocKind kind;
+
+  /// Judul yang dihasilkan, mis. "Tiket Arsenal vs Chelsea".
   final String title;
+
+  /// Kode mata uang nominal.
   final String currency;
+
+  /// True bila mata uang ditebak (bukan ditemukan lewat simbol/kode).
   final bool currencyGuessed;
+
+  /// Nominal terbaik (kandidat pertama); null bila tidak ada angka valid.
   final double? amount;
+
+  /// Kandidat nominal lain, sudah diurutkan dari yang paling relevan.
   final List<AmountCandidate> candidates;
+
+  /// Kategori Away Day yang disarankan.
   final AwayDayCategory category;
+
+  /// Klub yang terdeteksi di dokumen.
   final List<PlClub> clubs;
+
+  /// Tanggal di dokumen; null bila tidak ada pola tanggal yang dikenali.
   final DateTime? documentDate;
+
+  /// Id laga yang cocok dengan tiket; null bila tidak terpetakan.
   final int? matchId;
 }
 
@@ -46,6 +76,8 @@ class ReceiptDraft {
 /// per token. Pencocokan token memakai batas kata supaya "ARS" tidak ikut
 /// cocok di dalam kata lain; alias nama tetap pakai [PlClub.isTeam] yang sudah
 /// menoleransi akhiran "FC"/"AFC".
+///
+/// Club yang ditemukan lebih dulu wins: setiap klub hanya dicatat sekali.
 List<PlClub> detectClubs(String text, List<PlClub> clubs) {
   final found = <PlClub>[];
   for (final line in text.split('\n')) {
@@ -65,24 +97,43 @@ List<PlClub> detectClubs(String text, List<PlClub> clubs) {
   return found;
 }
 
+/// Pola angka (dipakai baris demi baris).
 final _number = RegExp(r'\d[\d.,]*\d|\d');
+
+/// Pola huruf, dipakai untuk menilai apakah sebuah baris layak jadi judul.
 final _letters = RegExp(r'[A-Za-z]');
+
+/// Kata "vs"/"v." penanda dua tim (dipakai untuk deteksi tiket).
 final _vsToken = RegExp(r'\bvs?\b\.?', caseSensitive: false);
+
+/// Kata kunci tiket (blok, baris, kursi, gerbang, admission, ticket).
 final _ticketWord = RegExp(
     r'\b(block|row|seat|gate|stand|admission|ticket)s?\b',
     caseSensitive: false);
+
+/// Penanda Rupiah ("Rp", dengan atau tanpa titik).
 final _rp = RegExp(r'\brp\.?', caseSensitive: false);
+
+/// Kata kunci baris total.
 final _totalRe = RegExp(
     r'\b(total|grand total|total bayar|amount due|balance due|jumlah|ticket price|price)\b',
     caseSensitive: false);
+
+/// Kata kunci baris pembayaran tunai/kartu (kandidat nominal yang salah).
 final _cashRe = RegExp(
     r'\b(cash|tunai|change|kembali|tendered|paid|card|visa|mastercard|debit)\b',
     caseSensitive: false);
+
+/// Kata kunci baris pajak atau biaya layanan.
 final _taxRe = RegExp(r'\b(vat|tax|ppn|service|tip)\b', caseSensitive: false);
+
+/// Baris yang jelas bukan nominal (nomor bangku, blok, telepon, dsb).
 final _lineSkipRe = RegExp(
     r'\b(block|row|seat|gate|section|table|tel|phone|telp|wa)\b'
     r'|\border\s*no\b|\breceipt\s*no\b|\binvoice\s*no\b',
     caseSensitive: false);
+
+/// Potongan teks yang bukan nominal: tanggal, jam, dan persentase.
 final _excludedPatterns = <RegExp>[
   RegExp(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b'), // dd/mm/yyyy
   RegExp(r'\b\d{1,2}\s+[A-Za-z]{3,}\s+\d{2,4}\b'), // dd Mon yyyy
@@ -91,6 +142,7 @@ final _excludedPatterns = <RegExp>[
   RegExp(r'\d[\d.,]*\s*%'), // persentase
 ];
 
+/// Nama bulan Inggris (3 huruf) ke nomor bulan.
 const _months = {
   'jan': 1,
   'feb': 2,
@@ -107,6 +159,19 @@ const _months = {
 };
 
 /// Parse satu dokumen OCR menjadi [ReceiptDraft].
+///
+/// Alur: deteksi klub → tentukan jenis dokumen (tiket/struk) → tebak mata
+/// uang → kumpulkan kandidat nominal → tentukan kategori → cari tanggal →
+/// petakan ke laga bila dokumennya tiket.
+///
+/// Parameter:
+/// - [ocrText]: hasil OCR mentah.
+/// - [clubs]: daftar klub untuk pencocokan (dari `assets/data/pl_clubs.json`).
+/// - [matches]: daftar laga untuk memetakan tiket ke [ReceiptDraft.matchId].
+/// - [forceKind]: memaksa jenis dokumen, melewati deteksi otomatis.
+///
+/// Kandidat nominal dibatasi tiga ambil; nominal terbaik dipakai sebagai
+/// [ReceiptDraft.amount].
 ReceiptDraft parseReceipt(
   String ocrText, {
   required List<PlClub> clubs,
@@ -134,6 +199,10 @@ ReceiptDraft parseReceipt(
   );
 }
 
+/// Tentukan jenis dokumen: tiket kalau ada dua klub + kata "vs", atau ada
+/// kata tiket (block/row/seat/gate/stand/admission/ticket).
+///
+/// [force] (dari `forceKind`) selalu menang dan menutupi deteksi otomatis.
 DocKind _detectKind(String text, List<PlClub> found, DocKind? force) {
   if (force != null) return force;
   final hasTwoClubs = found.length >= 2;
@@ -149,6 +218,13 @@ bool _hasWord(String text, String word) => RegExp(
       caseSensitive: false,
     ).hasMatch(text);
 
+/// Tebak mata uang dokumen: simbol/kode yang eksplisit lebih dulu
+/// (£/$/€/Rp atau GBP/USD/EUR/IDR), lalu kata kunci berbahasa Indonesia
+/// ("total bayar", "tunai", "kembali", "ppn", "jl.").
+///
+/// Mengembalikan `(kode, tebak)`; boolean menandai bahwa mata uang ditebak
+/// karena tidak ada penanda eksplisit. Kalau tidak ada petunjuk sama sekali,
+/// default-nya GBP (karena liga Premier).
 (String, bool) _detectCurrency(String text) {
   if (text.contains('£') || _hasWord(text, 'GBP')) return ('GBP', false);
   if (text.contains(r'$') || _hasWord(text, 'USD')) return ('USD', false);
@@ -167,6 +243,13 @@ bool _hasWord(String text, String word) => RegExp(
   return idCues.any((v) => v) ? ('IDR', true) : ('GBP', true);
 }
 
+/// Kumpulkan kandidat nominal dari setiap baris OCR.
+///
+/// Baris yang berisi data non-harga (nomor blok/kursi/karcis, nomor
+/// telepon, nomor struk/invoice) dilewati. Angka tanggal, jam, persentase,
+/// dan angka yang diikuti "x" (jumlah barang) juga dibuang. Nilai di-parse
+/// dengan [PriceParser.parse] memakai mata uang dokumen, lalu kandidat diberi
+/// skor relevansi dan diurutkan; hanya tiga teratas yang dikembalikan.
 List<AmountCandidate> _amountCandidates(String text, String currency) {
   final out = <AmountCandidate>[];
   for (final line in text.split('\n')) {
@@ -226,6 +309,11 @@ bool _isQuantity(String line, int start, int end) {
   return n < line.length && (line[n] == 'x' || line[n] == 'X');
 }
 
+/// Skor relevansi sebuah baris terhadap nominal total.
+///
+/// Bonus: kata "total"/"amount due"/"jumlah" (+6), ada simbol/kode mata
+/// uang (+2), angka berdesimal (+1). Penalti: "subtotal" (-4), baris
+/// cash/tunai/kembali (-6), dan baris pajak berpersentase (-8).
 double _scoreLine(String line, String raw) {
   final lower = line.toLowerCase();
   var score = 0.0;
@@ -246,6 +334,12 @@ bool _hasCurrencyMark(String line) {
       .hasMatch(line);
 }
 
+/// Tebak kategori Away Day dari isi struk.
+///
+/// Urutan pemeriksaan penting: hotel lebih dulu, lalu transport, makanan,
+/// merchandise, tiket, dan terakhir "lainnya". Makanan diperiksa sebelum
+/// merchandise supaya kafe yang memakai kata "shop" (mis. "The Pie Shop")
+/// tetap terklasifikasi sebagai makanan.
 AwayDayCategory _detectCategory(String text) {
   final lower = text.toLowerCase();
   bool has(List<String> words) => words.any((w) => _hasWord(lower, w));
@@ -274,6 +368,11 @@ AwayDayCategory _detectCategory(String text) {
   return AwayDayCategory.lainnya;
 }
 
+/// Susun judul draf.
+///
+/// Untuk tiket: "Tiket <klubA> vs <klubB>" (atau satu klub, atau label
+/// kategori bila klub tidak terdeteksi). Untuk struk: baris pertama yang
+/// punya minimal 3 huruf, dipotong 40 karakter dan dijadikan title case.
 String _buildTitle(
   DocKind kind,
   String text,
@@ -297,6 +396,7 @@ String _buildTitle(
   return _categoryLabel(category);
 }
 
+/// Ubah teks menjadi judul kapital per kata.
 String _titleCase(String s) => s
     .split(RegExp(r'\s+'))
     .where((w) => w.isNotEmpty)
@@ -305,6 +405,7 @@ String _titleCase(String s) => s
         : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
     .join(' ');
 
+/// Label Indonesia untuk tiap kategori Away Day.
 String _categoryLabel(AwayDayCategory c) => switch (c) {
       AwayDayCategory.tiket => 'Tiket',
       AwayDayCategory.hotel => 'Hotel',
@@ -314,9 +415,16 @@ String _categoryLabel(AwayDayCategory c) => switch (c) {
       AwayDayCategory.lainnya => 'Lainnya',
     };
 
+/// Cek rentang tanggal (bulan 1..12, hari 1..31).
 bool _validDate(int day, int month) =>
     month >= 1 && month <= 12 && day >= 1 && day <= 31;
 
+/// Cari tanggal di dalam teks OCR.
+///
+/// Pola yang dikenali berurutan: `dd/mm/yyyy`, `dd Mon yyyy` (bulan bahasa
+/// Inggris, 3 huruf pertama), lalu `yyyy-mm-dd`. Tahun dua digit dianggap
+/// abad 2000. Mengembalikan null bila tidak ada pola yang cocok atau
+/// tanggalnya di luar rentang.
 DateTime? _detectDate(String text) {
   final slash = RegExp(r'\b(\d{1,2})/(\d{1,2})/(\d{2,4})\b').firstMatch(text);
   if (slash != null) {
@@ -349,6 +457,11 @@ DateTime? _detectDate(String text) {
   return null;
 }
 
+/// Petakan tiket ke id laga yang relevan.
+///
+/// Hanya berlaku untuk dokumen tiket yang memuat dua klub. Bila tanggal
+/// dokumen tersedia, dicari laga yang kickoff-nya dalam rentang +/-1 hari dari
+/// tanggal itu; bila tidak, dipakai laga mendatang yang paling dekat.
 int? _detectMatch(
   List<PlClub> found,
   List<FootballMatch> matches,

@@ -1,13 +1,25 @@
 /// Kota di Indonesia dengan perkiraan bujur dan zona waktu sipilnya.
+///
+/// Bujur dipakai untuk mengurutkan kota dari barat ke timur (fajar lebih
+/// dulu di timur); zona waktu dipakai untuk menampilkan jam lokal saat
+/// away day.
 class IndoCity {
+  /// Membuat entri kota.
   const IndoCity(this.name, this.lng, this.zone);
 
+  /// Nama kota yang ditampilkan.
   final String name;
+
+  /// Perkiraan bujur (derajat, positif = timur).
   final double lng;
+
+  /// Zona waktu sipil: `WIB`, `WITA`, atau `WIT`.
   final String zone;
 }
 
 /// Daftar kota Indonesia yang ditampilkan, diurutkan dari barat ke timur.
+///
+/// Daftar ini statis (bukan dari API), jadi bisa dipakai tanpa jaringan.
 const indonesianCities = <IndoCity>[
   IndoCity('Jakarta', 106.85, 'WIB'),
   IndoCity('Bandung', 107.61, 'WIB'),

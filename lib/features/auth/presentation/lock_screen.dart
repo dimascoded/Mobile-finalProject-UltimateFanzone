@@ -11,6 +11,17 @@ import '../providers/auth_provider.dart';
 import 'auto_lock_observer.dart';
 import 'logout_flow.dart';
 
+// STRUKTUR UI — LockScreen
+// Ukuran: PopScope > Scaffold > Stack: ScrimImage latar + SafeArea >
+//         SingleChildScrollView > ConstrainedBox(maxWidth 420).
+// [1] Ikon kunci      — bundar 88px berisi ikon lock di atas latar gelap
+// [2] Judul           — teks "Aplikasi terkunci" di tengah
+// [3] AppCard aksi    — tombol biometrik (bila aktif), tombol password, dan
+//                        tombol keluar dari akun
+// [4] _PasswordDialog — dialog password tersembunyi; verifikasi lewat
+//                        AuthRepository.verifyPassword tanpa mengakhiri sesi
+// Tabel/kolom: tanpa tabel; satu kolom aksi pada layar kunci.
+// Sumber data: authProvider, biometricEnabledProvider.
 /// Tampil saat sesi masih valid: minta biometrik sebelum masuk Dashboard.
 class LockScreen extends ConsumerStatefulWidget {
   const LockScreen({super.key, this.popOnSuccess = false});

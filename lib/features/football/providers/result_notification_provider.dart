@@ -16,6 +16,11 @@ import 'kickoff_reminder_provider.dart';
 const resultNotifyMaxAge = Duration(hours: 6);
 
 /// Id laga yang hasil akhirnya sudah pernah dinotifikasi.
+///
+/// State di memori (bukan Hive) yang dicerminkan dari daftar persisten di
+/// [NotifiedStore]; dipakai UI untuk tahu laga mana yang sudah diberi tahu
+/// pada sesi ini. StateProvider biasa agar tidak ter-reset saat provider lain
+/// dibangun ulang.
 final notifiedMatchIdsProvider = StateProvider<Set<int>>((ref) => const {});
 
 /// Signature penjadwalan hasil agar tidak dijadwalkan ulang setiap data berubah:
@@ -23,9 +28,19 @@ final notifiedMatchIdsProvider = StateProvider<Set<int>>((ref) => const {});
 final _scheduledResultsProvider =
     StateProvider<Map<String, DateTime>>((ref) => const {});
 
+/// Signature satu laga: `matchId@kickoffUtc` (waktu dalam UTC).
+///
+/// Fungsi murni; dipakai sebagai kunci di [_scheduledResultsProvider] supaya
+/// satu laga hanya punya satu jadwal pengingat hasil.
 String _sig(FootballMatch m) =>
     '${m.id}@${m.kickoffUtc.toUtc().toIso8601String()}';
 
+/// Penyimpanan daftar id laga yang sudah dinotifikasi.
+///
+/// Dipersisten di Hive `app_cache` dengan kunci `notified_results` sebagai
+/// JSON `List<int>` (format lama `'#1;#2;'` dibaca sebagai data rusak lalu
+/// diabaikan). Kunci ini termasuk daftar data pengguna yang dihapus saat
+/// logout lewat [AuthRepository.userDataKeys].
 class NotifiedStore {
   static const _key = 'notified_results';
 
@@ -45,13 +60,19 @@ class NotifiedStore {
   }
 
   /// Simpan sebagai JSON `List<int>` (bukan lagi string `'#id;'`).
+  ///
+  /// Efek samping: menulis ulang Hive `app_cache` (kunci `notified_results`).
   Future<void> save(Set<int> ids) =>
       HiveService.cache.put(_key, jsonEncode(ids.toList()..sort()));
 }
 
+/// Penyedia tunggal [NotifiedStore] yang dipakai sinkronisasi notifikasi.
 final notifiedStoreProvider = Provider((ref) => NotifiedStore());
 
 /// Bangun judul + isi notifikasi hasil akhir.
+///
+/// Fungsi murni: judul memuat nama pendek kedua tim, isi memuat skor dan
+/// pemenang (atau "Seri" bila imbang).
 ({String title, String body}) resultNotification(FootballMatch m) {
   final score = '${m.homeScore}-${m.awayScore}';
   final winner = m.homeScore! > m.awayScore!
@@ -66,6 +87,10 @@ final notifiedStoreProvider = Provider((ref) => NotifiedStore());
 }
 
 /// Penjadwal notifikasi hasil akhir 15 menit setelah perkiraan akhir laga.
+///
+/// `assumedMatchMinutes` adalah asumsi durasi laga (105 menit) dipakai untuk
+/// memperkirakan waktu selesai; angka tetap + 15 menit agar notifikasi
+/// dijadwalkan cukup jauh setelah ada kemungkinan skor akhir tersedia.
 const resultNotifyAfterMinutes = 15;
 const assumedMatchMinutes = 105;
 
@@ -75,11 +100,17 @@ const resultReminderBody =
     'Laga selesai. Buka Match Center untuk skor terbaru.';
 
 /// Kapan notifikasi hasil sebuah laga seharusnya dibunyikan (UTC).
+///
+/// Fungsi murni: kickoff + durasi asumsi + jeda [resultNotifyAfterMinutes].
 DateTime resultNotifyAt(FootballMatch m) => m.kickoffUtc.toUtc().add(
     const Duration(minutes: assumedMatchMinutes + resultNotifyAfterMinutes));
 
 /// Jadwalkan notifikasi hasil untuk satu laga. Mengembalikan jumlah jadwal
 /// yang benar-benar dibuat (0 bila waktunya sudah lewat).
+///
+/// Efek samping: membuat notifikasi terjadwal di OS lewat
+/// `NotificationService.scheduleResult` (id notifikasi `matchId * 10 + 2`).
+/// Tidak menyentuh state Riverpod.
 Future<int> scheduleResultNotification(FootballMatch m) async {
   final when = resultNotifyAt(m);
   if (!when.isAfter(DateTime.now().toUtc())) return 0;
@@ -101,6 +132,24 @@ Future<int> scheduleResultNotification(FootballMatch m) async {
 // membacanya; notifikasi hasil ditangani `resultNotifierSyncProvider` di bawah.
 
 /// Dipanggil setiap cache pertandingan berubah, untuk mengnotifikasi hasil baru.
+///
+/// Provider "seam" tanpa state: isinya effect yang memasang listener pada
+/// [matchesProvider] dan [favoriteClubProvider], lalu compleja tiga hal:
+///
+/// 1. Memastikan pengingat hasil terjadwal satu kali per laga (kunci
+///    signature di [_scheduledResultsProvider]).
+/// 2. Menampilkan notifikasi hasil akhir LANGSUNG (bukan terjadwal) untuk
+///    laga tim favorit yang baru saja selesai — dibatasi umur
+///    [resultNotifyMaxAge] (6 jam) supaya tidak membanjiri pengguna.
+/// 3. Merekaman id liga yang sudah dinotifikasi ke Hive `app_cache` (kunci
+///    `notified_results`) lewat [NotifiedStore].
+///
+/// Aturan yang berlaku: data contoh (tanpa `FOOTBALL_API_KEY`) tidak pernah
+/// memicu notifikasi, dan pada proses pertama daftar kosong diperlakukan
+/// sebagai "seed" — hasil lama ditandai sudah dinotifikasi tanpa
+/// ditampilkan. Provider ini `autoDispose`, jadi listener dibuang otomatis
+/// saat tidak dipakai; penjadwalan yang tertunda tidak menyentuh `state`
+/// Riverpod sehingga aman setelah provider dibuang.
 final resultNotifierSyncProvider = Provider<void>((ref) {
   void process(AsyncValue<FootballResult<List<FootballMatch>>> next) {
     final snapshot = next.valueOrNull;
@@ -188,6 +237,15 @@ final resultNotifierSyncProvider = Provider<void>((ref) {
 });
 
 /// Bersihkan daftar notifikasi dari laga yang sudah tidak ada di jadwal.
+///
+/// Provider "seam" tanpa state: memasang listener pada [matchesProvider] dan
+/// setiap ada perubahan, membandingkan daftar id liga yang tersimpan di Hive
+/// `app_cache` (kunci `notified_results`) dengan id liga yang masih ada di
+/// jadwal. Laga yang sudah tidak ada dibuang dari daftar.
+///
+/// Efek samping: menulis ulang Hive `notified_results` dan memperbarui
+/// [notifiedMatchIdsProvider]. `autoDispose`, jadi listener dibuang otomatis
+/// saat tidak dipakai.
 final pruneNotifiedProvider = Provider<void>((ref) {
   ref.listen(matchesProvider, (_, next) {
     final matches = next.valueOrNull?.data ?? const <FootballMatch>[];

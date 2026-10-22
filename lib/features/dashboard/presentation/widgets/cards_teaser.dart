@@ -13,6 +13,16 @@ import '../../../gamification/presentation/card_collection_screen.dart';
 import '../../../gamification/providers/card_collection_provider.dart';
 import '../../../penalty_shootout/presentation/penalty_screen.dart';
 
+// STRUKTUR UI — CardsTeaser
+// Ukuran: Column tanpa Scaffold: SectionHeader + isi, jarak AppSpacing.md.
+// [1] Kartu kosong    — AppCard ajakan bermain Adu Penalti bila koleksi
+//                        klub masih kosong
+// [2] Baris kartu     — Row berisi maksimal tiga _CardTile (Expanded)
+// [3] _CardTile       — kartu klub: crest, nama pendek, dan PillBadge
+//                        kelangkaan kartu
+// [4] _TextBadge      — badge lingkaran 36px berisi tiga huruf kode klub
+// Tabel/kolom: tanpa tabel; baris kartu tiga kolom saat koleksi terisi.
+// Sumber data: cardCollectionProvider, clubsProvider, clubCrestProvider.
 /// Tiga kartu klub terbaru, atau ajakan bermain bila koleksi masih kosong.
 class CardsTeaser extends ConsumerWidget {
   const CardsTeaser({super.key});

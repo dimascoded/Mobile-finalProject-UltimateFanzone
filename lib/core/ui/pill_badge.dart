@@ -1,8 +1,26 @@
 import 'package:flutter/material.dart';
 import '../theme/app_tokens.dart';
 
-enum PillTone { neutral, accent, success }
+/// Nada warna untuk [PillBadge].
+///
+/// Menentukan pasangan latar dan teks yang dipakai lencana, sehingga status
+/// yang sama selalu tampil dengan warna yang sama di seluruh aplikasi.
+enum PillTone {
+  /// Netral: latar permukaan tinggi dengan teks utama.
+  neutral,
 
+  /// Aksen: warna kuning [FanzoneColors.accent] dengan teks gelap.
+  accent,
+
+  /// Sukses: warna primer tema dengan teks kontrasnya.
+  success,
+}
+
+/// Lencana berbentuk kapsul untuk label status singkat.
+///
+/// Dipakai untuk menandai status seperti "Berlangsung", "Selesai", atau
+/// jumlah item pada kartu fitur. Label dipangkas satu baris dengan ellipsis
+/// supaya lencana tidak merusak layout saat terlalu panjang.
 class PillBadge extends StatelessWidget {
   const PillBadge({
     super.key,
@@ -11,8 +29,13 @@ class PillBadge extends StatelessWidget {
     this.tone = PillTone.neutral,
   });
 
+  /// Teks singkat pada lencana; idealnya satu sampai tiga kata.
   final String label;
+
+  /// Ikon opsional di sebelah kiri label.
   final Widget? icon;
+
+  /// Nada warna lencana, default [PillTone.neutral].
   final PillTone tone;
 
   @override

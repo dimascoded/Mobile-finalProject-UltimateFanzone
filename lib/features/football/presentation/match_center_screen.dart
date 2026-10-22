@@ -13,6 +13,19 @@ import 'club_crest.dart';
 import 'data_source_banner.dart';
 import 'kickoff_times.dart';
 
+// STRUKTUR UI — MatchCenterScreen
+// Ukuran: Scaffold + AppBar dengan TabBar 3 tab; tab Jadwal memakai
+// ConstrainedBox(maxWidth: 720) + Column, tab lain Column tanpa batas lebar
+// [1] Tab "Jadwal" (_FixturesTab) — kolom pencarian, baris filter ChoiceChip, DataSourceBanner, ListView _MatchTile
+// [2] _MatchTile — kartu laga: badge status, baris home vs away dengan crest, KickoffTimes
+// [3] Tab "Klasemen" (_StandingsTab) — DataSourceBanner, baris kepala tabel, baris klasemen, catatan kaki
+// [4] Tab "Top Skor" (_ScorersTab) — DataSourceBanner dan ListView pencetak gol
+// [5] Aksi AppBar — tombol atur pengingat kickoff dan tombol muat ulang data
+// Tabel/kolom: tabel klasemen (baris manual) dengan kolom #, Tim, M, M, S, K, SG, Poin
+// Sumber data: filteredMatchesProvider, matchFilterProvider, favoriteClubProvider,
+// standingsProvider, scorersProvider, matchesProvider, kickoffLeadsProvider,
+// matchQueryProvider, footballRefreshProvider
+
 class MatchCenterScreen extends ConsumerWidget {
   const MatchCenterScreen({super.key});
 

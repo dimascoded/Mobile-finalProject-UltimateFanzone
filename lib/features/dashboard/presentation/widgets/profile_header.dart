@@ -14,6 +14,21 @@ import '../../../prediction/data/prediction_rank.dart';
 import '../../../prediction/providers/prediction_provider.dart';
 import '../../providers/dashboard_provider.dart';
 
+// STRUKTUR UI — ProfileHeader
+// Ukuran: Column > ScrimImage tinggi 230 * textScaler; isi dibungkus
+//         ConstrainedBox(minHeight) + SingleChildScrollView.
+// [1] Header foto      — ScrimImage AppImages.headerLaga dengan scrim 0.75,
+//                        pola lapangan, dan radius AppRadius.xl
+// [2] _ProfileAvatar   — avatar lingkaran radius 40 dari berkas foto lokal,
+//                        fallback ke ikon orang bila berkas tidak ada
+// [3] Nama & email     — baris nama tampilan (maks 2 baris + ikon ubah)
+//                        dan email dengan indikator pemuatan
+// [4] Klub favorit     — pil berisi ClubCrest yang membuka TeamPickerScreen
+// [5] Peringkat        — PillBadge rankFor(predictionPointsProvider)
+// [6] _EditNameDialog  — dialog ubah nama tampilan dengan validasi nama
+// Tabel/kolom: tanpa tabel; lima bagian pada satu kolom header.
+// Sumber data: favoriteClubProvider, predictionPointsProvider,
+//              clubCrestProvider, effectiveDisplayNameProvider.
 class ProfileHeader extends ConsumerWidget {
   const ProfileHeader({
     super.key,

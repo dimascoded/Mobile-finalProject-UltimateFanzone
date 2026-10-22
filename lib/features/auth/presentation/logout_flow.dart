@@ -72,6 +72,18 @@ Future<({List<String> rows, String? cause})> _syncAttempt(WidgetRef ref) async {
   return (rows: await _pendingRows(ref), cause: cause);
 }
 
+// STRUKTUR UI — confirmAndLogout (alur keluar)
+// Ukuran: bukan widget; satu dialog AlertDialog konfirmasi.
+// [1] Dialog keluar    — muncul bila tidak ada data lokal yang belum
+//                        terkirim; tombol Batal dan Keluar
+// [2] Dialog data belum dicadangkan — muncul bila masih ada sisa data:
+//                        daftar baris, tombol Batal, Coba sinkron lagi
+//                        (maksimal satu percobaan), dan Keluar tetap
+// [3] Isi peringatan  — teks daftar data per baris, konsekuensi keluar, nota
+//                        perangkat offline, dan penyebab kegagalan sinkron
+// Tabel/kolom: tanpa tabel; daftar data ditulis satu baris per koleksi.
+// Sumber data: syncProvider, onlineProvider, authRepositoryProvider,
+//              logoutProvider.
 /// Keluar dari akun dengan perlindungan data yang belum tersinkron.
 ///
 /// Sebelum menghapus sesi, kalau masih ada perubahan lokal yang belum dikirim

@@ -5,9 +5,18 @@ import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
 import '../../auth/data/auth_repository.dart';
 
+/// Kategori pengeluaran away day (dipakai juga sebagai label saat parsing
+/// struk pada fitur Lens).
 enum AwayDayCategory { tiket, hotel, transport, merchandise, makanan, lainnya }
 
+/// Satu pengeluaran away day (tiket, hotel, makan, merch, ...).
+///
+/// Menyimpan tiga nilai nominal sekaligus: [amountForeign] (nominal asli
+/// dalam [currencyCode]), [amountIdr] (nilai Rupiah saat disimpan), dan
+/// [amountGbp] (padanan poundsterling untuk ringkasan).
 class AwayDayExpense {
+  /// Membuat expense. [amountForeign] otomatis mengikuti [amountGbp] bila
+  /// tidak diberikan, jadi pemanggil lama tidak perlu mengubah apa pun.
   AwayDayExpense({
     required this.title,
     required this.amountGbp,
@@ -18,15 +27,35 @@ class AwayDayExpense {
     double? amountForeign,
     this.clubKey,
   }) : amountForeign = amountForeign ?? amountGbp;
+
+  /// Judul bebas, mis. "Tiket Arsenal vs Chelsea".
   final String title;
+
+  /// Nominal dalam poundsterling (dihitung dari [amountIdr] saat disimpan).
   final double amountGbp;
+
+  /// Nominal dalam Rupiah.
   final double amountIdr;
+
+  /// Kode mata uang nominal asli (default `GBP`).
   final String currencyCode;
+
+  /// Nominal asli dalam [currencyCode].
   final double amountForeign;
+
+  /// Kategori pengeluaran.
   final AwayDayCategory category;
+
+  /// Tanggal pengeluaran; sekaligus menjadi identitas baris (lihat [id]).
   final DateTime date;
+
+  /// Kode klub yang dikunjungi (bisa null untuk pengeluaran biasa).
   final String? clubKey;
 
+  /// Identitas expense, diturunkan dari [date].
+  ///
+  /// Sengaja memakai tanggal (bukan UUID) supaya edit menimpa baris yang
+  /// sama dan [copyWith] tidak pernah mengubah [date].
   String get id => date.toIso8601String();
 
   /// Salinan dengan field yang boleh diubah saat edit.
@@ -55,6 +84,9 @@ class AwayDayExpense {
     );
   }
 
+  /// Serialisasi ke JSON untuk disimpan di Hive/SQLite.
+  ///
+  /// Bentuk kunci harus sama dengan yang dibaca [AwayDayExpense.fromJson].
   Map<String, dynamic> toJson() => {
         'title': title,
         'amountGbp': amountGbp,
@@ -71,6 +103,9 @@ class AwayDayExpense {
   ///
   /// Aturannya: judul wajib (kalau kosong, pakai "Tanpa judul"), nominal
   /// non-angka jadi 0, tanggal rusak jadi epoch supaya item tetap urut.
+  ///
+  /// Sumber datanya adalah koleksi Hive `away_day_expenses` (box `app_cache`)
+  /// yang disalin ke tabel SQLite `sync_documents` untuk sinkronisasi.
   factory AwayDayExpense.fromJson(Map<String, dynamic> j) {
     final amountGbp = (j['amountGbp'] as num?)?.toDouble() ?? 0;
     return AwayDayExpense(
@@ -92,13 +127,28 @@ class AwayDayExpense {
   }
 }
 
+/// Repository daftar pengeluaran away day.
+///
+/// Data disimpan pada koleksi Hive `away_day_expenses` (box `app_cache`) dan
+/// dicerminkan ke tabel SQLite `sync_documents` dengan `collection =
+/// 'away_day_expenses'` supaya bisa disinkronkan ke server (koleksi sinkron:
+/// `away_day_expenses`, `passport_chain`, `score_predictions`). Penghapusan
+/// satu baris dicatat di tabel `sync_deletions`.
 class AwayDayRepository {
+  /// Nama koleksi (dipakai juga sebagai kunci Hive dan kolom `collection`).
   static const _key = 'away_day_expenses';
 
+  /// Repository tanpa [AuthRepository]: anggaran tidak bisa dibaca/simpan.
   AwayDayRepository([this._auth]);
 
+  /// Auth aktif; dipakai untuk membaca/menulis anggaran per-pengguna.
   final AuthRepository? _auth;
 
+  /// Muat seluruh pengeluaran dari Hive box `app_cache`, kunci
+  /// `away_day_expenses`.
+  ///
+  /// Isinya adalah JSON array. Data yang rusak (bukan JSON, bukan array, atau
+  /// item dengan field salah) dilewati, bukan menggagalkan seluruh daftar.
   List<AwayDayExpense> load() {
     final raw = HiveService.cache.get(_key);
     if (raw == null) return [];
@@ -121,12 +171,23 @@ class AwayDayRepository {
     return out;
   }
 
+  /// Simpan seluruh daftar pengeluaran.
+  ///
+  /// Menulis ke Hive box `app_cache` (kunci `away_day_expenses`) sekaligus
+  /// ke tabel SQLite `sync_documents` (collection `away_day_expenses`) lewat
+  /// [OfflineSyncDatabase.persist], sehingga revisi sinkronisasi naik dan
+  /// data terkirim ke server.
   Future<void> save(List<AwayDayExpense> list) => OfflineSyncDatabase.persist(
         _key,
         jsonEncode(list.map((e) => e.toJson()).toList()),
       );
 
   /// Anggaran harian dalam Rupiah. 0 berarti belum diatur.
+  ///
+  /// Sumber: nilai lokal di Hive (kunci `away_day_budget_idr_<userId>`,
+  /// termasuk nilai legacy global yang diadopsi); kalau belum ada, diambil
+  /// dari metadata cloud `away_day_budget_idr` lalu ditulis balik ke Hive.
+  /// Tanpa user id (belum masuk) hasilnya 0.
   double loadBudget() {
     final auth = _auth;
     if (auth?.currentUserId == null) return 0;
@@ -139,6 +200,12 @@ class AwayDayRepository {
     return cloud.toDouble();
   }
 
+  /// Simpan anggaran harian (Rupiah) secara lokal dan ke metadata cloud.
+  ///
+  /// Nilai lokal disimpan pada kunci Hive `away_day_budget_idr_<userId>`;
+  /// nilai cloud disimpan pada metadata `away_day_budget_idr` (dibulatkan ke
+  /// integer). Mengembalikan false bila tidak ada user id atau penulisan
+  /// cloud gagal.
   Future<bool> saveBudget(double idr) async {
     final auth = _auth;
     if (auth?.currentUserId == null) return false;
@@ -147,5 +214,6 @@ class AwayDayRepository {
   }
 }
 
+/// Repository pengeluaran away day yang terikat pada pengguna aktif.
 final awayDayRepositoryProvider =
     Provider((ref) => AwayDayRepository(ref.watch(authRepositoryProvider)));

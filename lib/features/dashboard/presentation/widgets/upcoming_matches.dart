@@ -10,6 +10,16 @@ import '../../../football/presentation/club_crest.dart';
 import '../../../football/presentation/match_center_screen.dart';
 import '../../../football/providers/football_providers.dart';
 
+// STRUKTUR UI — UpcomingMatches
+// Ukuran: Column > SectionHeader + SizedBox(tinggi 120 * textScaler) berisi
+//         ListView.separated horizontal dengan lebar kartu 220.
+// [1] Daftar laga   — daftar horizontal maksimal lima laga, disaring ke tim
+//                      favorit dan melewati laga yang tampil di hero
+// [2] _MatchCard    — kartu laga: tanggal/jam WIB, baris tim home, dan baris
+//                      tim away lengkap dengan ClubCrest
+// Tabel/kolom: tanpa tabel; daftar kartu satu baris horizontal.
+// Sumber data: matchesProvider, favoriteClubProvider, nextMatchProvider,
+//              clubCrestProvider.
 /// Daftar horizontal laga mendatang (maksimal 5), disaring ke tim favorit bila
 /// sudah dipilih. Laga yang sedang tampil di hero dilewati.
 class UpcomingMatches extends ConsumerWidget {

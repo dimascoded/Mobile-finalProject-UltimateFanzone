@@ -13,6 +13,20 @@ import '../../../core/widgets/permission_gate.dart';
 import '../data/penalty_rules.dart';
 import '../providers/penalty_provider.dart';
 
+// STRUKTUR UI — PenaltyScreen
+// Ukuran: Scaffold + AppBar, body dibungkus PermissionGate, lalu Center +
+// ConstrainedBox(maxWidth: 720) + ListView satu kolom
+// [1] _Scoreboard — kartu skor AppCard: gol/tendangan, skor, badge sudden death
+// [2] _ResultChips — Wrap badge hasil tiap tendangan bernomor
+// [3] _PhaseInstruction — teks instruksi per fase (aiming/swinging/resolved/finished)
+// [4] _GoalBoard — papan gawang AspectRatio 1.55: 2 baris x 3 _ZoneCell, _BallMarker/_KeeperMarker, gesture geser
+// [5] _ResultOverlay — overlay hasil tendangan di atas papan: judul, alasan, tombol lanjut
+// [6] _PowerMeter — meter kekuatan ayunan (segmen Lemah/Pas/Terlalu keras) + label band
+// [7] _KickHistory — daftar riwayat tendangan satu kolom (ListTile: zona, alasan, band)
+// [8] _PhaseControls — tombol aksi per fase: tendang demo, main lagi, atau pesan geser
+// Tabel/kolom: tanpa tabel; papan gawang 2 baris x 3 kolom zona, sisanya daftar kartu satu kolom
+// Sumber data: penaltyProvider
+
 class PenaltyScreen extends ConsumerStatefulWidget {
   const PenaltyScreen({super.key});
 

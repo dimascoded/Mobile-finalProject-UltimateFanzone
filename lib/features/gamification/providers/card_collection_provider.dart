@@ -6,6 +6,10 @@ import '../domain/club_card.dart';
 import 'gamification_providers.dart';
 
 /// Katalog klub (hanya key) dari aset lokal. Kosong selama aset belum termuat.
+///
+/// Provider turunan dari [clubsProvider]: hanya menyimpan `key` setiap
+/// [PlClub], karena itu yang dipakai sebagai kunci kartu dan perhitungan
+/// rarity. Tanpa efek samping.
 final clubKeysProvider = Provider<List<String>>((ref) {
   final clubs = ref.watch(clubsProvider).valueOrNull;
   return clubs == null ? const <String>[] : [for (final c in clubs) c.key];
@@ -13,6 +17,12 @@ final clubKeysProvider = Provider<List<String>>((ref) {
 
 /// Semua kartu klub yang bisa diturunkan dari rantai, terbaru lebih dulu.
 /// Tidak memicu mint; murni membaca state rantai yang ada.
+///
+/// Provider turunan dari [chainProvider] dan [clubKeysProvider]: setiap blok
+/// bertipe `card` dipetakan ke [ClubCard] lewat [cardFromBlock], di mana klub
+/// dan rarity dihitung dari hash blok sehingga tidak bisa dimanipulasi.
+/// Kartu diurutkan menurut indeks blok menaik (terbaru di posisi paling
+/// awal). Tanpa efek samping.
 final cardCollectionProvider = Provider<List<ClubCard>>((ref) {
   final clubKeys = ref.watch(clubKeysProvider);
   if (clubKeys.isEmpty) return const <ClubCard>[];
@@ -26,6 +36,10 @@ final cardCollectionProvider = Provider<List<ClubCard>>((ref) {
 });
 
 /// Jumlah kartu per rarity.
+///
+/// Provider turunan dari [cardCollectionProvider]: setiap rarity
+/// ([CardRarity.values]) selalu ada di peta meski nilainya 0.
+/// Tanpa efek samping.
 final cardRarityCountsProvider = Provider<Map<CardRarity, int>>((ref) {
   final counts = {for (final r in CardRarity.values) r: 0};
   for (final card in ref.watch(cardCollectionProvider)) {
@@ -35,10 +49,16 @@ final cardRarityCountsProvider = Provider<Map<CardRarity, int>>((ref) {
 });
 
 /// Klub berbeda yang sudah dimiliki (satu atau lebih kartu).
+///
+/// Provider turunan dari [cardCollectionProvider]: hanya mengembalikan
+/// kunci klub unik, tanpa jumlah kartu per klub. Tanpa efek samping.
 final ownedClubsProvider = Provider<Set<String>>(
     (ref) => {for (final c in ref.watch(cardCollectionProvider)) c.clubKey});
 
 /// Entri koleksi untuk setiap pasangan (klub, rarity).
+///
+/// Dipakai layar koleksi sebagai satu baris tampilan yang memuat daftar kartu,
+/// jumlah, dan kartu terbaru (indeks blok tertinggi).
 class CollectionEntry {
   CollectionEntry(
       {required this.clubKey, required this.rarity, required this.cards});
@@ -52,6 +72,11 @@ class CollectionEntry {
 }
 
 /// Daftar entri koleksi, dikelompokkan berdasarkan (clubKey, rarity).
+///
+/// Provider turunan dari [cardCollectionProvider] dan [clubsProvider]:
+/// kartu dikelompokkan per pasangan (klub, rarity), kartu dalam kelompok
+/// diurutkan terbaru dulu, dan kelompok diurutkan menurut rarity (legendary
+/// lebih dulu), lalu nama klub (A-Z), lalu blok terbaru. Tanpa efek samping.
 final collectionEntriesProvider = Provider<List<CollectionEntry>>((ref) {
   final allCards = ref.watch(cardCollectionProvider);
   final clubs = ref.watch(clubsProvider).valueOrNull ?? const <PlClub>[];
@@ -90,6 +115,8 @@ final collectionEntriesProvider = Provider<List<CollectionEntry>>((ref) {
   return entries;
 });
 
+/// Progress koleksi: jumlah klub yang dimiliki, total klub, jumlah entri
+/// grup (klub x rarity), dan total kartu.
 typedef CollectionProgress = ({
   int clubsOwned,
   int clubsTotal,
@@ -98,6 +125,11 @@ typedef CollectionProgress = ({
 });
 
 /// Progress koleksi.
+///
+/// Provider turunan dari [clubsProvider], [ownedClubsProvider],
+/// [collectionEntriesProvider], dan [cardCollectionProvider]; dipakai layar
+/// koleksi untuk menampilkan "X dari Y klub" dan total kartu.
+/// Tanpa efek samping.
 final collectionProgressProvider = Provider<CollectionProgress>((ref) {
   final clubs = ref.watch(clubsProvider).valueOrNull ?? const <PlClub>[];
   final ownedClubs = ref.watch(ownedClubsProvider);

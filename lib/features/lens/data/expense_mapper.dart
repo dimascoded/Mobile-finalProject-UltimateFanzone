@@ -10,6 +10,12 @@ import '../../away_day/providers/away_day_providers.dart';
 ///   tidak, hasilnya null supaya UI bisa meminta isian manual.
 /// - [amountGbp] dihitung dari Rupiah lewat [idrToForeign] dan jatuh ke 0 bila
 ///   kurs GBP belum tersedia.
+///
+/// PENTING: kurs berbasis IDR (dari `https://api.exchangerate-api.com/v4/latest/IDR`),
+/// jadi nominal asing ke Rupiah itu DIBAGI kurs, bukan dikali.
+///
+/// Mengembalikan null berarti data belum cukup untuk disimpan; pemanggil
+/// harus meminta isian manual dari pengguna.
 ({double amountForeign, double amountIdr, double amountGbp})? toExpenseAmounts({
   required double amountForeign,
   required String currency,

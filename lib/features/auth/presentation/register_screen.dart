@@ -9,6 +9,15 @@ import '../../dashboard/presentation/dashboard_screen.dart';
 import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
 
+// STRUKTUR UI — RegisterScreen
+// Ukuran: Scaffold dengan AppBar > Stack: ScrimImage latar + SafeArea >
+//         SingleChildScrollView > ConstrainedBox(maxWidth 420).
+// [1] Ikon bola       — bundar 88px berisi ikon sepak bola
+// [2] Judul           — teks "Ultimate Fanzone"
+// [3] AppCard form    — kolom email, password (dengan tombol lihat sandi),
+//                        ulang password, tombol Daftar, dan tautan masuk
+// Tabel/kolom: tanpa tabel; satu kolom form di dalam kartu.
+// Sumber data: authProvider.
 /// U1: layar pendaftaran akun baru.
 ///
 /// Password di-hash SHA-256 di [AuthRepository.register] sebelum dikirim, jadi

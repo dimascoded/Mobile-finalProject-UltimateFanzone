@@ -16,6 +16,21 @@ import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../providers/ar_providers.dart';
 
+// STRUKTUR UI — StadiumPointerScreen
+// Ukuran: Scaffold + AppBar, body clubs.when (loading/error/data) dibungkus
+// PermissionGate, tanpa batas lebar; _Picker memakai Column, _Pointer memakai
+// SingleChildScrollView
+// [1] Pemilih stadion — DropdownButtonFormField klub (crest + nama stadion) di atas
+// [2] _Pointer — isi layar: _LocationMap, catatan rute, kartu info rute, switch mode demo
+// [3] _CompassDial — dial kompas custom (_DialPainter) berisi sudut relatif ke stadion
+// [4] Identitas klub — crest, nama klub, stadion, kota
+// [5] Kartu informasi — 3 baris ListTile: jarak ke stadion, azimut + heading HP, arah relatif
+// [6] Aksi — tombol buka Google Maps, catatan sensor, tombol muat ulang lokasi
+// Tabel/kolom: tanpa tabel; kartu informasi 3 baris ListTile satu kolom
+// Sumber data: clubsProvider, selectedStadiumProvider, effectivePositionProvider,
+// compassProvider, clubCrestProvider, demoNearStadiumProvider, routeProvider,
+// positionProvider, selectedStadiumIndexProvider
+
 /// Kompas arah ke stadion klub favorit.
 ///
 /// Panah = bearing(stadion) - heading(HP), jadi 0° = lurus ke depan.

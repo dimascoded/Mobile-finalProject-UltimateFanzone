@@ -6,6 +6,16 @@ import '../../../core/ui/app_card.dart';
 import '../providers/football_providers.dart';
 import 'club_crest.dart';
 
+// STRUKTUR UI — TeamPickerScreen
+// Ukuran: Scaffold > Center > ConstrainedBox(maxWidth 720) > ListView.builder.
+// [1] Daftar klub   — satu AppCard per klub: ClubCrest, nama klub, serta
+//                      stadium dan kota
+// [2] Penanda pilih — border primary 2px dan ikon centang pada klub
+//                      favorit yang sedang terpilih
+// [3] Status muat   — CircularProgressIndicator saat memuat, teks galat saat
+//                      data klub gagal dimuat
+// Tabel/kolom: tanpa tabel; daftar kartu satu kolom.
+// Sumber data: clubsProvider, favoriteKeyProvider, clubCrestProvider.
 class TeamPickerScreen extends ConsumerWidget {
   const TeamPickerScreen({super.key});
 

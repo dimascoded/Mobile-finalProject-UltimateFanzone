@@ -67,6 +67,18 @@ String shortOwner(String owner) => owner.length <= 10
     ? owner
     : '${owner.substring(0, 6)}…${owner.substring(owner.length - 4)}';
 
+// STRUKTUR UI — CardCollectionScreen
+// Ukuran: Scaffold + AppBar, body ListView satu kolom tanpa batas lebar;
+// grid kartu 2 kolom (<=600px) atau 3 kolom (>600px) di dalam LayoutBuilder
+// [1] _Header — kartu ringkasan: jumlah klub terkumpul, total kartu, progress bar, _RarityChip per kelangkaan
+// [2] Baris filter — SingleChildScrollView horizontal berisi _FilterChip (Semua + tiap kelangkaan)
+// [3] Grid koleksi — GridView shrinkWrap berisi _CollectionEntryTile, atau _EmptyState bila belum ada kartu
+// [4] _ChainFooter — kartu status validitas riwayat blockchain
+// [5] Detail kartu — bottom sheet _showEntryDetails: kelangkaan, sumber, bukti keaslian, kode unik
+// Tabel/kolom: tanpa tabel; grid kartu 2-3 kolom (crossAxisCount) dengan filter kelangkaan
+// Sumber data: clubsProvider, cardCollectionProvider, cardRarityCountsProvider,
+// collectionEntriesProvider, chainValidProvider, clubCrestProvider
+
 class CardCollectionScreen extends ConsumerStatefulWidget {
   const CardCollectionScreen({super.key});
 

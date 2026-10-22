@@ -12,6 +12,17 @@ import 'widgets/upcoming_matches.dart';
 export 'feature_menu_tab.dart';
 export 'menu_groups.dart';
 
+// STRUKTUR UI — HomeTab
+// Ukuran: RefreshIndicator > ListView > Center > ConstrainedBox(maxWidth 720)
+//         > Column dengan lima bagian.
+// [1] HomeHero        — banner laga unggulan di bagian atas
+// [2] QuickActions    — deretan empat pintasan fitur
+// [3] HomeStats       — ringkasan tiga angka pribadi
+// [4] UpcomingMatches — daftar horizontal laga mendatang
+// [5] CardsTeaser     — pratinjau kartu klub terbaru
+// Tabel/kolom: tanpa tabel; lima bagian satu kolom.
+// Sumber data: tanpa provider yang di-watch; tarik-ke-bawah memanggil
+//              footballRefreshProvider, angka berasal dari widget anak.
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
 

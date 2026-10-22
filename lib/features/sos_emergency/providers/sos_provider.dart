@@ -5,9 +5,19 @@ import '../data/notification_service.dart';
 /// Berapa lama menunggu fix GPS sebelum menyerah.
 const sosLocationTimeout = Duration(seconds: 12);
 
+/// Alur tombol SOS: baca GPS -> tampilkan koordinat + notifikasi lokal.
+///
+/// BATASAN PENTING: aplikasi TIDAK punya backend pengirim. Tidak ada pesan yang
+/// dikirim ke siapa pun; koordinat hanya tampil di perangkat ini. Lihat
+/// `docs/feature-map.md` (bagian sos_emergency).
 class SosNotifier extends StateNotifier<AsyncValue<String?>> {
   SosNotifier() : super(const AsyncData(null));
 
+  /// Minta izin lokasi, ambil posisi, lalu kembalikan teks berisi koordinat.
+  ///
+  /// Mengubah state menjadi [AsyncData] berisi pesan (bukan null) saat berhasil,
+  /// atau [AsyncError] dengan pesan Indonesia saat gagal. `mounted` diperiksa
+  /// sebelum menulis state akhir.
   Future<void> trigger() async {
     state = const AsyncLoading();
     final result = await AsyncValue.guard(() async {
@@ -46,5 +56,6 @@ class SosNotifier extends StateNotifier<AsyncValue<String?>> {
   }
 }
 
+/// Status SOS terkini: null (belum ditekan), loading, atau teks koordinat/galat.
 final sosProvider = StateNotifierProvider<SosNotifier, AsyncValue<String?>>(
     (ref) => SosNotifier());

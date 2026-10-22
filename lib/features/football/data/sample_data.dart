@@ -2,6 +2,10 @@ import 'models.dart';
 
 /// DATA CONTOH untuk pengembangan/demo tanpa API key. BUKAN jadwal atau hasil resmi.
 /// UI wajib menampilkan banner "Data contoh" saat sumbernya DataSource.sample.
+///
+/// Isinya sengaja dibuat deterministik (tidak diacak): jadwal dihitung
+/// relatif terhadap hari ini sehingga demo selalu punya 4 laga lampau dan 6
+/// laga mendatang, apa pun tanggal build-nya.
 class SampleData {
   // name, short, tla
   static const _teams = <List<String>>[
@@ -27,6 +31,12 @@ class SampleData {
     ['AFC Bournemouth', 'Bournemouth', 'BOU'],
   ];
 
+  /// Jadwal contoh: 10 laga (id 900000+), 4 lampau dan 6 mendatang.
+  ///
+  /// Kickoff dihitung dari tengah malam UTC hari ini + jam tetap (12, 14,
+  /// 16, atau 19 UTC), jadi contoh selalu punya masa lalu dan masa depan.
+  /// Laga lampau berstatus `FINISHED` dan punya skor pseudo-acak; laga
+  /// mendatang berstatus `TIMED` tanpa skor.
   static List<FootballMatch> matches() {
     final now = DateTime.now().toUtc();
     final day0 = DateTime.utc(now.year, now.month, now.day);
@@ -57,6 +67,9 @@ class SampleData {
     ];
   }
 
+  /// Klasemen contoh untuk 20 klub: setiap tim dadurch 8 laga, poin = 3 per
+  /// menang + 1 per seri, lalu diurutkan berdasarkan poin (tie dipecah
+  /// dengan urutan tetap klub) dan diberi nomor posisi 1..20.
   static List<StandingRow> standings() {
     final rows = <StandingRow>[
       for (var i = 0; i < _teams.length; i++)
@@ -95,6 +108,8 @@ class SampleData {
     ];
   }
 
+  /// Lima pencetak gol teratas contoh dengan nama pemain generik
+  /// ("Pemain Contoh 1" dst.), gol menurun dari 9 ke 5 dan 3 assist.
   static List<ScorerRow> scorers() => [
         for (var i = 0; i < 5; i++)
           ScorerRow(

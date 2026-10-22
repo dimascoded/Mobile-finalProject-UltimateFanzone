@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Pola garis lapangan yang digambar tipis di atas gambar header.
+///
+/// Lapisan dekoratif tanpa interaksi: dipakai [ScrimImage] lewat parameter
+/// `showPitchPattern` untuk memberi kesan lapangan pada header pertandingan
+/// seperti layar login, beranda, dan header fitur.
 class PitchPattern extends StatelessWidget {
   const PitchPattern({super.key});
 
@@ -16,6 +21,8 @@ class PitchPattern extends StatelessWidget {
   }
 }
 
+/// Melukis garis lapangan (garis tengah, lingkaran tengah, area penalti) dengan
+/// warna putih transparan tipis.
 class _PitchPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

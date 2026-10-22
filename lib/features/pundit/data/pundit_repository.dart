@@ -7,15 +7,23 @@ import '../../../core/utils/app_config.dart';
 import '../../football/data/models.dart';
 import 'pundit_chat.dart';
 
+/// Hasil analisis AI untuk satu klub.
 class PunditResult {
+  /// Membuat hasil analisis.
   PunditResult(
     this.text, {
     this.fromCache = false,
     this.cachedAt,
     this.warning,
   });
+
+  /// Teks analisis (atau balasan chat) yang ditampilkan ke pengguna.
   final String text;
+
+  /// True bila teks berasal dari cache, bukan request baru.
   final bool fromCache;
+
+  /// Waktu cache dibuat; null untuk hasil request baru.
   final DateTime? cachedAt;
 
   /// Terisi kalau teks ini bukan hasil request baru, tapi cache lama yang
@@ -23,6 +31,7 @@ class PunditResult {
   /// tidak mengira analisisnya baru saja dibuat.
   final String? warning;
 
+  /// Salinan dengan [warning] baru (tanpa mengubah teks).
   PunditResult copyWith({String? warning}) => PunditResult(
         text,
         fromCache: fromCache,
@@ -31,9 +40,22 @@ class PunditResult {
       );
 }
 
+/// Repository analisis & obrolan "Pundit" berbasis Gemini.
+///
+/// Cache memakai Hive box `app_cache`:
+/// - `gemini_model_ok` — model Gemini yang terakhir berhasil (dipakai lebih
+///   dulu pada request berikutnya).
+/// - `pundit_<clubKey>` — teks analisis terbaru untuk sebuah klub, dan
+///   `pundit_<clubKey>_at` — waktu analisis itu dibuat (ISO-8601).
+/// - `pundit_chat_<clubKey>` — riwayat chat klub (maks. 30 pesan terakhir).
+///
+/// Semua kunci diawali `pundit_` (kecuali `gemini_model_ok`), jadi
+/// [clearCache] bisa membersihkannya sekaligus saat logout.
 class PunditRepository {
+  /// Repository dengan [GeminiClient] bawaan.
   PunditRepository({GeminiClient? client}) : _client = client ?? GeminiClient();
 
+  /// Klien Gemini yang dipakai untuk generate dan chat.
   final GeminiClient _client;
 
   /// Key Hive berisi model Gemini yang terakhir berhasil, supaya request
@@ -47,10 +69,23 @@ class PunditRepository {
   /// Batas pesan yang disimpan per klub.
   static const _maxChatMessages = 30;
 
+  /// Kunci cache analisis sebuah klub (dan cap waktunya + `_at`).
   String _key(String clubKey) => 'pundit_$clubKey';
 
+  /// Kunci cache riwayat chat sebuah klub.
   String _chatKey(String clubKey) => '$_chatKeyPrefix$clubKey';
 
+  /// Buat analisis singkat untuk [club] dari klasemen dan 5
+  /// hasil terakhir.
+  ///
+  /// Melempar [Exception] dengan pesan Bahasa Indonesia bila
+  /// `GEMINI_API_KEY` belum diset atau respons AI kosong. Klasemen kosong
+  /// diganti kalimat eksplisit ("Data klasemen belum tersedia") supaya model
+  /// tidak mengarang angka; baris klub sendiri selalu ikut yang dikirim.
+  ///
+  /// Hasil sukses disimpan ke Hive pada `pundit_<clubKey>` (dan
+  /// `pundit_<clubKey>_at`), dan model yang berhasil dicatat di
+  /// `gemini_model_ok`.
   Future<PunditResult> generate(PlClub club, List<StandingRow> standings,
       List<FootballMatch> last5) async {
     if (AppConfig.geminiApiKey.isEmpty) {
@@ -112,6 +147,11 @@ class PunditRepository {
   ///
   /// Memakai kandidat model dan model yang diingat yang sama seperti
   /// [generate], dan menyimpan model yang berhasil.
+  ///
+  /// [systemInstruction] berisi aturan dan data pengikat hasil
+  /// [buildSystemInstruction]; [turns] adalah giliran yang sudah dipangkas
+  /// oleh [trimTurns]. Melempar [Exception] berbahasa Indonesia bila
+  /// `GEMINI_API_KEY` belum diset atau respons kosong.
   Future<String> chatReply({
     required String systemInstruction,
     required List<ChatTurn> turns,
@@ -143,6 +183,9 @@ class PunditRepository {
   }
 
   /// Muat riwayat chat klub. Data rusak dikembalikan sebagai daftar kosong.
+  ///
+  /// Sumbernya kunci Hive `pundit_chat_<clubKey>` (box `app_cache`) berisi
+  /// JSON array pesan; pesan yang tidak valid dilewati satu per satu.
   List<ChatMessage> loadChat(String clubKey) {
     final raw = HiveService.cache.get(_chatKey(clubKey));
     if (raw == null || raw.isEmpty) return const [];
@@ -161,6 +204,8 @@ class PunditRepository {
   }
 
   /// Simpan riwayat chat klub, menyisakan [_maxChatMessages] pesan terakhir.
+  ///
+  /// Menulis ke kunci Hive `pundit_chat_<clubKey>` (box `app_cache`).
   Future<void> saveChat(String clubKey, List<ChatMessage> messages) async {
     final kept = messages.length > _maxChatMessages
         ? messages.sublist(messages.length - _maxChatMessages)
@@ -169,6 +214,11 @@ class PunditRepository {
     await HiveService.cache.put(_chatKey(clubKey), encoded);
   }
 
+  /// Ambil analisis yang tersimpan untuk sebuah klub.
+  ///
+  /// Membaca Hive `pundit_<clubKey>` dan cap waktu `pundit_<clubKey>_at`.
+  /// Null kalau belum pernah ada analisis atau clubKey null (belum ada klub
+  /// terpilih).
   PunditResult? cached(String? clubKey) {
     if (clubKey == null) return null;
     final v = HiveService.cache.get(_key(clubKey));
@@ -180,6 +230,9 @@ class PunditRepository {
 
   /// Hapus seluruh cache analisis (dipakai saat logout agar tidak bocor
   /// ke pengguna berikutnya di perangkat yang sama).
+  ///
+  /// Menghapus semua kunci Hive yang diawali `pundit_` (analisis per klub,
+  /// cap waktunya, dan riwayat chat per klub).
   static Future<void> clearCache() async {
     final keys =
         HiveService.cache.keys.where((k) => k.startsWith('pundit_')).toList();
@@ -187,4 +240,5 @@ class PunditRepository {
   }
 }
 
+/// Repository pundit bersama (memakai [GeminiClient] bawaan).
 final punditRepositoryProvider = Provider((ref) => PunditRepository());

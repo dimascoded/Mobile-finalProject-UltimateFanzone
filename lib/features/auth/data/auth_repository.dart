@@ -11,9 +11,21 @@ import '../../../core/utils/app_config.dart';
 import 'identity_store.dart';
 
 /// Pesan saat env Supabase belum diisi, jadi autentikasi tidak mungkin jalan.
+///
+/// Ini yang tampil pada mode mock: aplikasi tetap bisa dibangun tanpa
+/// `env.json`, tapi semua operasi yang butuh server (login, daftar, simpan
+/// metadata) berhenti dengan pesan ini — tidak ada sesi palsu yang diam-diam
+/// dibuat.
 const notConfiguredAuthMessage =
     'Aplikasi belum dikonfigurasi. Isi SUPABASE_URL dan SUPABASE_ANON_KEY di env.json lalu jalankan ulang.';
 
+/// Penyedia [FlutterSecureStorage] untuk menyimpan kunci privat dompet.
+///
+/// Satu-satunya kunci yang ditulis aplikasi ke secure storage adalah
+/// `wallet_private_key` (lihat [AuthRepository.privateKeyKeys]). Token sesi
+/// milik Supabase dikelola sendiri oleh SDK Supabase dan TIDAK ditulis ke
+/// secure storage, jadi aplikasi ini tidak punya kunci `session_token`,
+/// `session_expiry`, atau `user_email` sendiri.
 final secureStorageProvider = Provider((ref) => const FlutterSecureStorage());
 
 /// Galat autentikasi dengan pesan yang layak ditampilkan ke pengguna (U2).
@@ -21,15 +33,30 @@ final secureStorageProvider = Provider((ref) => const FlutterSecureStorage());
 /// Isinya sudah Bahasa Indonesia dan tidak pernah memuat galat mentah,
 /// `uri` internal, atau kode status yang tidak berguna bagi pengguna.
 class AuthException implements Exception {
+  /// Membangun galat dengan pesan final yang langsung ditampilkan ke pengguna.
   AuthException(this.message);
 
+  /// Pesan galat dalam Bahasa Indonesia, siap tampil tanpa format tambahan.
   final String message;
 
+  /// Mengembalikan pesan galat apa adanya, supaya galat yang dilempar bisa
+  /// langsung ditampilkan tanpa parsing tambahan.
   @override
   String toString() => message;
 }
 
 /// Petakan kegagalan autentikasi menjadi kalimat Indonesia.
+///
+/// Sumber pesan, berurutan dari yang paling spesifik:
+/// 1. [AuthException] — pesan sudah jadi kalimat Indonesia, dipakai apa adanya.
+/// 2. `supa.AuthException` — dipetakan lewat [_mapSupabaseAuthError].
+/// 3. [SocketException] dan galat jaringan Dio — jadi "Tidak ada koneksi
+///    ke server. Cek internetmu."
+/// 4. Galat lain — diambil dari `toString()`; awalan "Exception: " dibuang
+///    supaya tidak tampil mentah ke pengguna.
+///
+/// Kembalikan string, bukan objek galat: pemanggil cukup memakainya sebagai
+/// teks di snackbar/dialog tanpa perlu membungkus lagi.
 String describeAuthError(Object error) {
   if (error is AuthException) return error.message;
   if (error is supa.AuthException) return _mapSupabaseAuthError(error);
@@ -54,6 +81,11 @@ String describeAuthError(Object error) {
 
 /// Petakan galat Supabase Auth ke Bahasa Indonesia. `code` dipakai lebih dulu
 /// karena stabil; kalau tidak ada, petakan dari pesan yang sudah di-lowercase.
+///
+/// Daftar kode yang dikenali: `invalid_credentials`, `email_not_confirmed`,
+/// `user_already_exists`, `over_request_rate_limit`,
+/// `over_email_send_rate_limit`, dan `weak_password`. Kode lain jatuh ke
+/// pencocokan pesan, lalu ke pesan asli Supabase sebagai upaya terakhir.
 String _mapSupabaseAuthError(supa.AuthException e) {
   switch (e.code) {
     case 'invalid_credentials':
@@ -88,8 +120,38 @@ String _mapSupabaseAuthError(supa.AuthException e) {
   return e.message.isNotEmpty ? e.message : 'Gagal masuk.';
 }
 
-/// Autentikasi hanya lewat Supabase Auth.
+/// Sumber kebenaran autentikasi dan preferensi profil pengguna.
+///
+/// Alur: seluruh autentikasi lewat Supabase Auth (alias `supa`), jadi sesi,
+/// email, dan token JWT dibaca langsung dari klien Supabase. Preferensi
+/// profil (nama tampilan, foto profil, tim favorit, anggaran away day)
+/// disimpan dua kali:
+///
+/// - Lokal di Hive box `app_cache` dengan kunci ber-sufiks user id, misalnya
+///   `profile_display_name_<userId>` ([displayNameKey]),
+///   `profile_photo_path_<userId>` ([profilePhotoKey]),
+///   `favorite_team_<userId>` ([favoriteTeamKey]), dan
+///   `away_day_budget_idr_<userId>` ([awayDayBudgetKey]).
+/// - Di metadata Supabase (`display_name`, `favorite_team`,
+///   `away_day_budget_idr`) sebagai cadangan cloud yang bisa diambil ulang
+///   di perangkat lain.
+///
+/// Kegagalan menulis ke cloud tidak menghapus data lokal: penanda
+/// `prefs_pending_<userId>` ([prefsPendingKey]) disisipkan supaya
+/// [retryPendingPrefs] dapat mengirim ulangnya pada start berikutnya.
+///
+/// Mode mock: bila Supabase belum dikonfigurasi ([AppConfig.supabaseConfigured]
+/// kosong) dan tidak ada hook injeksi, semua operasi autentikasi berhenti
+/// dengan [notConfiguredAuthMessage] — tidak ada login lokal/"offline" yang
+/// menyamar sebagai login sungguhan.
 class AuthRepository {
+  /// Membuat repository dengan [_storage] (secure storage) dan [_localAuth]
+  /// (biometrik perangkat).
+  ///
+  /// [updateUserMetadata] dan [readUserMetadata] adalah hook injeksi yang
+  /// dipakai test agar repository bisa diuji tanpa Supabase sungguhan.
+  /// [identityStore] bisa diganti dengan penyimpanan palsu; bawaannya
+  /// [HiveIdentityStore] (Hive box `app_cache`).
   AuthRepository(
     this._storage,
     this._localAuth, {
@@ -100,34 +162,92 @@ class AuthRepository {
         _updateUserMetadataOverride = updateUserMetadata,
         _readUserMetadataOverride = readUserMetadata;
 
+  /// Secure storage untuk kunci privat dompet (`wallet_private_key`).
   final FlutterSecureStorage _storage;
+
+  /// APIs biometrik/face-id perangkat.
   final LocalAuthentication _localAuth;
+
+  /// Penyimpanan lokal nilai preferensi (Hive box `app_cache`).
   final IdentityStore identityStore;
+
   final Future<void> Function(Map<String, dynamic>)?
       _updateUserMetadataOverride;
   final Map<String, dynamic>? Function()? _readUserMetadataOverride;
 
+  /// True bila repository boleh menyentuh Supabase.
+  ///
+  /// Benar bila Supabase dikonfigurasi ([AppConfig.supabaseConfigured]) atau
+  /// ada hook injeksi metadata. Bila false, repository operate sebagai mode
+  /// mock: operasi yang butuh server melempar [notConfiguredAuthMessage].
   bool get _usesSupabase =>
       AppConfig.supabaseConfigured ||
       _updateUserMetadataOverride != null ||
       _readUserMetadataOverride != null;
+
+  /// Id user Supabase yang sedang masuk, atau null bila belum ada sesi.
+  ///
+  /// Dipakai sebagai sufiks semua kunci Hive per-pengguna, jadi nilai ini
+  /// menentukan file mana yang "milik" pengguna aktif.
   String? get currentUserId =>
       _usesSupabase ? supa.Supabase.instance.client.auth.currentUser?.id : null;
 
+  /// Kunci Hive untuk nama tampilan pengguna.
+  ///
+  /// Format: `profile_display_name_<userId>`. Nilai legacy tanpa sufiks
+  /// (`profile_display_name`) diadopsi lewat [readUserScopedValue].
   static String displayNameKey(String userId) => 'profile_display_name_$userId';
+
+  /// Kunci Hive untuk lokasi foto profil (path file lokal).
+  ///
+  /// Format: `profile_photo_path_<userId>`. Nilai legacy tanpa sufiks
+  /// (`profile_photo_path`) diadopsi lewat [readUserScopedValue].
   static String profilePhotoKey(String userId) => 'profile_photo_path_$userId';
+
+  /// Kunci Hive untuk tim favorit (kode klub, mis. `ARS`).
+  ///
+  /// Format: `favorite_team_<userId>`. Nilai legacy tanpa sufiks
+  /// (`favorite_team`) diadopsi lewat [readUserScopedValue].
   static String favoriteTeamKey(String userId) => 'favorite_team_$userId';
+
+  /// Kunci Hive untuk anggaran away day dalam Rupiah.
+  ///
+  /// Format: `away_day_budget_idr_<userId>`, disimpan sebagai teks hasil
+  /// `double.toString()` (bisa berdesimal), bukan integer murni.
   static String awayDayBudgetKey(String userId) =>
       'away_day_budget_idr_$userId';
+
+  /// Kunci penanda "preferensi belum tersinkron ke cloud".
+  ///
+  /// Format: `prefs_pending_<userId>`, nilainya string `'true'`. Disisipkan
+  /// saat [saveDisplayName]/[saveProfilePrefs] gagal menulis metadata
+  /// Supabase, dan dihapus setelah [retryPendingPrefs] berhasil.
   static String prefsPendingKey(String userId) => 'prefs_pending_$userId';
+
+  /// Alias lama dari [prefsPendingKey] (dipakai saat nama tampilan gagal
+  /// disimpan). Keduanya menunjuk kunci yang sama: `prefs_pending_<userId>`.
   static String displayNamePendingKey(String userId) => prefsPendingKey(userId);
 
+  /// Bentuk kunci per-pengguna dari [base], atau null bila belum ada user id.
+  ///
+  /// Dipakai untuk nilai yang tidak punya helper statis (mis. key
+  /// `pundit_<userId>`), sehingga semua data pengguna memakai pola sufiks
+  /// yang sama dan bisa dibersihkan seragam saat logout.
   String? userScopedKey(String base) {
     final userId = currentUserId;
     return userId == null ? null : '${base}_$userId';
   }
 
   /// Reads a scoped value and migrates its legacy global value on first use.
+  ///
+  /// Membaca kunci ber-sufiks `base_<userId>`; kalau belum ada, nilai lama
+  /// global `base` (ditulis versi aplikasi sebelumnya) dipakai lalu
+  /// dipindahkan ke kunci ber-sufiks di latar belakang (fire-and-forget),
+  /// dan kunci global dihapus supaya tidak bocor ke akun lain.
+  ///
+  /// Kunci legacy yang dikenal: `profile_display_name`, `profile_photo_path`,
+  /// `favorite_team`, dan `away_day_budget_idr`. Kunci global lain ikut
+  /// dimigrasi karena mekanismenya generik.
   String? readUserScopedValue(String base) {
     final key = userScopedKey(base);
     if (key == null) return null;
@@ -142,11 +262,21 @@ class AuthRepository {
     return legacy;
   }
 
+  /// Tulis nilai ke kunci per-pengguna `base_<userId>` di Hive box `app_cache`.
+  ///
+  /// Diam-diam diabaikan bila belum ada user id (belum masuk), supaya
+  /// pemanggil tidak perlu mengecek login dulu.
   Future<void> writeUserScopedValue(String base, String value) async {
     final key = userScopedKey(base);
     if (key != null) await identityStore.put(key, value);
   }
 
+  /// Masuk dengan email dan password lewat Supabase Auth.
+  ///
+  /// Email di-trim dan divalidasi kosong lebih dulu; password tidak diubah.
+  /// Kegagalan apa pun dibungkus jadi [AuthException] berbahasa Indonesia
+  /// (lihat [describeAuthError]). Melempar [notConfiguredAuthMessage] bila
+  /// Supabase belum dikonfigurasi (mode mock).
   Future<void> login(String email, String password) async {
     final mail = email.trim();
     if (mail.isEmpty || password.isEmpty) {
@@ -235,22 +365,34 @@ class AuthRepository {
   }
 
   /// Sesi valid kalau Supabase punya sesi yang belum kedaluwarsa.
+  ///
+  /// False juga bila Supabase belum dikonfigurasi (mode mock), sehingga
+  /// layar kunci/biometrik tidak pernah membuka sesi yang tidak ada.
   Future<bool> hasSession() async {
     if (!_usesSupabase) return false;
     final session = supa.Supabase.instance.client.auth.currentSession;
     return session != null && !session.isExpired;
   }
 
+  /// True bila perangkat mendukung biometrik dan ada biometrik yang
+  /// terdaftar. Punya perangkat yang mendukung saja tidak cukup: enrolling
+  /// biometrik di perangkat tetap dibutuhkan.
   Future<bool> canUseBiometric() async =>
       await _localAuth.isDeviceSupported() &&
       await _localAuth.canCheckBiometrics;
 
+  /// Email user yang sedang masuk, atau null bila belum masuk / Supabase
+  /// belum dikonfigurasi.
   Future<String?> userEmail() async {
     if (!_usesSupabase) return null;
     return supa.Supabase.instance.client.auth.currentUser?.email;
   }
 
   /// Simpan nama tampilan ke metadata Supabase dan tandai kegagalan untuk retry.
+  ///
+  /// Key metadata: `display_name`. Mengembalikan true bila berhasil; false
+  /// bila Supabase tidak siap atau request gagal — pada kasus gagal penanda
+  /// `prefs_pending_<userId>` ditulis supaya [retryPendingPrefs] mencoba lagi.
   Future<bool> saveDisplayName(String name) async {
     final userId = currentUserId;
     if (!_usesSupabase || userId == null) return false;
@@ -263,6 +405,12 @@ class AuthRepository {
     }
   }
 
+  /// Simpan tim favorit dan/atau anggaran away day ke metadata Supabase.
+  ///
+  /// Key metadata: `favorite_team` (kode klub) dan `away_day_budget_idr`
+  /// (integer Rupiah, dibulatkan dari nilai desimal). Argumen null berarti
+  /// "jangan sentuh field ini", jadi pemanggilan dengan keduanya null
+  /// tidak melakukan request sama sekali dan mengembalikan true.
   Future<bool> saveProfilePrefs({String? favoriteTeam, int? budgetIdr}) async {
     final userId = currentUserId;
     if (!_usesSupabase || userId == null) return false;
@@ -279,6 +427,13 @@ class AuthRepository {
     }
   }
 
+  /// Kirim ulang preferensi yang masih tertunda ke metadata Supabase.
+  ///
+  /// Dijalankan saat start berikutnya setelah sesi aktif. Sumber nilai tetap
+  /// Hive box `app_cache`: `profile_display_name_<userId>`,
+  /// `favorite_team_<userId>`, dan `away_day_budget_idr_<userId>`.
+  /// Penanda `prefs_pending_<userId>` dihapus setelah berhasil; kalau gagal
+  /// penanda sengaja disimpan untuk percobaan berikutnya.
   Future<void> retryPendingPrefs() async {
     final userId = currentUserId;
     if (userId == null ||
@@ -307,8 +462,16 @@ class AuthRepository {
     }
   }
 
+  /// Alias lama [retryPendingPrefs] yang dipanggil saat nama tampilan gagal
+  /// disimpan; keduanya menulis ulang metadata yang sama.
   Future<void> retryPendingDisplayName() => retryPendingPrefs();
 
+  /// Tulis metadata user dengan menyalin metadata lama lalu menimpa field
+  /// yang ada di [updates].
+  ///
+  /// Menyalin dulu (bukan menimpa penuh) supaya field metadata lain milik
+  /// pengguna tidak ikut terhapus. Memakai hook injeksi bila ada, jika tidak
+  /// memanggil `updateUser` milik Supabase.
   Future<void> _updateUserMetadata(Map<String, dynamic> updates) async {
     final merged = {..._currentUserMetadata(), ...updates};
     final updateOverride = _updateUserMetadataOverride;
@@ -321,6 +484,7 @@ class AuthRepository {
     );
   }
 
+  /// Metadata user saat ini (dict kosong bila tidak ada user atau metadata).
   Map<String, dynamic> _currentUserMetadata() {
     final readOverride = _readUserMetadataOverride;
     if (readOverride != null) return readOverride() ?? const {};
@@ -340,8 +504,14 @@ class AuthRepository {
     return value is String && value.isNotEmpty ? value : null;
   }
 
+  /// Tim favorit dari metadata cloud (key `favorite_team`), atau null.
   String? cloudFavoriteTeam() => _cloudString('favorite_team');
 
+  /// Anggaran away day dari metadata cloud (key `away_day_budget_idr`) dalam
+  /// Rupiah bulat, atau null bila belum diisi.
+  ///
+  /// Nilai metadata bisa berupa angka desimal atau teks; keduanya dibaca,
+  /// dan angka desimal dibulatkan ke integer terdekat.
   int? cloudBudgetIdr() {
     if (!_usesSupabase) return null;
     final meta = _currentUserMetadata();
@@ -349,6 +519,7 @@ class AuthRepository {
     return value is num ? value.round() : int.tryParse('$value');
   }
 
+  /// Ambil nilai string dari metadata cloud, null bila kosong/tipe lain.
   String? _cloudString(String key) {
     if (!_usesSupabase) return null;
     final meta = _currentUserMetadata();
@@ -357,12 +528,20 @@ class AuthRepository {
   }
 
   /// Token JWT Supabase untuk endpoint yang butuh Authorization header.
+  ///
+  /// Token diambil dari sesi Supabase yang aktif (bukan disimpan sendiri di
+  /// secure storage), jadi null berarti belum masuk. Perlu diperbarui kalau
+  /// sesi diperpanjang; pemanggil yang melakukan request ke server memakai
+  /// nilai ini sebagai header `Authorization: Bearer <token>`.
   Future<String?> currentToken() async {
     if (!_usesSupabase) return null;
     return supa.Supabase.instance.client.auth.currentSession?.accessToken;
   }
 
   /// Biometrik hanya valid jika sudah pernah login (sesi Supabase ada).
+  ///
+  /// Melempar [AuthException] bila belum pernah login manual, biometrik tidak
+  /// tersedia di perangkat, atau pengguna menolak/membatalkan sidik jari.
   Future<bool> authenticateBiometric() async {
     if (!await hasSession()) {
       throw AuthException('Login manual dulu minimal sekali.');
@@ -382,6 +561,12 @@ class AuthRepository {
   /// U4: hapus sesi beserta private key wallet, supaya akun berikutnya tidak
   /// memakai dompet milik akun lama. Data pengguna di Hive dihapus oleh
   /// pemanggil lewat `clearUserData()`.
+  ///
+  /// Dua hal yang dibersihkan di sini: sesi Supabase (dicabut dari server
+  /// bila bisa; kalau gagal, sesi lokal tetap dihapus oleh SDK) dan kunci
+  /// privat dompet `wallet_private_key` di flutter_secure_storage.
+  /// Identitas pemilik data lokal (`last_user_id`) sengaja TIDAK dihapus di
+  /// sini supaya pergantian akun masih bisa dideteksi.
   Future<void> logout() async {
     if (_usesSupabase) {
       try {
@@ -396,10 +581,17 @@ class AuthRepository {
   }
 
   /// Kunci secure storage milik pengguna: private key wallet.
+  ///
+  /// Hanya satu kunci (`wallet_private_key`); dihapus saat logout supaya
+  /// akun berikutnya tidak memakai dompet milik akun lama.
   static const privateKeyKeys = ['wallet_private_key'];
 
   /// Semua kunci Hive yang berisi data pengguna (U4).
   ///
+  /// `away_day_expenses`, `passport_chain`, dan `score_predictions` juga
+  /// adalah koleksi yang ikut disinkronkan (lihat `OfflineSyncDatabase`:
+  /// tabel `sync_documents` dan `sync_deletions`), jadi menghapusnya di sini
+  /// ikut menghapus salinan sinkronnya.
   /// Sisa kunci non-pengguna (tema, alasan penolakan izin, cache jadwal liga)
   /// sengaja tidak dihapus: bukan data pribadi dan tidak memuat apa pun dari
   /// akun lama.
@@ -413,9 +605,16 @@ class AuthRepository {
   ];
 
   /// Prefiks kunci cache yang milik pengguna (pundit per klub).
+  ///
+  /// Semua kunci yang diawali `pundit_` ikut terhapus saat logout, termasuk
+  /// riwayat chat per klub (`pundit_chat_<clubKey>`).
   static const userKeyPrefixes = <String>['pundit_'];
 }
 
+/// Repository autentikasi bersama untuk seluruh aplikasi.
+///
+/// Memakai [secureStorageProvider] untuk kunci privat dompet dan
+/// [LocalAuthentication] untuk biometrik perangkat.
 final authRepositoryProvider = Provider((ref) => AuthRepository(
       ref.watch(secureStorageProvider),
       LocalAuthentication(),

@@ -4,14 +4,32 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+/// Layanan notifikasi lokal (kickoff, hasil akhir, dan SOS).
+///
+/// Dua channel Android dipakai: `match_channel` ("Jadwal Pertandingan") untuk
+/// pengingat laga, dan `sos_channel` ("SOS Darurat") untuk keadaan darurat.
+///
+/// Skema id notifikasi (lihat bagian "Slot id notifikasi" di bawah):
+/// satu liga punya beberapa slot, semua berbasis `matchId * 10` + offset,
+/// sedangkan id `0` dicadangkan untuk SOS.
 class NotificationService {
+  /// Instans plugin notifikasi lokal (statis, dipakai bersama).
   static final _plugin = FlutterLocalNotificationsPlugin();
 
+  /// Id channel Android untuk pengingat pertandingan.
   static const _matchChannelId = 'match_channel';
+
+  /// Id channel Android untuk notifikasi SOS.
   static const _sosChannelId = 'sos_channel';
 
+  /// True setelah zona waktu berhasil diinisialisasi.
   static bool _tzReady = false;
 
+  /// Inisialisasi zona waktu dan plugin notifikasi.
+  ///
+  /// Zona waktu lokal diambil dari perangkat (supaya jadwal ikut waktu
+  /// pengguna), dengan fallback `Asia/Jakarta` bila pembacaan zona gagal.
+  /// Sekaligus meminta izin notifikasi di Android dan iOS.
   static Future<void> init() async {
     // timezone harus diinisialisasi sebelum zonedSchedule dipakai.
     if (!_tzReady) {
@@ -68,6 +86,8 @@ class NotificationService {
   //
   // Tata letak per laga: `matchId * 10` + {1, 3, 4} = slot kickoff 0..2,
   // + 2 = hasil akhir, + 0 dan + 5..9 tidak dipakai.
+  //
+  /// Id notifikasi khusus SOS (dipesan, tidak pernah dipakai slot laga).
   static const sosId = 0;
 
   /// Jumlah slot pengingat kickoff per laga. Harus sama dengan
@@ -75,11 +95,14 @@ class NotificationService {
   static const kickoffSlotCount = 3;
 
   /// Id notifikasi terjadwal untuk pengingat kickoff sebuah laga (slot 0).
+  ///
+  /// Rumus: `matchId * 10 + 1`.
   static int kickoffId(int matchId) => matchId * 10 + 1;
 
   /// Id notifikasi terjadwal untuk pengingat kickoff pada [slot] (0..2).
+  ///
   /// Slot 0 = [kickoffId]; slot 1 dan 2 sengaja melompati +2 karena angka
-  /// itu milik [resultId].
+  /// itu milik [resultId]. Rumus lengkapnya `matchId * 10 + {1, 3, 4}`.
   static int kickoffIdForSlot(int matchId, int slot) => switch (slot) {
         1 => matchId * 10 + 3,
         2 => matchId * 10 + 4,
@@ -87,8 +110,11 @@ class NotificationService {
       };
 
   /// Id notifikasi terjadwal untuk pengingat hasil akhir sebuah laga.
+  ///
+  /// Rumus: `matchId * 10 + 2`.
   static int resultId(int matchId) => matchId * 10 + 2;
 
+  /// Detail notifikasi untuk channel "Jadwal Pertandingan".
   static NotificationDetails _matchDetails() => const NotificationDetails(
         android: AndroidNotificationDetails(
           _matchChannelId,
@@ -102,6 +128,10 @@ class NotificationService {
 
   /// Jadwalkan pengingat pada [when] (UTC). Mengembalikan false bila
   /// waktunya sudah lewat.
+  ///
+  /// Memakai mode `exactAllowWhileIdle`; bila Android menolak (mis. izin
+  /// exact alarm dicabut pengguna), otomatis turun ke `inexactAllowWhileIdle`
+  /// supaya pengingat tetap terkirim.
   static Future<bool> _scheduleAt(
     int id,
     DateTime when,
@@ -144,6 +174,9 @@ class NotificationService {
   /// [kickoffUtc] dikurangi [minutesBefore], kecuali [fireUtc] diberikan
   /// (dipakai lead time yang sudah dihitung `plannedReminders`).
   /// Mengembalikan false bila waktunya sudah lewat.
+  ///
+  /// Id notifikasi memakai [kickoffIdForSlot], jadi setiap slot lead time punya
+  /// notifikasi sendiri dan tidak saling menimpa.
   static Future<bool> scheduleKickoff({
     required int matchId,
     required DateTime kickoffUtc,
@@ -162,6 +195,9 @@ class NotificationService {
       );
 
   /// Jadwalkan notifikasi hasil akhir (dipakai result_notification_provider).
+  ///
+  /// Memakai id [resultId] (`matchId * 10 + 2`) yang berbeda dari slot
+  /// pengingat kickoff.
   static Future<bool> scheduleResult({
     required int matchId,
     required DateTime whenUtc,
@@ -203,6 +239,12 @@ class NotificationService {
     );
   }
 
+  /// Tampilkan notifikasi SOS langsung (bukan terjadwal) di channel
+  /// "SOS Darurat" dengan id [sosId].
+  ///
+  /// Isi notifikasi ini hanya koordinat lokasi di perangkat; aplikasi tidak
+  /// punya backend pengirim, jadi pesan tidak terkirim ke siapa pun. Nomor
+  /// darurat UK (999/112) ditampilkan terpisah di layar SOS.
   static Future<void> show(String title, String body) {
     const details = NotificationDetails(
       android: AndroidNotificationDetails(

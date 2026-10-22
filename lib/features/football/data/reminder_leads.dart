@@ -1,6 +1,9 @@
 import '../../../core/utils/app_config.dart';
 
 /// Lead time paling awal yang diizinkan: 7 hari sebelum kickoff.
+///
+/// Nilai di atas batas ini dibuang oleh [normalizeLeads] supaya pengingat
+/// tidak pernah dijadwalkan terlalu jauh (mis. sebulan sebelumnya).
 const maxLeadMinutes = 7 * 24 * 60;
 
 /// Jumlah maksimal pengingat (slot notifikasi) per laga. Harus sama dengan
@@ -8,6 +11,9 @@ const maxLeadMinutes = 7 * 24 * 60;
 const maxReminderSlots = 3;
 
 /// Lead time bawaan, mengikuti `--dart-define=KICKOFF_REMINDER_MINUTES`.
+///
+/// Nilai build ini dipakai sebagai satu-satunya lead time awal pengguna
+/// (bawaan 30 menit sebelum kickoff).
 const defaultLeads = <int>[AppConfig.kickoffReminderMinutes];
 
 /// Rapikan daftar lead time (menit): buang nilai <= 0 atau > [maxLeadMinutes],
@@ -25,6 +31,9 @@ List<int> normalizeLeads(Iterable<int> input) {
 
 /// Ubah jumlah menit ke teks Indonesia: 15 -> '15 menit', 60 -> '1 jam',
 /// 90 -> '1 jam 30 menit', 1440 -> '1 hari', 1500 -> '1 hari 1 jam'.
+///
+/// Komponen nol (0 jam / 0 menit) dilewati; hasil "0 menit" hanya muncul
+/// untuk input 0.
 String formatLead(int minutes) {
   final days = minutes ~/ (24 * 60);
   final hours = (minutes % (24 * 60)) ~/ 60;
@@ -47,6 +56,9 @@ String leadBody(int minutes) => minutes >= 24 * 60
 /// Konversi input pengguna ke menit. [unit] salah satu dari 'menit', 'jam',
 /// atau 'hari'; unit yang tidak dikenal menghasilkan 0 (lalu dibuang oleh
 /// [normalizeLeads]).
+///
+/// Nilai negatif juga menghasilkan 0/negatif yang dibuang normalisasi, jadi
+/// pemanggil cukup memvalidasi lewat [normalizeLeads].
 int leadFromInput(int value, String unit) {
   switch (unit) {
     case 'menit':
@@ -65,6 +77,10 @@ int leadFromInput(int value, String unit) {
 /// [slot] adalah posisi di daftar hasil [normalizeLeads] (bukan posisi di
 /// hasil filter), sehingga nomor slot tetap stabil walau pengingat lain sudah
 /// lewat waktunya. Entri yang waktunya tidak lagi setelah [nowUtc] dibuang.
+///
+/// Hasilnya dipakai `NotificationService.scheduleKickoff` yang memetakan
+/// slot ke id notifikasi (`matchId * 10 + 1/3/4`), jadi jumlah slot tidak
+/// boleh melebihi `maxReminderSlots`.
 List<(int slot, int minutes, DateTime fireUtc)> plannedReminders(
   DateTime kickoffUtc,
   List<int> leads,

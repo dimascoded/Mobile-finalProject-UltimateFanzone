@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../network/connectivity_provider.dart';
 
+/// Spanduk peringatan mode offline.
+///
+/// Muncul otomatis di atas konten saat perangkat tidak punya koneksi, memberi
+/// tahu pengguna bahwa data yang tampil berasal dari cache lokal. Status
+/// koneksi diambil dari [onlineProvider] yang memeriksa koneksi berkala.
 class OfflineBanner extends ConsumerWidget {
   const OfflineBanner({super.key});
 

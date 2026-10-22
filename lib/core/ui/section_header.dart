@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// Judul seksi dengan aksi opsional di sisi kanan.
+///
+/// Dipakai di awal tiap blok pada halaman beranda, ringkasan profil, dan
+/// pengaturan agar pengguna cepat memindai struktur layar.
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
@@ -8,8 +12,13 @@ class SectionHeader extends StatelessWidget {
     this.onAction,
   });
 
+  /// Judul seksi; dipotong satu baris dengan ellipsis bila terlalu panjang.
   final String title;
+
+  /// Label tombol aksi di kanan; tombol tidak dirender bila null.
   final String? actionLabel;
+
+  /// Callback saat tombol aksi ditekan.
   final VoidCallback? onAction;
 
   @override

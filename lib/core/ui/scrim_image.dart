@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import '../theme/app_tokens.dart';
 import 'pitch_pattern.dart';
 
+/// Gambar header dengan scrim gelap bertingkat di bagian bawah.
+///
+/// Lapisan scrim memastikan teks di atas gambar tetap terbaca apa pun latar
+/// fotonya, dan bila aset gagal dimuat otomatis digantikan gradien warna dari
+/// [FanzoneColors]. Dipakai untuk header layar auth (login, register,
+/// kunci), hero beranda, dan header tiap fitur.
+///
+/// Path aset berasal dari `AppImages` di `app_images.dart`.
 class ScrimImage extends StatelessWidget {
   const ScrimImage({
     super.key,
@@ -14,12 +22,26 @@ class ScrimImage extends StatelessWidget {
     this.showPitchPattern = false,
   });
 
+  /// Path aset gambar, misalnya `AppImages.heroMalamLaga`.
   final String assetPath;
+
+  /// Konten yang diletakkan di atas gambar (biasanya teks atau tombol).
   final Widget? child;
+
+  /// Tinggi tetap gambar; bila null tinggi mengikuti parent.
   final double? height;
+
+  /// Radius sudut gambar, default [AppRadius.lg].
   final double borderRadius;
+
+  /// Warna gradien pengganti saat aset gagal dimuat; default memakai
+  /// `heroGradientStart` dan `heroGradientEnd`.
   final List<Color>? fallbackColors;
+
+  /// Kekuatan scrim hitam di bagian bawah, 0.0 sampai 1.0.
   final double scrim;
+
+  /// Tampilkan [PitchPattern] di atas gambar sebagai ornamen lapangan.
   final bool showPitchPattern;
 
   @override

@@ -12,6 +12,15 @@ import '../../../gamification/presentation/passport_screen.dart';
 import '../../../gamification/providers/card_collection_provider.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 
+// STRUKTUR UI — HomeStats
+// Ukuran: Column tanpa Scaffold: SectionHeader + satu Row berisi tiga
+//         Expanded(StatTile).
+// [1] SectionHeader — judul "Ringkasan"
+// [2] Baris StatTile — tiga kartu angka: Away Day, Stempel, dan Kartu Klub
+// Tabel/kolom: tanpa tabel; baris tiga kolom angka.
+// Sumber data: favoriteClubProvider, awayDayTotalsProvider,
+//              awayDayBudgetProvider, stampsProvider, cardCollectionProvider,
+//              ownedClubsProvider.
 /// Ringkasan angka privat: pengeluaran away day, stempel, dan kartu klub.
 class HomeStats extends ConsumerWidget {
   const HomeStats({super.key});

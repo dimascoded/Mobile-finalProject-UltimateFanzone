@@ -50,6 +50,17 @@ double _rarityStrength(CardRarity rarity) => switch (rarity) {
       CardRarity.legendary => 1.4,
     };
 
+// STRUKTUR UI — CardRevealOverlay
+// Ukuran: overlay dialog (showGeneralDialog) tanpa Scaffold; Material > SafeArea >
+// Center > SingleChildScrollView, kartu berukuran 220 x 320
+// [1] Judul — teks "Kartu baru!" di atas kartu
+// [2] Kartu beranimasi — Transform rotateY gabungan flip dan denyut scale, _BackFace lalu _FrontFace
+// [3] _BackFace — punggung kartu bergradasi dengan ikon bola dan teks "Membuka kartu..."
+// [4] _FrontFace — wajah kartu: crest klub, nama klub, badge kelangkaan, glow sesuai rarity
+// [5] Aksi — tombol Tutup dan tombol Lihat Koleksi menuju CardCollectionScreen
+// Tabel/kolom: tanpa tabel; satu kartu 220 x 320 di tengah layar
+// Sumber data: clubsProvider, clubCrestProvider, lastEarnedCardProvider
+
 /// Overlay kartu: punggung kartu berputar (rotateY) lalu membuka wajah klub,
 /// disusul denyut glow/scale sesuai kelangkaan. Flip dilewati bila pengguna
 /// menonaktifkan animasi.

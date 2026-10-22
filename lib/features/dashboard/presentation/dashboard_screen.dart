@@ -13,6 +13,17 @@ import '../providers/dashboard_provider.dart';
 import 'home_tab.dart';
 import 'profile_tab.dart';
 
+// STRUKTUR UI — DashboardScreen
+// Ukuran: Scaffold dengan AppBar, Column body (OfflineBanner + IndexedStack),
+//         FAB SosHoldButton 64px, dan NavigationBar lima tujuan.
+// [1] AppBar        — judul tab terpilih plus tombol alih tema terang/gelap
+// [2] OfflineBanner — banner status koneksi di atas isi layar
+// [3] IndexedStack  — lima halaman: HomeTab, tiga FeatureMenuTab, ProfileTab
+// [4] SosHoldButton — tombol SOS tekan-tahan di pojok kanan bawah
+// [5] NavigationBar — lima tujuan: Home, Laga, Seru, Alat, Profil
+// Tabel/kolom: tanpa tabel; navigasi bawah lima kolom.
+// Sumber data: tabIndexProvider, automaticSyncProvider, shakeProvider,
+//              sosProvider, themeModeProvider.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 

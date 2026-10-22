@@ -10,6 +10,7 @@ const String kHashMismatchReason = 'Hash tidak cocok dengan commit di rantai.';
 
 /// Hasil pemeriksaan reveal terhadap blok rantai.
 class RevealVerdict {
+  /// Membuat hasil pemeriksaan.
   const RevealVerdict({
     required this.valid,
     required this.points,
@@ -37,6 +38,9 @@ class RevealVerdict {
 }
 
 /// Hitung berapa banyak blok `prediction_commit` untuk sebuah laga.
+///
+/// Berguna sebagai diagnostik: kalau jumlahnya lebih dari satu, ada commit
+/// ganda untuk laga yang sama dan verifikasi bisa ambigu.
 int countCommitBlocks(List<Block> chain, int matchId) {
   var count = 0;
   for (final b in chain) {
@@ -47,6 +51,9 @@ int countCommitBlocks(List<Block> chain, int matchId) {
 }
 
 /// Ambil blok `prediction_commit` pertama untuk sebuah laga.
+///
+/// Mengembalikan null bila rantai tidak punya blok commit untuk laga itu
+/// (lihat [kNoCommitReason]).
 Block? findCommitBlock(List<Block> chain, int matchId) {
   for (final b in chain) {
     if (b.type != Prediction.blockTypeCommit) continue;
@@ -66,6 +73,10 @@ Block? findCommitBlock(List<Block> chain, int matchId) {
 ///   dihitung ulang dengan input yang sama persis seperti saat commit dibuat;
 /// - `data['at']` harus lebih awal dari kickoff, jadi predikasi tidak bisa
 ///   dicatat setelah Knowing hasil akhir.
+///
+/// Mengembalikan [RevealVerdict]: kalau valid, `points` berisi poin dari
+/// [scorePoints] (tebak pas 3, meleset 1 gol 2, meleset 2 gol 1, dan seterusnya);
+/// kalau tidak valid, `points` 0 dan `reason` menjelaskan alasannya.
 RevealVerdict verifyReveal({
   required List<Block> chain,
   required Prediction prediction,
@@ -166,5 +177,8 @@ RevealVerdict verifyReveal({
 }
 
 /// Status laga yang berarti hasil resminya tidak ada.
+///
+/// Laga yang ditunda/dibatalkan tidak bisa diverifikasi, jadi poin tidak
+/// diberikan.
 bool isCancelledStatus(String status) =>
     status == 'POSTPONED' || status == 'CANCELLED' || status == 'SUSPENDED';

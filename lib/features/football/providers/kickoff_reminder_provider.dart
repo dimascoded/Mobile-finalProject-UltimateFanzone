@@ -23,6 +23,10 @@ const maxKickoffReminders = 10;
 
 /// Signature jadwal yang terakhir diproses, supaya tidak menjadwal ulang
 /// event yang sama setiap kali provider dibangun ulang.
+///
+/// State di memori (bukan Hive): nilainya hanya bertahan selama aplikasi
+/// hidup dan sengaja dibuat `StateProvider` biasa agar tidak ter-reset saat
+/// provider lain dibangun ulang.
 final _lastScheduledProvider = StateProvider<String>((ref) => '');
 
 // ---------- Lead time pengingat (pilihan pengguna) ----------
@@ -34,6 +38,11 @@ const kickoffLeadsCacheKey = 'kickoff_reminder_leads';
 /// Izin exact alarm diminta sekali saja (tanda 'exact_alarm_asked'), baik
 /// saat lead time pertama kali disimpan maupun saat tombol Match Center
 /// ditekan.
+///
+/// Efek samping: menulis penanda ke Hive `app_cache` (kunci
+/// `exact_alarm_asked`) setelah permintaan, sehingga izin tidak ditanyakan
+/// ulang tiap kali aplikasi dibuka. Fungsi ini idempoten dan aman dipanggil
+/// dari mana saja.
 Future<void> ensureExactAlarmPermissionAsked() async {
   if (HiveService.cache.get('exact_alarm_asked') == 'true') return;
   await NotificationService.requestExactAlarmPermission();
@@ -42,6 +51,13 @@ Future<void> ensureExactAlarmPermissionAsked() async {
 
 /// Daftar lead time (menit, urut menurun) yang dipilih pengguna. Daftar kosong
 /// berarti pengingat kickoff nonaktif.
+///
+/// State-nya `List<int>` hasil normalisasi [normalizeLeads]: nilai <= 0 atau
+/// > 7 hari dibuang, duplikat dihapus, diurutkan menurun, dan dibatasi
+/// maksimal 3 slot (harus sama dengan `NotificationService.kickoffSlotCount`).
+/// Pilihan disimpan di Hive `app_cache` (kunci `kickoff_reminder_leads`) dan
+/// sengaja bukan per pengguna, jadi pengaturan perangkat bertahan saat
+/// logout.
 class KickoffLeadsNotifier extends StateNotifier<List<int>> {
   KickoffLeadsNotifier() : super(_load());
 
@@ -61,6 +77,11 @@ class KickoffLeadsNotifier extends StateNotifier<List<int>> {
 
   /// Simpan lead time baru (di-normalisasi dulu) lalu minta izin exact alarm
   /// bila hasilnya tidak kosong.
+  ///
+  /// Menulis daftar hasil normalisasi ke Hive `app_cache` (kunci
+  /// `kickoff_reminder_leads`). Bila daftar tidak kosong, izin exact alarm
+  /// dipastikan sudah diminta lewat [ensureExactAlarmPermissionAsked] supaya
+  /// notifikasi benar-benar berbunyi tepat waktu di Android 12+.
   Future<void> set(List<int> leads) async {
     final normalized = normalizeLeads(leads);
     if (!listEquals(state, normalized)) state = normalized;
@@ -68,14 +89,32 @@ class KickoffLeadsNotifier extends StateNotifier<List<int>> {
     if (normalized.isNotEmpty) await ensureExactAlarmPermissionAsked();
   }
 
+  /// Tambah satu lead time (menit) ke daftar yang ada.
+  ///
+  /// Setara memanggil [set] dengan daftar lama ditambah nilai baru; daftar
+  /// dinormalisasi sehingga nilai tidak valid diabaikan dan batas 3 slot
+  /// tetap berlaku. Efek samping: penulisan Hive + permintaan izin exact
+  /// alarm.
   Future<void> add(int minutes) async => set([...state, minutes]);
 
+  /// Hapus satu lead time (menit) dari daftar.
+  ///
+  /// Bila daftar menjadi kosong, pengingat kickoff otomatis nonaktif dan izin
+  /// exact alarm tidak diminta ulang. Efek samping: penulisan Hive.
   Future<void> remove(int minutes) async => set([...state]..remove(minutes));
 
+  /// Kembalikan lead time ke daftar bawaan (ikut `--dart-define`).
+  ///
+  /// Efek samping: penulisan Hive dan permintaan izin exact alarm bila
+  /// hasilnya tidak kosong.
   Future<void> reset() async => set(defaultLeads);
 }
 
 /// Lead time pengingat kickoff milik pengguna.
+///
+/// StateProvider biasa (bukan `autoDispose`) supaya pilihan lead time tidak
+/// hilang saat layar pengaturan ditutup; sumber penyimpanan ada di
+/// [KickoffLeadsNotifier].
 final kickoffLeadsProvider =
     StateNotifierProvider<KickoffLeadsNotifier, List<int>>(
         (ref) => KickoffLeadsNotifier());
@@ -84,6 +123,11 @@ final kickoffLeadsProvider =
 
 /// Laga yang perlu pengingat: hanya yang memuat tim favorit, maksimal
 /// [maxKickoffReminders] laga terdekat. Kosong bila tim favorit belum dipilih.
+///
+/// Fungsi murni (tanpa efek samping): menyaring laga berstatus `upcoming`
+/// yang melibatkan tim favorit, mengurutkannya berdasarkan kickoff terdekat,
+/// lalu mengambil maksimal 10 laga. Dipakai baik oleh penjadwal pengingat
+/// kickoff maupun penjadwal notifikasi hasil akhir.
 List<FootballMatch> reminderTargets(
   List<FootballMatch> matches,
   PlClub? favorite,
@@ -100,6 +144,9 @@ List<FootballMatch> reminderTargets(
 
 /// Signature jadwal yang terakhir diproses: lead time + daftar laga. Lead time
 /// ikut dihitung supaya penggantian lead time selalu memicu penjadwalan ulang.
+///
+/// Fungsi murni; hasilnya disimpan di [_lastScheduledProvider] supaya jadwal
+/// tidak dibuat dua kali untuk kombinasi lead time + daftar laga yang sama.
 String _signature(List<FootballMatch> targets, List<int> leads) {
   final parts = targets.map((m) => '${m.id}@${m.kickoffUtc.toIso8601String()}');
   return '${leads.join(',')}|${parts.join('|')}';
@@ -108,6 +155,18 @@ String _signature(List<FootballMatch> targets, List<int> leads) {
 /// Dijalankan sekali setelah cache pertandingan termuat, dan setiap kali tim
 /// favorit atau lead time pengingat berubah (jadwal lama dibatalkan lalu
 /// dibuat ulang).
+///
+/// Provider "seam" tanpa state: yang di dalamnya adalah effect — dia
+/// memasang listener pada [matchesProvider], [favoriteClubProvider], dan
+/// [kickoffLeadsProvider], lalu menjadwalkan/membatalkan notifikasi lokal
+/// lewat `zonedSchedule`. Provider ini `autoDispose`, jadi seluruh listener
+/// dibuang saat tidak ada lagi yang rebuilding; penjadwalan ulang yang
+/// tertunda (unawaited) tetap aman karena penjadwalan tidak menyentuh
+/// `state`.
+///
+/// Aturan yang berlaku: data contoh (tanpa `FOOTBALL_API_KEY`) tidak pernah
+/// dijadwalkan, dan penjadwalan baru hanya dikirim SETELAH pembatalan slot
+/// lama selesai supaya jadwal baru ikut terhapus.
 final kickoffReminderSyncProvider = Provider<void>((ref) {
   void reschedule(AsyncValue<FootballResult<List<FootballMatch>>> next) {
     final snapshot = next.valueOrNull;
@@ -165,6 +224,11 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
 
 /// Batalkan pengingat kickoff untuk daftar [matches] yang diberikan
 /// (seluruh slot tiap laga).
+///
+/// Membatalkan semua slot lead time tiap laga (slot 0..2) melalui
+/// `NotificationService.cancelKickoff`; slot notifikasi hasil akhir tidak
+/// disentuh. Efek samping: notifikasi lokal yang sudah terjadwal dibatalkan
+/// di OS.
 Future<void> cancelReminders(List<FootballMatch> matches) async {
   for (final m in matches) {
     await NotificationService.cancelKickoff(m.id);
@@ -176,6 +240,12 @@ Future<void> cancelReminders(List<FootballMatch> matches) async {
 ///
 /// [minutesBefore] hanya override untuk uji; tanpa itu, lead time dibaca dari
 /// pilihan pengguna di [kickoffLeadsProvider].
+///
+/// Mengembalikan 0 tanpa menjadwalkan apa pun bila: cache pertandingan belum
+/// termuat, data yang dipakai adalah data contoh, daftar lead time kosong,
+/// atau semua waktu bunyi sudah lewat. Efek samping: meminta izin exact
+/// alarm (hanya sekali seumur perangkat) dan menjadwalkan notifikasi lokal
+/// melalui `zonedSchedule`.
 Future<int> scheduleRemindersForUpcoming(
   WidgetRef ref, {
   int? minutesBefore,
@@ -205,6 +275,15 @@ Future<int> scheduleRemindersForUpcoming(
 /// Jadwalkan seluruh slot pengingat untuk setiap laga di [targets] secara
 /// paralel dan mengembalikan jumlah notifikasi yang benar-benar dibuat.
 /// [leads] kosong -> tidak ada yang dijadwalkan (pengingat nonaktif).
+///
+/// Hanya lead time yang masih di masa depan yang dijadwalkan (lihat
+/// `plannedReminders`). Setiap slot memakai id notifikasi sendiri
+/// (`matchId * 10 + {1,3,4}`) supaya tidak saling menimpa, dan jadwal
+/// dikirim lewat `NotificationService.scheduleKickoff` (zonedSchedule dengan
+/// mode exact, ada fallback inexact bila izin exact alarm tidak ada).
+///
+/// Efek samping: membuat notifikasi terjadwal di OS. Tidak menyentuh state
+/// Riverpod mana pun, jadi aman dipanggil dari provider `autoDispose`.
 Future<int> scheduleReminders(
   List<FootballMatch> targets, {
   required List<int> leads,

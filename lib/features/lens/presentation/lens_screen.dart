@@ -30,6 +30,19 @@ const _catLabel = {
   AwayDayCategory.lainnya: 'Lainnya',
 };
 
+// STRUKTUR UI — LensScreen
+// Ukuran: Scaffold + AppBar, body Center + ConstrainedBox(maxWidth: 720) + Column;
+// hasil scan ditampilkan di _ResultView (ListView)
+// [1] Pemilih jenis dokumen — SegmentedButton Otomatis/Struk/Tiket + tips pencahayaan
+// [2] Pemicu pemindaian — Row tombol Kamera dan Galeri, plus LinearProgressIndicator saat busy
+// [3] _ResultView — hasil scan: _ImagePreview, kartu _ExpenseCard, ExpansionTile teks OCR
+// [4] _ExpenseCard — form disunting: keterangan, jumlah, nominal alternatif, mata uang, kategori
+// [5] Info tiket — klub terdeteksi, laga terkait, tombol lihat jadwal klub
+// [6] Penyimpanan — ringkasan konversi Rupiah dan tombol simpan ke Away Day
+// Tabel/kolom: tanpa tabel; daftar kartu satu kolom, pilihan nominal/kategori memakai Wrap Chip
+// Sumber data: lensProvider, ratesProvider, matchesProvider, clubCrestProvider,
+// awayDayProvider, favoriteKeyProvider, matchQueryProvider
+
 class LensScreen extends ConsumerStatefulWidget {
   const LensScreen({super.key});
 

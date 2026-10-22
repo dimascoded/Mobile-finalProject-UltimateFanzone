@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 
+// STRUKTUR UI — ClubCrest
+// Ukuran: SizedBox ukuran logo + Image.network; tanpa Scaffold.
+// [1] Crest jaringan  — gambar logo klub dari crestUrl, fallback ke _Badge
+//                        saat URL kosong, gagal dimuat, atau frame belum siap
+// [2] _Badge          — lingkaran warna klub berisi kode TLA, ukuran teks
+//                        mengikuti ukuran logo
+// Tabel/kolom: tanpa tabel; satu logo bundar.
+// Sumber data: tanpa provider; crestUrl, tla, color, dan size dari parameter.
 /// Logo klub: menampilkan crest dari [crestUrl]; bila URL kosong atau gagal
 /// dimuat (offline / data contoh) otomatis jatuh ke badge warna + [tla].
 class ClubCrest extends StatelessWidget {

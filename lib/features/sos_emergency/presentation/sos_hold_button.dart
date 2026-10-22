@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 
+// STRUKTUR UI — SosHoldButton
+// Ukuran: Semantics > Listener > AnimatedBuilder; SizedBox bujur sangkar
+//         dengan ukuran dari parameter size.
+// [1] Tombol merah    — Container lingkaran dengan teks "SOS" di tengah
+// [2] Cincin progres  — CircularProgressIndicator yang mengikuti nilai
+//                        AnimationController selama 3 detik tahan
+// [3] Pemicu          — onPointerDown maju, pointer naik/batal mengulang;
+//                        animasi selesai memanggil onTriggered
+// Tabel/kolom: tanpa tabel; satu tombol melingkar.
+// Sumber data: tanpa provider; animasi internal dan callback onTriggered.
 /// Tombol SOS: tahan 3 detik untuk memicu (mencegah terkirim tidak sengaja).
 class SosHoldButton extends StatefulWidget {
   const SosHoldButton({super.key, required this.onTriggered, this.size = 64});

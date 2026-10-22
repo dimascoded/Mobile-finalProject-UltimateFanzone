@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/ui/app_card.dart';
 
+// STRUKTUR UI — FeedbackScreen
+// Ukuran: Scaffold > Center > ConstrainedBox(maxWidth 720) > ListView.
+// [1] Judul           — "Mata Kuliah Pemrograman Aplikasi Mobile"
+// [2] AppCard Kesan   — paragraf kesan tentang pembelajaran Flutter
+// [3] AppCard Pesan   — paragraf pesan untuk Perkuliahan
+// Tabel/kolom: tanpa tabel; dua kartu teks satu kolom.
+// Sumber data: tanpa provider; isi teks statis di dalam file.
 class FeedbackScreen extends StatelessWidget {
   const FeedbackScreen({super.key});
 

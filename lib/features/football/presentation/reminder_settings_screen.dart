@@ -18,6 +18,20 @@ const _presets = <(int, String)>[
   (1440, '1 hari'),
 ];
 
+// STRUKTUR UI — ReminderSettingsScreen
+// Ukuran: Scaffold > Center > ConstrainedBox(maxWidth 720) > ListView.
+// [1] Teks pengantar  — penjelasan singkat bahwa maksimal tiga pengingat
+// [2] Pengingatmu     — AppCard berisi InputChip untuk lead time aktif, atau
+//                        teks "Pengingat dimatikan" bila kosong
+// [3] Pilihan cepat   — AppCard berisi FilterChip preset 15 menit sampai
+//                        1 hari, terpilih bila sudah aktif
+// [4] Tindakan manual — tombol tambah sendiri (buka dialog) dan kembalikan
+//                        ke bawaan, catatan batasan, serta peringatan bila
+//                        klub favorit belum dipilih
+// [5] _AddReminderDialog — dialog jumlah dan satuan (menit/jam/hari) dengan
+//                        validasi nilai positif dan batas 7 hari
+// Tabel/kolom: tanpa tabel; daftar chip satu kolom terbungkus.
+// Sumber data: kickoffLeadsProvider, favoriteClubProvider.
 class ReminderSettingsScreen extends ConsumerWidget {
   const ReminderSettingsScreen({super.key});
 

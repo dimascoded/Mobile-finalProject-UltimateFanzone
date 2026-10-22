@@ -6,6 +6,18 @@ import '../../../core/ui/app_card.dart';
 import '../providers/sos_provider.dart';
 import 'sos_hold_button.dart';
 
+// STRUKTUR UI — SosScreen
+// Ukuran: Scaffold > Center > SingleChildScrollView >
+//         ConstrainedBox(maxWidth 720) > Column.
+// [1] Tombol SOS      — SosHoldButton berukuran 200px untuk tekan-tahan
+// [2] Petunjuk        — teks "Tahan 3 detik..." dan "atau goyangkan HP 2x"
+// [3] Penafian        — catatan bahwa aplikasi tidak mengirim pesan dan
+//                       koordinat hanya ditampilkan di perangkat
+// [4] Status lokasi   — hasil pembacaan lokasi: teks, CircularProgressIndicator
+//                        saat memuat, atau pesan galat
+// [5] AppCard darurat — nomor darurat UK 999/112 (polisi, ambulans, umum)
+// Tabel/kolom: tanpa tabel; satu kolom isi dengan kartu info.
+// Sumber data: sosProvider.
 class SosScreen extends ConsumerWidget {
   const SosScreen({super.key});
 

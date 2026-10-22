@@ -22,6 +22,14 @@ typedef MenuItem = ({
   String? badge,
 });
 
+// STRUKTUR UI — menuGroups (registry menu, tanpa komposisi UI)
+// Ukuran: bukan widget; konstanta registry <FeatureSection, MenuGroup>.
+// [1] FeatureSection — enum tiga tab: matches, activities, tools
+// [2] MenuItem      — tuple: label, description, icon, page, badge
+// [3] MenuGroup     — judul, deskripsi, ikon, dan daftar item tiap tab
+// Tabel/kolom: tanpa tabel; tiap grup memuat tiga item MenuItem.
+// Sumber data: tanpa provider; konstanta statis yang dirender lewat
+//              FeatureMenuTab, FeatureCard, dan FeaturedFeatureCard.
 /// Sekelompok fitur yang ditampilkan pada satu tab menu.
 class MenuGroup {
   const MenuGroup({

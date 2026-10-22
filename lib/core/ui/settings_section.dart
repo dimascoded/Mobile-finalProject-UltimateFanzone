@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import '../theme/app_tokens.dart';
 import 'app_card.dart';
 
+/// Grup baris pengaturan di dalam satu kartu.
+///
+/// Menyatukan beberapa [SettingsTile] di bawah satu judul seksi, dengan
+/// pemisah tipis antar baris. Dipakai di halaman Profil untuk mengelompokkan
+/// preferensi, data, dan aksi pengguna.
 class SettingsSection extends StatelessWidget {
   const SettingsSection({
     super.key,
@@ -10,7 +15,10 @@ class SettingsSection extends StatelessWidget {
     required this.children,
   });
 
+  /// Judul kelompok, ditampilkan dengan warna teks redup.
   final String title;
+
+  /// Baris-baris isi seksi, biasanya [SettingsTile].
   final List<Widget> children;
 
   @override
@@ -50,6 +58,11 @@ class SettingsSection extends StatelessWidget {
   }
 }
 
+/// Satu baris pengaturan bergaya daftar.
+///
+/// Menampilkan ikon, judul, keterangan opsional, dan kontrol di kanan (mis.
+/// switch atau chevron). Baris destruktif seperti "Hapus akun" diberi warna
+/// error agar tidak tertukar dengan aksi biasa.
 class SettingsTile extends StatelessWidget {
   const SettingsTile({
     super.key,
@@ -61,11 +74,23 @@ class SettingsTile extends StatelessWidget {
     this.destructive = false,
   });
 
+  /// Ikon di sisi kiri baris.
   final Widget icon;
+
+  /// Judul baris.
   final String title;
+
+  /// Keterangan tambahan di bawah judul, dipotong maksimal tiga baris.
   final String? subtitle;
+
+  /// Kontrol di sisi kanan baris, mis. switch, ikon, atau chevron.
   final Widget? trailing;
+
+  /// Aksi saat baris diketuk; bila null baris tidak dapat diklik.
   final VoidCallback? onTap;
+
+  /// Tandai baris sebagai aksi merusak (warna teks dan ikon memakai warna
+  /// error tema).
   final bool destructive;
 
   @override

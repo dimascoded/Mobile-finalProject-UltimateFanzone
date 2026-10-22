@@ -41,6 +41,19 @@ String syncSubtitle(SyncState sync, DateTime? lastSync) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
+// STRUKTUR UI — ProfileStats & ProfileSections
+// Ukuran: Column tanpa kontainer scroll; tiap bagian dipisah SizedBox, isinya
+// SettingsSection dengan SettingsTile
+// [1] ProfileStats — Row tiga StatTile: Stempel, Kartu, Pencapaian
+// [2] Section Aktivitas — SettingsTile Paspor Suporter dan Koleksi Kartu
+// [3] Section Keamanan — SwitchListTile biometrik
+// [4] Section Notifikasi — SettingsTile Pengingat Kickoff
+// [5] Section Data — SettingsTile cadangan ke cloud plus tombol cadangkan sekarang
+// [6] Section Tentang — SettingsTile Kesan & Pesan, catatan afiliasi, lalu Section Akun untuk keluar
+// Tabel/kolom: tanpa tabel; baris statistik 3 kolom (Row berisi tiga StatTile)
+// Sumber data: stampsProvider, chainProvider, chainValidProvider, biometricEnabledProvider,
+// kickoffLeadsProvider, syncProvider, lastSyncedAtProvider, cardCollectionProvider, ownedClubsProvider
+
 /// Baris ringkasan tiga statistik di atas bagian Profil.
 class ProfileStats extends ConsumerWidget {
   const ProfileStats({super.key});

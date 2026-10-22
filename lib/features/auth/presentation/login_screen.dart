@@ -10,6 +10,16 @@ import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 
+// STRUKTUR UI — LoginScreen
+// Ukuran: Scaffold > Stack: ScrimImage latar + SafeArea >
+//         SingleChildScrollView > ConstrainedBox(maxWidth 420).
+// [1] Ikon bola       — bundar 88px berisi ikon sepak bola
+// [2] Judul & subjudul — "Ultimate Fanzone" dan tagline teman suporter
+// [3] AppCard form    — kolom email, kolom password dengan tombol lihat
+//                        sandi, tombol Masuk, tombol Masuk dengan Biometrik
+//                        (bila aktif), dan tautan pendaftaran
+// Tabel/kolom: tanpa tabel; satu kolom form di dalam kartu.
+// Sumber data: authProvider, biometricEnabledProvider.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
   @override

@@ -10,6 +10,7 @@ import '../data/receipt_parser.dart';
 // (mis. test) tetap bekerja.
 export '../data/receipt_parser.dart' show detectClubs;
 
+/// Satu hasil pemindaian Lens: foto, teks OCR, dan draft terparsing.
 class LensResult {
   const LensResult({
     required this.imagePath,
@@ -18,7 +19,10 @@ class LensResult {
     this.ratesFromCache = false,
   });
 
+  /// Path file foto yang diambil (sementara, tidak dipersist).
   final String imagePath;
+
+  /// Teks mentah hasil OCR.
   final String text;
 
   /// Hasil parsing struk/karcis: jenis, nominal, kategori, klub, tanggal, dan
@@ -29,6 +33,12 @@ class LensResult {
   final bool ratesFromCache;
 }
 
+/// Notifier pemindaian Lens.
+///
+/// Alur data: `ImagePicker` -> OCR ([LensRepository]) -> `parseReceipt` ->
+/// [LensResult] -> UI; kurs dibaca dari `ratesProvider` (cache Hive saat
+/// offline). Didaftarkan `autoDispose` supaya state besar dibuang saat layar
+/// ditutup. Lihat `docs/feature-map.md` (bagian lens).
 class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
   LensNotifier(this._ref) : super(const AsyncData(null));
   final Ref _ref;
@@ -36,6 +46,9 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
 
   /// Pindai foto, lalu parse jadi [ReceiptDraft]. Pemindaian tetap jalan tanpa
   /// tim favorit; [clubs] dan [matches] hanya dipakai untuk mengenali klub/laga.
+  ///
+  /// Batal (pengguna menutup picker) -> state tidak berubah. Gagal OCR/parse ->
+  /// [AsyncError]. `mounted` diperiksa sebelum menulis state.
   Future<void> scan(ImageSource source, {DocKind? forceKind}) async {
     final x = await _picker.pickImage(
         source: source, maxWidth: 1600, imageQuality: 90);
@@ -73,9 +86,11 @@ class LensNotifier extends StateNotifier<AsyncValue<LensResult?>> {
     state = result;
   }
 
+  /// Kosongkan hasil supaya UI kembali ke keadaan awal.
   void clear() => state = const AsyncData(null);
 }
 
+/// State pemindaian Lens (dibuang otomatis saat tidak dipakai).
 final lensProvider =
     StateNotifierProvider.autoDispose<LensNotifier, AsyncValue<LensResult?>>(
         (ref) => LensNotifier(ref));

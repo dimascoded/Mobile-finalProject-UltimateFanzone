@@ -3,6 +3,14 @@ import '../../../core/theme/app_tokens.dart';
 import '../../../core/utils/time_utils.dart';
 import '../data/football_repository.dart';
 
+// STRUKTUR UI — DataSourceBanner
+// Ukuran: Padding + Card (radius AppRadius.md) berisi satu Row ikon dan teks;
+//         tanpa Scaffold.
+// [1] Kartu status   — warna kartu dan ikon berubah menurut DataSource:
+//                      contoh (errorContainer), cache, atau live
+// [2] Baris ikon     — ikon 16px di kiri, teks status Expandable di kanan
+// Tabel/kolom: tanpa tabel; satu baris status sumber data.
+// Sumber data: tanpa provider; berasal dari parameter source dan fetchedAt.
 class DataSourceBanner extends StatelessWidget {
   const DataSourceBanner({super.key, required this.source, this.fetchedAt});
   final DataSource source;

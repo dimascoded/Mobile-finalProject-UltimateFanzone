@@ -6,7 +6,13 @@ import '../../football/providers/football_providers.dart';
 import '../data/pundit_chat.dart';
 import '../data/pundit_repository.dart';
 
-/// 5 hasil terakhir. Kalau belum ada tim favorit, pakai semua laga selesai.
+/// Laga-laga yang sudah selesai, terbaru (kickoff terakhir) lebih dulu.
+///
+/// Kalau belum ada tim favorit, dipakai semua laga selesai; kalau ada, hanya
+/// laga tim favorit. Jumlah 5 biasanya diterapkan pemanggil dengan `.take(5)`.
+///
+/// Provider turunan dari [favoriteClubProvider] dan [matchesProvider];
+/// tanpa efek samping.
 final lastResultsProvider = Provider<List<FootballMatch>>((ref) {
   final fav = ref.watch(favoriteClubProvider);
   return ref.watch(matchesProvider).maybeWhen(
@@ -20,12 +26,34 @@ final lastResultsProvider = Provider<List<FootballMatch>>((ref) {
       );
 });
 
-// State awal diisi lewat super.initialState, bukan lewat `state =` dari luar.
+/// Notifier analisis "Tanya Pundit" untuk tim favorit saat ini.
+///
+/// State-nya `AsyncValue<PunditResult?>`: `null` berarti belum ada analisis,
+/// `loading` selama request Gemini berjalan, dan `data` berisi teks analisis.
+/// State awal diisi lewat `super.initialState`, bukan lewat `state =` dari luar.
+///
+/// Aturan §3.5: notifier ini melakukan `await` request Gemini, jadi sebelum
+/// menyentuh `state` setelah `await` selalu diperiksa `if (!mounted) return;`
+/// — tanpa itu, layar yang ditutup di tengah request akan membuat error saat
+/// memperbarui state.
+///
+/// Cache analisis terakhir disimpan per klub di Hive `app_cache` (kunci
+/// `pundit_<clubKey>` dan `pundit_<clubKey>_at`) dan ikut terhapus saat logout
+/// lewat prefix `pundit_`.
 class PunditNotifier extends StateNotifier<AsyncValue<PunditResult?>> {
   PunditNotifier(this._ref, super.initialState);
 
   final Ref _ref;
 
+  /// Buat analisis baru untuk tim favorit dengan memanggil Gemini.
+  ///
+  /// Menolak (state error) bila tim favorit belum dipilih. Saat request
+  /// gagal (model salah, API key kosong, atau offline), fallback ke cache
+  /// terakhir beserta [PunditResult.warning] agar UI menyatakan bahwa teks
+  /// itu bukan hasil request baru.
+  ///
+  /// Efek samping: request jaringan ke Gemini, lalu menulis Hive `app_cache`
+  /// (`pundit_<clubKey>`, `pundit_<clubKey>_at`, dan `gemini_model_ok`).
   Future<void> generate() async {
     final club = _ref.read(favoriteClubProvider);
     if (club == null) {
@@ -59,9 +87,15 @@ class PunditNotifier extends StateNotifier<AsyncValue<PunditResult?>> {
     }
   }
 
+  /// Kosongkan hasil analisis dari state (tanpa menghapus cache Hive).
   void clear() => state = const AsyncData(null);
 }
 
+/// Hasil analisis "Tanya Pundit" untuk tim favorit saat ini.
+///
+/// Dibangun ulang setiap kali tim favorit berubah, sehingga state awalnya
+/// diisi dari cache klub yang sedang aktif. Bukan `autoDispose`, jadi hasil
+/// analisis bertahan antar navigasi.
 final punditProvider =
     StateNotifierProvider<PunditNotifier, AsyncValue<PunditResult?>>((ref) {
   final club = ref.watch(favoriteClubProvider);
@@ -70,6 +104,9 @@ final punditProvider =
 });
 
 /// Status tab "Tanya Pundit".
+///
+/// State immutable yang merangkum riwayat pesan, status pengiriman, pesan
+/// galat, dan teks pertanyaan terakhir yang gagal dikirim.
 class PunditChatState {
   const PunditChatState({
     this.messages = const [],
@@ -88,6 +125,18 @@ class PunditChatState {
 }
 
 /// Notifier percakapan "Tanya Pundit" untuk tim favorit saat ini.
+///
+/// State-nya [PunditChatState]. Riwayat pesan disimpan per klub di Hive
+/// `app_cache` (kunci `pundit_chat_<clubKey>`, maksimal 30 pesan terakhir)
+/// dan ikut terhapus saat logout lewat prefix `pundit_`.
+///
+/// Aturan §3.5: meski provider ini tidak `autoDispose`, metode `_reply`
+/// melakukan `await` request Gemini dan menyentuh `state`, sehingga tetap
+/// diperiksa `if (!mounted) return;` sebelum menyentuh `state` setelah
+/// `await` — mencegah error bila provider dibuang di tengah request.
+///
+/// Bukan `autoDispose`: riwayat perlu bertahan selama pengguna berpindah
+/// antar tab dalam Dashboard.
 class PunditChatNotifier extends StateNotifier<PunditChatState> {
   PunditChatNotifier(this._ref) : super(const PunditChatState()) {
     _load();
@@ -106,7 +155,7 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
     );
   }
 
-  /// Tiga laga berikutnya milik [club] dari data pertandingan.
+  /// Tiga laga berikutnya milik `club` dari data pertandingan.
   List<FootballMatch> _upcoming(PlClub club) {
     final data =
         _ref.read(matchesProvider).valueOrNull?.data ?? const <FootballMatch>[];
@@ -129,6 +178,15 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
         failedText: state.failedText,
       );
 
+  /// Kirim pertanyaan pengguna ke Gemini lalu tampilkan balasannya.
+  ///
+  /// Pesan pengguna diberi batas `_maxInputChars` karakter, dan state
+  /// di-set `sending: true` selama request berlangsung. Menolak (state error)
+  /// bila teks kosong, sedang mengirim, tim favorit belum dipilih, atau
+  /// `GEMINI_API_KEY` belum diset.
+  ///
+  /// Efek samping: request jaringan ke Gemini, lalu menulis riwayat chat ke
+  /// Hive `app_cache` (`pundit_chat_<clubKey>`).
   Future<void> send(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty || state.sending) return;
@@ -156,6 +214,10 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
   }
 
   /// Kirim ulang pertanyaan yang gagal tanpa menggandakan pesan pengguna.
+  ///
+  /// Tidak berpengaruh bila tidak ada [PunditChatState.failedText] atau
+  /// sedang mengirim. Efek samping: request jaringan ke Gemini dan penulisan
+  /// riwayat chat ke Hive `app_cache` (`pundit_chat_<clubKey>`).
   Future<void> retry() async {
     final failed = state.failedText;
     if (failed == null || state.sending) return;
@@ -165,6 +227,11 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
     await _reply(messages, failed);
   }
 
+  /// Mintalah balasan dari Gemini untuk [messages], simpan riwayatnya.
+  ///
+  /// Aturan §3.5: setiap `await` dibuntuti `if (!mounted) return;` sebelum
+  /// `state` disentuh. Efek samping: request jaringan dan penulisan riwayat
+  /// chat ke Hive `app_cache` (`pundit_chat_<clubKey>`).
   Future<void> _reply(List<ChatMessage> messages, String failedText) async {
     final club = _ref.read(favoriteClubProvider);
     if (club == null) {
@@ -205,6 +272,9 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
   }
 
   /// Kosongkan percakapan di memori dan di penyimpanan.
+  ///
+  /// Efek samping: menulis ulang Hive `app_cache` (kunci
+  /// `pundit_chat_<clubKey>`) menjadi daftar kosong.
   Future<void> clear() async {
     final club = _ref.read(favoriteClubProvider);
     state = const PunditChatState();
@@ -214,8 +284,11 @@ class PunditChatNotifier extends StateNotifier<PunditChatState> {
   }
 }
 
+/// Riwayat percakapan "Tanya Pundit" untuk tim favorit saat ini.
+///
 /// Dibangun ulang setiap kali tim favorit berganti supaya riwayat yang
-/// ditampilkan selalu milik klub yang sedang aktif.
+/// ditampilkan selalu milik klub yang sedang aktif. Bukan `autoDispose`
+/// karena riwayat perlu bertahan selama pengguna berpindah tab.
 final punditChatProvider =
     StateNotifierProvider<PunditChatNotifier, PunditChatState>((ref) {
   ref.watch(favoriteClubProvider);

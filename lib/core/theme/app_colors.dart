@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Palet warna mentah (hex) untuk tema terang dan gelap.
+///
+/// `AppTheme.light`/`AppTheme.dark` merangkai konstanta ini menjadi
+/// `ColorScheme`. Jangan hardcode warna di widget — pakai token
+/// `Theme.of(context)` atau [FanzoneColors] (lihat `app_tokens.dart`).
 class AppColors {
   // Dark mode
   static const Color bgDark = Color(0xFF0A130E);

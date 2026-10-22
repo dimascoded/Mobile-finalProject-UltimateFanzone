@@ -16,6 +16,19 @@ import '../providers/card_collection_provider.dart';
 import '../providers/gamification_providers.dart';
 import 'card_collection_screen.dart';
 
+// STRUKTUR UI — PassportScreen
+// Ukuran: Scaffold + AppBar, body ListView satu kolom tanpa batas lebar;
+// header ScrimImage setinggi 190 * textScale
+// [1] Empty state — kolom "Pilih tim favorit dulu" plus tombol menuju TeamPickerScreen
+// [2] Header klub — ScrimImage: crest, nama klub, stadion dan kota, PillBadge jarak ke stadion
+// [3] Kartu aksi cap — info radius cap, tombol "Cap stamp", switch mode demo
+// [4] Status riwayat — SettingsTile validitas rantai catatan
+// [5] Kartu Koleksi Kartu — ListTile jumlah kartu dan jumlah klub terkumpul
+// [6] Daftar stamp stadion — SectionHeader lalu kartu kosong atau AppCard per catatan stamp
+// Tabel/kolom: tanpa tabel; daftar stamp satu kolom (satu ListTile per catatan)
+// Sumber data: favoriteClubProvider, clubCrestProvider, stampsProvider, chainValidProvider,
+// demoModeProvider, stampProvider, stampDistanceProvider, cardCollectionProvider, ownedClubsProvider
+
 class PassportScreen extends ConsumerWidget {
   const PassportScreen({super.key});
 

@@ -124,6 +124,19 @@ Future<void> _deletePrediction(
   ));
 }
 
+// STRUKTUR UI — PredictionScreen
+// Ukuran: Scaffold + AppBar, body Center + ConstrainedBox(maxWidth: 720) +
+// ListView satu kolom
+// [1] Kartu peringkat — AppCard: badge peringkat, jumlah poin, LinearProgressIndicator ke peringkat berikutnya
+// [2] Kartu "Cara dapat poin" — AppCard berisi ExpansionTile daftar aturan poin
+// [3] Section "Siap dicek" — daftar _SettleTile per laga yang sudah selesai (tombol cek hasil, sinkron, hapus)
+// [4] Section "Pilih skor sebelum kickoff" — _UpcomingPicker: dropdown laga, _Stepper skor home/away, tombol kunci
+// [5] Section "Tebakan tersimpan" — daftar _HistoryTile satu kolom (status, waktu WIB, hapus)
+// Tabel/kolom: tanpa tabel; daftar kartu satu kolom, baris status memakai Wrap
+// Sumber data: predictionPointsProvider, unsettledPredictionsProvider, predictionHistoryProvider,
+// matchesProvider, favoriteClubProvider, favoriteUpcomingMatchesProvider, allUpcomingMatchesProvider,
+// predictionsProvider, predictionActionProvider, settleActionProvider, syncProvider
+
 /// Layar Prediksi Skor.
 class PredictionScreen extends ConsumerWidget {
   const PredictionScreen({super.key});

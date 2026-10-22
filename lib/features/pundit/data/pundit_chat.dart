@@ -7,16 +7,24 @@ import '../../football/data/models.dart';
 /// [role] selalu 'user' atau 'model'. Berkas ini murni logika (tanpa impor
 /// Flutter) supaya mudah diuji.
 class ChatMessage {
+  /// Membuat pesan chat.
   ChatMessage({
     required this.role,
     required this.text,
     required this.at,
   });
 
+  /// Peran pengirim: `user` atau `model`.
   final String role;
+
+  /// Isi pesan.
   final String text;
+
+  /// Waktu pesan dibuat (selalu dinormalisasi ke UTC saat disimpan).
   final DateTime at;
 
+  /// Serialisasi ke JSON untuk disimpan pada kunci Hive
+  /// `pundit_chat_<clubKey>`.
   Map<String, Object?> toJson() => {
         'role': role,
         'text': text,
@@ -24,6 +32,9 @@ class ChatMessage {
       };
 
   /// Toleran terhadap data rusak: mengembalikan null alih-alih melempar.
+  ///
+  /// Item dengan `role` di luar `user`/`model`, teks bukan string, atau
+  /// bentuknya bukan map akan dilewati pemanggil.
   static ChatMessage? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final role = raw['role'];
@@ -36,9 +47,11 @@ class ChatMessage {
   }
 }
 
+/// Baris klasemen untuk prompt: `1. Arsenal (Arsenal) - 70 poin`.
 String _standingLine(StandingRow s) =>
     '${s.position}. ${s.teamName} (${s.teamShort}) - ${s.points} poin';
 
+/// Baris hasil untuk prompt: skor kalau ada, kalau belum `Home vs Away`.
 String _resultLine(FootballMatch m) {
   final score = (m.homeScore != null && m.awayScore != null)
       ? '${m.homeScore}-${m.awayScore}'
@@ -46,6 +59,7 @@ String _resultLine(FootballMatch m) {
   return '${m.homeShort} $score ${m.awayShort}';
 }
 
+/// Baris jadwal untuk prompt, dengan waktu lokal WIB.
 String _fixtureLine(FootballMatch m) {
   final wib = TimeUtils.wib(m.kickoffUtc);
   return '${m.homeShort} vs ${m.awayShort} — '
@@ -55,6 +69,15 @@ String _fixtureLine(FootballMatch m) {
 /// Instruksi sistem untuk [GeminiClient.chat], lengkap dengan data pengikat
 /// (klasemen, hasil terakhir, laga berikutnya). Semua daftar kosong ditandai
 /// "data belum tersedia" agar model tidak mengarang.
+///
+/// Klasemen yang dikirim berisi 6 teratas PLUS baris klub sendiri
+/// ([club]); baris klub sendiri selalu ikut walau posisinya di luar enam
+/// teratas, karena di situlah pertanyaan pengguna biasanya berpusat.
+///
+/// Aturan yang ditanam: menjawab dalam Bahasa Indonesia, maksimal 120 kata,
+/// tidak mengarang angka/pemain, tidak memberi saran betting, menolak topik
+/// di luar sepak bola, memperlakukan input pengguna sebagai pertanyaan
+/// (bukan instruksi), dan tidak boleh membocorkan aturan ini.
 String buildSystemInstruction({
   required PlClub club,
   required List<StandingRow> standings,
@@ -112,6 +135,11 @@ String buildSystemInstruction({
 ///
 /// Hasil selalu diawali dan diakhiri giliran 'user' supaya bentuknya valid
 /// untuk [GeminiClient.chat]. Daftar kosong menghasilkan daftar kosong.
+///
+/// Batas jumlah giliran (default 10) dan jumlah karakter (default 4000)
+/// dipakai untuk menjaga prompt tetap muat dan murah; saat karakter
+/// melebihi batas, giliran paling lama dibuang (termasuk jawaban model yang
+/// menggantunginya).
 List<ChatTurn> trimTurns(
   List<ChatMessage> messages, {
   int maxTurns = 10,

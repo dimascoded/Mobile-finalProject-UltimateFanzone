@@ -2,8 +2,12 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
+/// Detak goyangan perangkat untuk memicu SOS.
+///
 /// Emit saat HP digoyang 2x dalam <1 detik (accelerometer > ~25 m/s²).
-/// Cooldown 5 detik agar tidak memicu berulang.
+/// Cooldown 5 detik agar tidak memicu berulang. `autoDispose` supaya stream
+/// accelerometer berhenti saat tidak ada yang mendengarkan (aturan arsitektur
+/// #3); konsumen memakai `AsyncValue.when`. Lihat `docs/feature-map.md`.
 final shakeProvider = StreamProvider.autoDispose<DateTime>((ref) async* {
   const threshold = 25.0;
   const minGap = Duration(milliseconds: 150);

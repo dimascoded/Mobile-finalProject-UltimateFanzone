@@ -2,13 +2,32 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_tokens.dart';
 
+/// Kumpulan tema Material 3 (terang dan gelap) untuk seluruh aplikasi.
+///
+/// Tema disusun dari palet mentah [AppColors] menjadi [ColorScheme], lalu
+/// dilengkapi tema komponen Material (AppBar, kartu, tombol, input, dialog)
+/// supaya tampilan tetap seragam di semua layar.
+///
+/// Warna aksen yang tidak muat di [ColorScheme] didaftarkan sebagai extension
+/// [FanzoneColors] dan dibaca lewat `context.fz` (lihat `app_tokens.dart`).
+/// Token [AppSpacing] dan [AppRadius] dipakai untuk jarak dan radius sudut.
+///
+/// Pilihan mode tema pengguna disimpan lewat `ThemeModeNotifier` pada
+/// `theme_provider.dart`.
 class AppTheme {
   static const String _fontDisplay = 'BarlowCondensed';
   static const String _fontBody = 'Inter';
 
+  /// Tema terang; dipakai ketika mode [ThemeMode.light] aktif.
   static ThemeData get light => _build(Brightness.light);
+
+  /// Tema gelap; dipakai ketika mode [ThemeMode.dark] aktif.
   static ThemeData get dark => _build(Brightness.dark);
 
+  /// Merakit [ThemeData] untuk mode terang atau gelap.
+  ///
+  /// Memilih pasangan warna terang/gelap dari [AppColors] sesuai brightness,
+  /// lalu mendaftarkan [FanzoneColors] sebagai extension tema.
   static ThemeData _build(Brightness b) {
     final isDark = b == Brightness.dark;
 
@@ -216,6 +235,8 @@ class AppTheme {
     );
   }
 
+  /// Skema tipografi aplikasi: judul memakai [_fontDisplay] (condensed) agar
+  /// mudah dipindai, sedangkan teks isi memakai [_fontBody].
   static TextTheme _buildTextTheme() {
     return const TextTheme(
       displaySmall:

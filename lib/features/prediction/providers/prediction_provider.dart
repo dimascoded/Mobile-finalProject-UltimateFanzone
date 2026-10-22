@@ -15,6 +15,12 @@ import '../data/reveal_verifier.dart';
 
 /// Prediksi aktif milik pengguna. Salt + skor disimpan LOKAL di Hive karena
 /// belum boleh bocor sebelum kickoff. Yang masuk blockchain hanya commit-nya.
+///
+/// Key Hive `app_cache` yang dipakai adalah `score_predictions`, dan
+/// penyimpanan lewat [OfflineSyncDatabase.persist] sehingga juga menjadi baris
+/// di SQLite `sync_documents` collection `score_predictions` (revisi naik tiap
+/// penulisan). Kunci ini termasuk [AuthRepository.userDataKeys], jadi ikut
+/// terhapus saat logout.
 class PredictionStore {
   static const collection = 'score_predictions';
   static const _key = collection;
@@ -43,35 +49,63 @@ class PredictionStore {
     return out;
   }
 
+  /// Simpan seluruh daftar prediksi ke Hive `score_predictions` dan SQLite
+  /// collection `score_predictions`.
   Future<void> save(List<Prediction> list) => OfflineSyncDatabase.persist(
         _key,
         jsonEncode(list.map((e) => e.toJson()).toList()),
       );
 }
 
+/// Penyedia tunggal [PredictionStore].
 final predictionStoreProvider = Provider((ref) => PredictionStore());
 
+/// Pembuat salt acak yang kuat (16 karakter hex) untuk komitmen prediksi.
+///
+/// Menghasilkan bytes acak dari `Random.secure()` sehingga salt tidak bisa
+/// ditebak sebelum kickoff.
 final _rnd = Random.secure();
 
+/// Hasilkan salt baru sebagai 16 karakter hex.
 String _newSalt() =>
     List.generate(16, (_) => _rnd.nextInt(16).toRadixString(16)).join();
 
-/// Satu prediksi per matchId.
+/// Prediksi milik pengguna (satu prediksi per matchId).
+///
+/// Provider ini dipakai lintas layar (Match Center, prediksi, sinkronisasi),
+/// jadi bukan `autoDispose`; sumber penyimpanan ada di [PredictionsNotifier].
 final predictionsProvider =
     StateNotifierProvider<PredictionsNotifier, List<Prediction>>(
   (ref) => PredictionsNotifier(ref.watch(predictionStoreProvider)),
 );
 
+/// Prediksi aktif milik pengguna.
+///
+/// State-nya `List<Prediction>`; hanya satu prediksi per `matchId`. Data
+/// disimpan di Hive `app_cache` (kunci `score_predictions`) dan SQLite
+/// collection `score_predictions`.
+///
+/// Notifier tidak `autoDispose` (prediksi dipakai lintas layar), jadi tidak
+/// wajib cek `mounted` setelah `await` (aturan §3.5 hanya berlaku untuk
+/// notifier `autoDispose`).
 class PredictionsNotifier extends StateNotifier<List<Prediction>> {
   PredictionsNotifier(this._store) : super(_store.load());
 
   final PredictionStore _store;
 
+  /// Ambil prediksi untuk satu laga, atau null bila belum ada.
+  ///
+  /// Fungsi murni, tanpa efek samping.
   Prediction? forMatch(int matchId) {
     final list = state.where((e) => e.matchId == matchId);
     return list.isEmpty ? null : list.first;
   }
 
+  /// Simpan atau timpa prediksi untuk satu laga.
+  ///
+  /// Baris lama untuk `matchId` yang sama dibuang, lalu prediksi baru
+  /// dimasukkan di depan. Efek samping: menulis Hive `score_predictions` dan
+  /// SQLite collection `score_predictions`.
   Future<void> put(Prediction p) async {
     state = [p, ...state.where((e) => e.matchId != p.matchId)];
     await _store.save(state);
@@ -86,6 +120,12 @@ class PredictionsNotifier extends StateNotifier<List<Prediction>> {
   ///
   /// Poin dan kartu yang sudah didapat TIDAK terpengaruh: keduanya hidup di
   /// blok result/card, bukan di baris prediksi ini.
+  ///
+  /// Efek samping: menambah antrean penghapusan di SQLite (collection
+  /// `score_predictions`) lewat [OfflineSyncDatabase.queueDeletion], lalu
+  /// menulis ulang daftar ke Hive `score_predictions` dan SQLite collection
+  /// `score_predictions`. Baris cloud ikut terhapus pada sinkronisasi
+  /// berikutnya.
   Future<bool> remove(
     int matchId, {
     required DateTime? kickoffUtc,
@@ -109,20 +149,35 @@ class PredictionsNotifier extends StateNotifier<List<Prediction>> {
 
   /// Terapkan hasil merge sinkronisasi (S1): daftar gabungan dari server dan
   /// perangkat ini langsung disimpan ke Hive.
+  ///
+  /// Efek samping: menulis Hive `score_predictions` dan SQLite collection
+  /// `score_predictions`.
   Future<void> replaceAll(List<Prediction> list) async {
     state = list;
     await _store.save(state);
   }
 }
 
+/// Hasil commit prediksi: prediksi yang tercatat, dan apakah laga itu sudah
+/// pernah diprediksi sebelumnya (jadi tidak ada commit baru).
 class CommitResult {
   const CommitResult(this.prediction, this.alreadyCommitted);
   final Prediction prediction;
   final bool alreadyCommitted;
 }
 
+/// Aksi commit prediksi skor (dipakai layar form prediksi).
 final predictionActionProvider = Provider((ref) => PredictionAction(ref));
 
+/// Penulis blok commit prediksi ke rantai paspor.
+///
+/// Aksi ini memastikan bahwa satu laga hanya pernah punya SATU blok commit.
+/// Bila rantai sudah punya commit tapi data tebakan (salt) tidak ada di
+/// perangkat ini, commit baru tidak akan pernah bisa dibuka; oleh karena itu
+/// [commit] menolak dan meminta pengguna menyinkronkan dulu.
+///
+/// Notifier/aksi ini tidak `autoDispose`, jadi tidak wajib cek `mounted`
+/// setelah `await` (aturan §3.5 hanya berlaku untuk notifier `autoDispose`).
 class PredictionAction {
   PredictionAction(this._ref);
   final Ref _ref;
@@ -130,6 +185,19 @@ class PredictionAction {
   /// Catat prediksi sebelum kickoff. Menolak perubahan bila:
   /// - kickoff sudah lewat
   /// - sudah ada commit untuk laga itu (prediksi tidak bisa diubah)
+  /// - sumber data adalah data contoh (R3)
+  ///
+  /// Bila laga itu sudah pernah diprediksi, metode ini mengembalikan
+  /// [CommitResult] dengan `alreadyCommitted: true` dan tidak menambah blok
+  /// baru. Bila rantai sudah punya blok commit untuk laga itu tetapi data
+  /// tebakan (salt) tidak ada di perangkat ini, metode melempar galat agar
+  /// pengguna menyinkronkan dulu.
+  ///
+  /// Efek samping: menambah blok commit ke rantai paspor (SQLite collection
+  /// `passport_chain` + Hive `passport_chain`) dan menyimpan prediksi ke Hive
+  /// `score_predictions` + SQLite collection `score_predictions`. Blok commit
+  /// ditulis lebih dulu (R2) supaya tidak ada prediksi tanpa blok commit bila
+  /// aplikasi ditutup di tengah jalan.
   Future<CommitResult> commit({
     required FootballMatch match,
     required int homeScore,
@@ -201,6 +269,11 @@ class PredictionAction {
 // ---------- Reveal + poin ----------
 
 /// Status satu prediksi setelah reveal.
+///
+/// Dibentuk oleh [SettleAction.settleDetailed] ketika skor resmi tersedia
+/// dan blok result berhasil ditulis. [points] adalah poin yang dihitung dari
+/// kecocokan tebakan, sedangkan [rankUp] terisi bila total poin menyeberangi
+/// peringkat baru.
 class SettledPrediction {
   const SettledPrediction({
     required this.prediction,
@@ -221,6 +294,11 @@ class SettledPrediction {
 }
 
 /// Prediksi yang laganya sudah selesai tapi blok result-nya belum ditulis.
+///
+/// Provider turunan dari [matchesProvider], [chainProvider], dan
+/// [predictionsProvider]: memasangkan setiap prediksi pengguna dengan laga
+/// berstatus selesai + punya skor yang belum punya blok result di rantai.
+/// Dipakai layar untuk menawarkan reveal. Tanpa efek samping.
 final unsettledPredictionsProvider =
     Provider<List<({FootballMatch match, Prediction prediction})>>((ref) {
   final matches =
@@ -242,11 +320,23 @@ final unsettledPredictionsProvider =
 });
 
 /// Laga yang dibatalkan/diundur: tidak ada skor, jadi tidak bisa direveal.
+///
+/// Fungsi murni, tanpa efek samping; hanya delegasi ke
+/// [isCancelledStatus] pada status laga.
 bool isCancelledMatch(FootballMatch m) => isCancelledStatus(m.status);
 
 /// Tulis blok result untuk prediksi yang sudah bisa direveal.
 final settleActionProvider = Provider((ref) => SettleAction(ref));
 
+/// Penulis blok result (reveal) ke rantai paspor.
+///
+/// Kebenaran diverifikasi terhadap rantai blockchain, bukan terhadap nilai
+/// yang tersimpan di Hive (aturan R1); mengubah data lokal tidak membuat
+/// reveal jadi sah. Setelah reveal sukses, kartu milestone (skor tepat atau
+/// arah hasil sesuai) dan kartu peringkat bisa ikut tercetak.
+///
+/// Aksi ini tidak `autoDispose`, jadi tidak wajib cek `mounted` setelah
+/// `await` (aturan §3.5 hanya berlaku untuk notifier `autoDispose`).
 class SettleAction {
   SettleAction(this._ref);
   final Ref _ref;
@@ -263,6 +353,11 @@ class SettleAction {
 
   /// Versi rinci [settle]: selalu mengembalikan alasan saat gagal, sehingga UI
   /// bisa menjelaskan kenapa sebuah prediksi belum bisa dibuka.
+  ///
+  /// Efek samping bila reveal sah: menambah blok `result` ke rantai paspor
+  /// (SQLite collection `passport_chain` + Hive `passport_chain`), bisa juga
+  /// menambah kartu milestone (`prediction:<matchId>`) dan kartu peringkat
+  /// (`rank:<key>`) lewat [CardMinter.mintCard].
   Future<({SettledPrediction? settled, String? reason, String? debug})>
       settleDetailed(
     FootballMatch m,
@@ -347,6 +442,11 @@ class SettleAction {
 }
 
 /// Poin dari blok result yang sudah tertulis di rantai.
+///
+/// Provider turunan dari [chainProvider]: menjumlahkan `data['points']` dari
+/// setiap blok bertipe result. Poin hidup di blockchain, bukan di baris
+/// prediksi, sehingga tetap ada walau prediksi dihapus.
+/// Tanpa efek samping.
 final predictionPointsProvider = Provider<int>((ref) {
   final chain = ref.watch(chainProvider);
   var total = 0;

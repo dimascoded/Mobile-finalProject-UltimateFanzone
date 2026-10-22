@@ -11,6 +11,18 @@ import '../../penalty_shootout/data/penalty_rules.dart';
 import '../data/reflex_rules.dart';
 import '../providers/gamification_providers.dart';
 
+// STRUKTUR UI — GameScreen
+// Ukuran: Scaffold + AppBar, body SafeArea + Center + ConstrainedBox(maxWidth: 720)
+// + ListView satu kolom; papan gawang memakai AspectRatio 1.35
+// [1] _Scoreboard — baris AppCard dengan tiga _Metric: SKOR, KOMBO, LEVEL
+// [2] _LivesRow — baris ikon nyawa tersisa
+// [3] _GoalGrid — papan gawang 2 baris x 3 _ZoneCell di atas ScrimImage, zona aktif menyala
+// [4] Blok sedang berjalan — label "Bola datang", sisa waktu ms, progress bar bola, tips tepuk zona
+// [5] Blok permainan selesai — skor akhir, best score, tombol main lagi
+// [6] Blok siap main — best score dan tombol mulai
+// Tabel/kolom: tanpa tabel; papan gawang 2 baris x 3 kolom zona
+// Sumber data: reflexProvider
+
 class GameScreen extends ConsumerWidget {
   const GameScreen({super.key});
 

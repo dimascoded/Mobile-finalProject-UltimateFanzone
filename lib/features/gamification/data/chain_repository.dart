@@ -4,6 +4,12 @@ import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
 import 'blockchain.dart';
 
+/// Baca/tulis rantai blok paspor.
+///
+/// Alur data: `chainProvider` memanggil [load]/[save]; penyimpanan utama lewat
+/// `OfflineSyncDatabase.persist` (SQLite `sync_documents`, collection
+/// `passport_chain`) dengan Hive `passport_chain` sebagai cermin/offline.
+/// Lihat `docs/feature-map.md` (bagian gamification).
 class ChainRepository {
   static const _key = 'passport_chain';
 
@@ -32,10 +38,13 @@ class ChainRepository {
     return out.isEmpty ? [Blockchain.genesis()] : out;
   }
 
+  /// Simpan seluruh rantai sebagai JSON lewat jalur offline-first, sehingga
+  /// revisi koleksi naik dan sinkronisasi ikut mengirim perubahannya.
   Future<void> save(List<Block> chain) => OfflineSyncDatabase.persist(
         _key,
         jsonEncode(chain.map((b) => b.toJson()).toList()),
       );
 }
 
+/// Penyedia [ChainRepository] tunggal.
 final chainRepositoryProvider = Provider((ref) => ChainRepository());

@@ -7,6 +7,17 @@ import '../../football/providers/football_providers.dart';
 import '../data/pundit_chat.dart';
 import '../providers/pundit_provider.dart';
 
+// STRUKTUR UI — PunditScreen
+// Ukuran: Scaffold + AppBar dengan TabBar 2 tab (DefaultTabController); tab
+// Analisis memakai ConstrainedBox(maxWidth: 720) + ListView, tab chat memakai Column + ListView
+// [1] Tab "Analisis" (_AnalysisTab) — baris tim favorit, tombol "Buat Analisis Pundit", lalu state.when
+// [2] _AnalysisTab — kartu peringatan hasil tersimpan, chip data tersimpan, teks analisis, kartu error dengan tombol coba lagi
+// [3] Tab "Tanya Pundit" (PunditChatTab) — header dengan tombol hapus, area pesan, indicator menulis, _ErrorBanner, kolom input
+// [4] _EmptyChat — layar kosong dengan saran pertanyaan siap pakai
+// [5] _Bubble — gelembung pesan satu kolom (kiri untuk AI, kanan untuk user)
+// Tabel/kolom: tanpa tabel; daftar pesan chat satu kolom
+// Sumber data: punditProvider, punditChatProvider, favoriteClubProvider, clubCrestProvider
+
 class PunditScreen extends ConsumerWidget {
   const PunditScreen({super.key});
 

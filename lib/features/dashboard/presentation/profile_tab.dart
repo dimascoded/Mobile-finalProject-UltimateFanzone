@@ -9,6 +9,15 @@ import '../providers/dashboard_provider.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/profile_sections.dart';
 
+// STRUKTUR UI — ProfileTab
+// Ukuran: ListView > ConstrainedBox(maxWidth 720) > Column dengan tiga bagian.
+// [1] ProfileHeader   — header foto profil, nama, email, klub favorit, dan
+//                        peringkat prediksi
+// [2] ProfileStats    — baris angka profil pengguna
+// [3] ProfileSections — daftar menu profil dan pengaturan
+// [4] Sheet foto      — showModalBottomSheet pilihan Kamera atau Galeri
+// Tabel/kolom: tanpa tabel; tiga bagian satu kolom.
+// Sumber data: userEmailProvider, profilePhotoProvider.
 class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
 

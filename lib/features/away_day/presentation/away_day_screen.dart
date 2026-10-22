@@ -72,6 +72,17 @@ const _catIcon = {
   AwayDayCategory.lainnya: Icons.more_horiz,
 };
 
+// STRUKTUR UI — AwayDayScreen
+// Ukuran: Scaffold + ListView dalam ConstrainedBox(maxWidth 720).
+// [1] _Summary          — kartu total pengeluaran, pilih mata uang tampil,
+//                         catatan kurs/fallback, progres anggaran
+// [2] _WorldClock       — jam dunia: pilih zona WIB/WITA/WIT + kota Indonesia
+// [3] _Filters          — cari pengeluaran + chip kategori/tim favorit
+// [4] _Tile             — satu baris pengeluaran (Dismissible hapus)
+// [5] _AddForm          — sheet Catat/Ubah (mata uang, klub, konversi)
+// Tabel/kolom: tanpa tabel; daftar kartu satu kolom.
+// Sumber data: awayDayTotalsProvider, awayDayBudgetProvider,
+//              awayDayFilteredProvider, worldClockProvider, ratesProvider.
 class AwayDayScreen extends ConsumerWidget {
   const AwayDayScreen({super.key});
 

@@ -8,18 +8,48 @@ import '../../../core/database/hive_service.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../data/penalty_rules.dart';
 
+/// Tahap dalam satu sesi Penalty Shootout.
+///
+/// - [Phase.aiming]: pemain mengarahkan gol (arah/ayunan HP).
+/// - [Phase.swinging]: ayunan terdeteksi, kekuatan dikumpulkan sampai peak.
+/// - [Phase.resolved]: tendangan selesai, hasil tampil dan menunggu [PenaltyNotifier.next].
+/// - [Phase.finished]: sesi selesai (termasuk kondisi sudden death).
 enum Phase { aiming, swinging, resolved, finished }
 
+/// Jeda sebelum kekuatan ayunan dikunci sebagai hasil tendangan (ms).
 const peakSettleDelay = Duration(milliseconds: 350);
+
+/// Throttle emisi state dari sensor akselerometer (ms).
 const sensorThrottle = Duration(milliseconds: 66);
+
+/// Jeda minimum antar dua ayunan agar tidak double-trigger (ms).
 const kickCooldown = Duration(milliseconds: 600);
+
+/// Jendela histori arah yang dipakai saat mengunci zona tendangan (ms).
 const aimHistoryWindow = Duration(milliseconds: 500);
+
+/// Offset ke belakang dari waktu trigger untuk memilih zona arah (ms).
 const aimLatchOffset = Duration(milliseconds: 200);
+
 const _sensorWatchdogDelay = Duration(seconds: 1);
+
+/// Kunci Hive `app_cache` yang menyimpan tanggal (YYYY-MM-DD) pencetakan
+/// achievement penalty terakhir, agar maksimal satu achievement per hari.
 const _mintDayKey = 'penalty_block_day';
+
+/// Kecepatan flick maksimum yang dinormalisasi (0-1).
 const _maximumFlickSpeed = 1.0;
+
+/// Kekuatan shake maksimum yang setara dengan kecepatan flick maksimum.
 const _maximumFlickShake = 20.0;
 
+/// State satu sesi Penalty Shootout.
+///
+/// Berisi tahap permainan, zona gol yang dipilih, kekuatan ayunan terakhir,
+/// riwayat hasil tendangan, skor sesi, serta penanda mode demo, achievement
+/// yang sudah dicetak, dan sudden death.
+///
+/// Objek ini immutable; perubahan dibuat lewat [PenaltyState.copyWith].
 class PenaltyState {
   const PenaltyState({
     this.phase = Phase.aiming,
@@ -43,13 +73,24 @@ class PenaltyState {
   final bool minted;
   final bool suddenDeath;
 
+  /// Jumlah tendangan yang menjadi gol di sesi ini.
   int get goals =>
       results.where((result) => result.outcome == ShotOutcome.goal).length;
+
+  /// Jumlah tendangan yang sudah dilakukan.
   int get taken => results.length;
+
+  /// Sisa kesempatan sebelum sesi selesai (tidak pernah negatif).
   int get remaining => max(0, PenaltyRules.attempts - taken);
+
+  /// Benar bila sesi sudah selesai.
   bool get isFinished => phase == Phase.finished;
+
+  /// Benar bila sedang mengukur kekuatan ayunan.
   bool get isSwinging => phase == Phase.swinging;
 
+  /// Salinan state dengan sebagian field diganti; `clearLast` dipakai untuk
+  /// mengosongkan [last].
   PenaltyState copyWith({
     Phase? phase,
     KickZone? zone,
@@ -75,11 +116,35 @@ class PenaltyState {
       );
 }
 
+/// Provider sesi Penalty Shootout yang sedang berjalan.
+///
+/// `autoDispose`: sesi dibuang saat layar Penalty Shootout ditutup, sehingga
+/// sensor akselerometer dan timer ikut berhenti. Efek samping: membuka stream
+/// sensor (akselerometer) selama provider hidup.
 final penaltyProvider =
     StateNotifierProvider.autoDispose<PenaltyNotifier, PenaltyState>(
   (ref) => PenaltyNotifier(ref),
 );
 
+/// Notifier mesin Penalty Shootout berbasis sensor akselerometer.
+///
+/// Tanggung jawabnya: membaca arah dan kekuatan ayunan HP, menentukan zona
+/// gol, menghitung hasil tendangan lewat aturan di
+/// `features/penalty_shootout/data/penalty_rules.dart`, menghitung skor
+/// sesi, dan mencetak achievement + kartu harian saat sesi selesai dengan gol.
+///
+/// State-nya [PenaltyState]. Sensor, jam, dan sumber acak bisa diinjeksi
+/// lewat parameter constructor agar logikanya bisa diuji tanpa perangkat.
+///
+/// Aturan §3.5: provider ini `autoDispose` dan `_mintAchievement` melakukan
+/// `await`, sehingga setiap kali menyentuh `state` setelah `await` selalu
+/// diperiksa `if (mounted)` terlebih dahulu — tanpa itu, provider yang
+/// dibuang di tengah pencetakan akan error saat memperbarui state.
+///
+/// Efek samping: membuka subscription sensor akselerometer, menjalankan
+/// timer ayunan/watchdog, dan (saat sesi berhasil) menulis blok
+/// achievement ke rantai paspor (`passport_chain`), mencetak kartu
+/// `penalty:<tanggal>`, serta menulis Hive `app_cache` `penalty_block_day`.
 class PenaltyNotifier extends StateNotifier<PenaltyState> {
   PenaltyNotifier(
     this._ref, {
@@ -200,13 +265,21 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     });
   }
 
-  /// Select a zone when no accelerometer is available.
+  /// Pilih zona secara manual saat sensor akselerometer tidak tersedia.
+  ///
+  /// Hanya bekerja bila mode demo aktif ([PenaltyState.demo]) dan fase masih
+  /// [Phase.aiming]; selain itu diabaikan. Tanpa efek samping lain.
   void selectZone(KickZone zone) {
     if (!state.demo || state.phase != Phase.aiming) return;
     state = state.copyWith(zone: zone);
   }
 
-  /// Gesture fallback; `speed` is normalized from 0 (slow) to 1 (fast).
+  /// Gesture cadangan (geser) sebagai pengganti ayunan HP.
+  ///
+  /// `dx` dan `dy` dipakai sebagai arah (roll/pitch), `speed` dinormalisasi
+  /// dari 0 (lambat) ke 1 (cepat) lalu dikonversi menjadi kekuatan shake
+  /// dengan `_maximumFlickSpeed` dan `_maximumFlickShake`. Efek samping:
+  /// menjalankan `_kick`, yang dapat mencetak achievement bila sesi selesai.
   Future<void> flick({
     required double dx,
     required double dy,
@@ -226,7 +299,12 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     await _kick(zone: zone, peak: shake);
   }
 
-  /// Kick the selected zone with demo power when sensors are unavailable.
+  /// Tendangkan dengan kekuatan demo saat sensor tidak tersedia.
+  ///
+  /// Hanya bekerja bila mode demo aktif ([PenaltyState.demo]) dan fase
+  /// masih [Phase.aiming]. Kekuatan diambil dari `demoShot` (acak), lalu
+  /// `_kick` dijalankan setelah jeda [peakSettleDelay]. Efek samping:
+  /// pencetakan achievement bila sesi selesai.
   void demoKick() {
     if (!state.demo || state.phase != Phase.aiming) return;
     final shot = demoShot(_rnd);
@@ -241,7 +319,11 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     });
   }
 
-  /// Continue to the next attempt. The last result is cleared only here.
+  /// Lanjut ke percobaan berikutnya.
+  ///
+  /// Hanya bekerja bila fase saat ini [Phase.resolved]. Hasil tendangan
+  /// terakhir baru dikosongkan di sini (bukan di [_kick]), supaya pengguna
+  /// sempat melihat hasil. Tanpa efek samping.
   void next() {
     if (state.phase != Phase.resolved) return;
     _cancelSwingTimers();
@@ -254,7 +336,12 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     );
   }
 
-  /// Start a fresh session. `last` remains visible until `next()` clears it.
+  /// Mulai sesi baru dari awal.
+  ///
+  /// Membatalkan seluruh timer, mengembalikan state ke [Phase.aiming] dengan
+  /// zona [KickZone.bottomMid], dan mempertahankan `last` sampai [next]
+  /// membersihkannya. Mode demo aktif kembali bila sensor tidak pernah
+  /// memberi data. Tanpa efek samping.
   void reset() {
     _cancelAllTimers();
     _enterAiming();
@@ -314,6 +401,19 @@ class PenaltyNotifier extends StateNotifier<PenaltyState> {
     _aimHistory.clear();
   }
 
+  /// Cetak achievement dan kartu harian bila sesi selesai dengan gol.
+  ///
+  /// Dilewati bila sesi sudah mencetak atau tidak ada gol sama sekali.
+  /// Maksimal satu achievement per hari: tanggal (YYYY-MM-DD) disimpan di
+  /// Hive `app_cache` dengan kunci `penalty_block_day`.
+  ///
+  /// Aturan §3.5: `await` di dalamnya diikuti pemeriksaan `mounted` sebelum
+  /// `state` disentuh, karena provider ini `autoDispose`.
+  ///
+  /// Efek samping: menambah blok `achievement` ke rantai paspor
+  /// (SQLite collection `passport_chain` + Hive `passport_chain`), mencetak
+  /// kartu `penalty:<tanggal>`, lalu menulis Hive `app_cache`
+  /// `penalty_block_day`.
   Future<void> _mintAchievement() async {
     if (state.minted || state.goals <= 0) return;
     final today = _clock().toIso8601String().substring(0, 10);
