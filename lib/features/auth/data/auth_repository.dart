@@ -21,11 +21,10 @@ const notConfiguredAuthMessage =
 
 /// Penyedia [FlutterSecureStorage] untuk menyimpan kunci privat dompet.
 ///
-/// Satu-satunya kunci yang ditulis aplikasi ke secure storage adalah
-/// `wallet_private_key` (lihat [AuthRepository.privateKeyKeys]). Token sesi
-/// milik Supabase dikelola sendiri oleh SDK Supabase dan TIDAK ditulis ke
-/// secure storage, jadi aplikasi ini tidak punya kunci `session_token`,
-/// `session_expiry`, atau `user_email` sendiri.
+/// Kunci dompet ditulis dengan pola `wallet_private_key_<userId>` oleh
+/// `WalletRepository`. Token sesi milik Supabase dikelola sendiri oleh SDK
+/// Supabase dan TIDAK ditulis ke secure storage, jadi aplikasi ini tidak punya
+/// kunci `session_token`, `session_expiry`, atau `user_email` sendiri.
 final secureStorageProvider = Provider((ref) => const FlutterSecureStorage());
 
 /// Galat autentikasi dengan pesan yang layak ditampilkan ke pengguna (U2).
@@ -145,15 +144,17 @@ String _mapSupabaseAuthError(supa.AuthException e) {
 /// dengan [notConfiguredAuthMessage] — tidak ada login lokal/"offline" yang
 /// menyamar sebagai login sungguhan.
 class AuthRepository {
-  /// Membuat repository dengan [_storage] (secure storage) dan [_localAuth]
-  /// (biometrik perangkat).
+  /// Membuat repository dengan secure storage dan [_localAuth] (biometrik
+  /// perangkat).
   ///
+  /// Parameter secure storage dipertahankan agar pemanggil lama (dan test)
+  /// tidak berubah; pengelolaan kunci dompet kini ada di `WalletRepository`.
   /// [updateUserMetadata] dan [readUserMetadata] adalah hook injeksi yang
   /// dipakai test agar repository bisa diuji tanpa Supabase sungguhan.
   /// [identityStore] bisa diganti dengan penyimpanan palsu; bawaannya
   /// [HiveIdentityStore] (Hive box `app_cache`).
   AuthRepository(
-    this._storage,
+    FlutterSecureStorage storage,
     this._localAuth, {
     IdentityStore? identityStore,
     Future<void> Function(Map<String, dynamic>)? updateUserMetadata,
@@ -161,9 +162,6 @@ class AuthRepository {
   })  : identityStore = identityStore ?? HiveIdentityStore(),
         _updateUserMetadataOverride = updateUserMetadata,
         _readUserMetadataOverride = readUserMetadata;
-
-  /// Secure storage untuk kunci privat dompet (`wallet_private_key`).
-  final FlutterSecureStorage _storage;
 
   /// APIs biometrik/face-id perangkat.
   final LocalAuthentication _localAuth;
@@ -558,15 +556,16 @@ class AuthRepository {
     return true;
   }
 
-  /// U4: hapus sesi beserta private key wallet, supaya akun berikutnya tidak
-  /// memakai dompet milik akun lama. Data pengguna di Hive dihapus oleh
-  /// pemanggil lewat `clearUserData()`.
+  /// U4: akhiri sesi Supabase tanpa menghapus dompet pengguna.
   ///
-  /// Dua hal yang dibersihkan di sini: sesi Supabase (dicabut dari server
-  /// bila bisa; kalau gagal, sesi lokal tetap dihapus oleh SDK) dan kunci
-  /// privat dompet `wallet_private_key` di flutter_secure_storage.
-  /// Identitas pemilik data lokal (`last_user_id`) sengaja TIDAK dihapus di
-  /// sini supaya pergantian akun masih bisa dideteksi.
+  /// Sesi Supabase dicabut dari server bila bisa; kalau gagal, sesi lokal
+  /// tetap dihapus oleh SDK. Private key dompet (`wallet_private_key_<userId>`)
+  /// SENGAJA TIDAK dihapus karena dompet menyimpan dana testnet dan harus
+  /// tetap bisa dipakai saat pengguna yang sama masuk kembali. Isolasi antar
+  /// akun tetap terjadi karena kunci selalu ber-sufiks user id.
+  ///
+  /// Identitas pemilik data lokal (`last_user_id`) juga TIDAK dihapus di sini
+  /// supaya pergantian akun masih bisa dideteksi.
   Future<void> logout() async {
     if (_usesSupabase) {
       try {
@@ -575,16 +574,7 @@ class AuthRepository {
         // Supabase menghapus session lokal sebelum mencoba mencabutnya di server.
       }
     }
-    for (final key in AuthRepository.privateKeyKeys) {
-      await _storage.delete(key: key);
-    }
   }
-
-  /// Kunci secure storage milik pengguna: private key wallet.
-  ///
-  /// Hanya satu kunci (`wallet_private_key`); dihapus saat logout supaya
-  /// akun berikutnya tidak memakai dompet milik akun lama.
-  static const privateKeyKeys = ['wallet_private_key'];
 
   /// Semua kunci Hive yang berisi data pengguna (U4).
   ///
@@ -604,11 +594,12 @@ class AuthRepository {
     'last_sync_at', // waktu sinkronisasi
   ];
 
-  /// Prefiks kunci cache yang milik pengguna (pundit per klub).
+  /// Prefiks kunci cache yang milik pengguna.
   ///
-  /// Semua kunci yang diawali `pundit_` ikut terhapus saat logout, termasuk
-  /// riwayat chat per klub (`pundit_chat_<clubKey>`).
-  static const userKeyPrefixes = <String>['pundit_'];
+  /// Semua kunci yang diawali `pundit_` (riwayat chat per klub) dan
+  /// `chain_anchors_` (riwayat anchor Sepolia per user) ikut terhapus saat
+  /// logout.
+  static const userKeyPrefixes = <String>['pundit_', 'chain_anchors_'];
 }
 
 /// Repository autentikasi bersama untuk seluruh aplikasi.

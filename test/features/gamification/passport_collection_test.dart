@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ultimate_fanzone/core/network/connectivity_provider.dart';
 import 'package:ultimate_fanzone/core/theme/app_theme.dart';
 import 'package:ultimate_fanzone/features/football/data/models.dart';
 import 'package:ultimate_fanzone/features/football/providers/football_providers.dart';
@@ -73,6 +74,9 @@ List<Override> _passportOverrides({PlClub? favorite}) => [
       cardCollectionProvider.overrideWithValue(const <ClubCard>[]),
       // GPS tidak disentuh: jarak selalu "tidak diukur".
       stampDistanceProvider.overrideWith((ref) => Future<int?>.value(null)),
+      // Koordinator anchor mendengarkan konektivitas; jangan biarkan timer
+      // jaringan nyata tertinggal setelah widget dibuang.
+      onlineProvider.overrideWith((ref) => Stream<bool>.value(true)),
     ];
 
 List<Override> _collectionOverrides(List<ClubCard> cards) => [

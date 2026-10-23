@@ -28,14 +28,17 @@ void main() {
       expect(AuthRepository.userKeyPrefixes, contains('pundit_'));
     });
 
-    test('logout menghapus private key wallet', () async {
-      FlutterSecureStorage.setMockInitialValues(
-          {'wallet_private_key': 'abcdef'});
+    test('logout mempertahankan private key wallet per pengguna', () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'wallet_private_key': 'abcdef',
+        'wallet_private_key_user-a': 'abcdef',
+      });
       final repo =
           AuthRepository(const FlutterSecureStorage(), LocalAuthentication());
       await repo.logout();
       const storage = FlutterSecureStorage();
-      expect(await storage.read(key: 'wallet_private_key'), isNull);
+      expect(await storage.read(key: 'wallet_private_key'), 'abcdef');
+      expect(await storage.read(key: 'wallet_private_key_user-a'), 'abcdef');
     });
   });
 }

@@ -19,14 +19,13 @@ final tabIndexProvider = StateProvider<int>((ref) => 0);
 /// [AuthNotifier.logout] sudah menghapus isi Hive; invalidate di sini membuang
 /// foto profil dan nama tampilan yang masih tertahan di memori notifier (U4).
 ///
-/// Efek samping: sesi Supabase dicabut dan kunci secure storage
-/// `wallet_private_key` dihapus; data pengguna di Hive `app_cache` (kunci
-/// `away_day_expenses`, `score_predictions`, `passport_chain`,
-/// `notified_results`, `penalty_block_day`, `last_sync_at`, dan kunci
-/// berawalan `pundit_`) beserta baris SQLite `sync_documents` dan
-/// `sync_deletions` dikosongkan; provider foto/nama/sinkronisasi di-invalidate
-/// dan tab kembali ke 0. Kunci `last_user_id` tetap ada untuk deteksi
-/// pergantian akun.
+/// Efek samping: sesi Supabase dicabut; data pengguna di Hive `app_cache`
+/// (kunci `away_day_expenses`, `score_predictions`, `passport_chain`,
+/// `notified_results`, `penalty_block_day`, `last_sync_at`, serta kunci
+/// berawalan `pundit_`/`chain_anchors_`) beserta baris SQLite
+/// `sync_documents` dan `sync_deletions` dikosongkan; provider
+/// foto/nama/sinkronisasi di-invalidate dan tab kembali ke 0. Kunci dompet
+/// per pengguna dan `last_user_id` tetap ada.
 final logoutProvider = Provider<Future<void> Function()>((ref) {
   return () async {
     await ref.read(authProvider.notifier).logout();

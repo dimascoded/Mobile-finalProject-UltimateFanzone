@@ -172,24 +172,25 @@ class AuthNotifier extends StateNotifier<AsyncValue<bool>> {
     await _afterIdentitySuccess();
   }
 
-  /// U4: keluar dari akun dan bersihkan semua jejak data pengguna.
+  /// U4: keluar dari akun dan bersihkan jejak data pengguna di perangkat.
   ///
-  /// Token, email, dan private key wallet dihapus dari secure storage; data
-  /// pengguna di Hive (pengeluaran, prediksi, rantai, foto profil, saran,
-  /// favorit, cache Pundit) dihapus; provider yang masih menyimpan data lama di
-  /// memori dibuang. Sisa prefs perangkat seperti tema dan alasan penolakan
-  /// izin tidak dihapus karena bukan data pribadi.
+  /// Data pengguna di Hive (pengeluaran, prediksi, rantai, foto profil, saran,
+  /// favorit, cache Pundit, riwayat anchor) dihapus; provider yang masih
+  /// menyimpan data lama di memori dibuang. Sisa prefs perangkat seperti tema
+  /// dan alasan penolakan izin tidak dihapus karena bukan data pribadi.
   ///
-  /// Efek samping konkretnya: sesi Supabase dicabut dan kunci secure storage
-  /// `wallet_private_key` dihapus ([AuthRepository.logout]); data pengguna di
-  /// Hive `app_cache` dihapus (kunci `away_day_expenses`, `score_predictions`,
-  /// `passport_chain`, `notified_results`, `penalty_block_day`, `last_sync_at`,
-  /// kunci berawalan `pundit_`, dan kunci identitas legacy) serta seluruh baris
-  /// SQLite `sync_documents` dan `sync_deletions` dikosongkan; provider
+  /// Efek samping konkretnya: sesi Supabase dicabut
+  /// ([AuthRepository.logout]); data pengguna di Hive `app_cache` dihapus
+  /// (kunci `away_day_expenses`, `score_predictions`, `passport_chain`,
+  /// `notified_results`, `penalty_block_day`, `last_sync_at`, kunci berawalan
+  /// `pundit_`/`chain_anchors_`, dan kunci identitas legacy) serta seluruh
+  /// baris SQLite `sync_documents` dan `sync_deletions` dikosongkan; provider
   /// konten dan identitas di-invalidate.
   ///
-  /// Catatan: kunci `last_user_id` (pemilik data lokal) SENGAJA TIDAK
-  /// dihapus, supaya login berikutnya bisa mendeteksi pergantian akun.
+  /// Private key dompet per pengguna (`wallet_private_key_<userId>`) SENGAJA
+  /// TIDAK dihapus karena menyimpan dana testnet; isolasi antar akun dijaga
+  /// oleh sufiks user id. Kunci `last_user_id` juga tidak dihapus, supaya
+  /// login berikutnya bisa mendeteksi pergantian akun.
   Future<void> logout() async {
     await _repo.logout();
     await _clearData();

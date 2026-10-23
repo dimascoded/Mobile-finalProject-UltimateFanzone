@@ -4,6 +4,12 @@
 class AppConfig {
   static const geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
+  /// Kunci privat dompet jangkar bersama untuk semua transaksi anchor Sepolia.
+  ///
+  /// Kosong = pakai dompet per pengguna seperti sebelumnya. Nilai ini hanya
+  /// diinjeksi saat build dan tidak pernah ditulis ke penyimpanan.
+  static const anchorPrivateKey = String.fromEnvironment('ANCHOR_PRIVATE_KEY');
+
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static bool get supabaseConfigured =>
@@ -44,4 +50,25 @@ class AppConfig {
 
   static const exchangeRateUrl =
       'https://api.exchangerate-api.com/v4/latest/IDR';
+
+  /// Endpoint JSON-RPC Sepolia. Kosong = fitur chain anchor melaporkan
+  /// "RPC belum dikonfigurasi" tanpa membuat aplikasi crash.
+  static const sepoliaRpcUrl = String.fromEnvironment('SEPOLIA_RPC_URL');
+
+  /// Chain id Ethereum Sepolia (testnet). Anchor hanya ditandatangani untuk
+  /// jaringan ini, tidak pernah untuk mainnet atau jaringan lain.
+  static const sepoliaChainId = 11155111;
+
+  /// Basis tautan explorer Sepolia untuk transaksi anchor.
+  static const explorerBase = 'https://sepolia.etherscan.io';
+
+  /// Tautan explorer untuk transaksi [txHash].
+  static String explorerTxUrl(String txHash) => '$explorerBase/tx/$txHash';
+
+  /// Tautan explorer untuk alamat dompet [address].
+  static String explorerAddressUrl(String address) =>
+      '$explorerBase/address/$address';
+
+  /// Faucet ETH Sepolia. URL belum diverifikasi ulang pada implementasi ini.
+  static const faucetUrl = 'https://sepolia-faucet.pk910.de/';
 }

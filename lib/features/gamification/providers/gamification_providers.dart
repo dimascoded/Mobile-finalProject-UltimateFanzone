@@ -4,24 +4,114 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/database/hive_service.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../auth/data/identity_store.dart';
 import '../../football/data/models.dart';
 import '../../football/providers/football_providers.dart';
 import '../../penalty_shootout/data/penalty_rules.dart';
+import '../data/anchor_store.dart';
 import '../data/blockchain.dart';
+import '../data/chain_anchor_service.dart';
 import '../data/chain_repository.dart';
 import '../data/reflex_rules.dart';
 import '../data/wallet_repository.dart';
 import '../domain/club_card.dart';
+import 'anchor_coordinator.dart' as coordinator;
 
 /// Alamat dompet Web3 pengguna (checksum EIP-55).
 ///
-/// Dibuat sekali lalu disimpan permanen di secure storage dengan kunci
-/// `wallet_private_key`; private key TIDAK pernah dikirim ke jaringan.
-/// Alamat ini dipakai sebagai `owner` setiap blok rantai paspor, dan ikut
-/// terhapus saat logout (lihat [AuthRepository.logout]) sehingga akun
-/// berikutnya tidak memakai dompet milik akun lama.
+/// Dibuat sekali per pengguna lalu disimpan permanen di secure storage dengan
+/// kunci `wallet_private_key_<userId>`; private key TIDAK pernah dikirim ke
+/// jaringan. Alamat ini dipakai sebagai `owner` setiap blok rantai paspor.
+/// Kunci dompet bertahan saat logout (menyimpan dana testnet), tetapi provider
+/// ini di-invalidate saat identitas berganti supaya akun berikutnya hanya
+/// membaca dompetnya sendiri.
 final walletAddressProvider = FutureProvider<String>(
     (ref) => ref.watch(walletRepositoryProvider).getOrCreateAddress());
+
+/// Alamat dompet jangkar yang dipakai untuk transaksi anchor Sepolia.
+///
+/// Bila `ANCHOR_PRIVATE_KEY` diisi, alamat ini sama untuk semua akun dan
+/// perangkat. Bila kosong, nilainya sama dengan dompet per pengguna.
+final anchorAddressProvider = FutureProvider<String>(
+    (ref) => ref.watch(walletRepositoryProvider).anchorAddress());
+
+// ---------- Chain anchor Sepolia ----------
+
+/// Klien JSON-RPC Sepolia untuk anchor dan pembacaan saldo.
+final ethClientProvider = Provider<EthClient>((ref) {
+  final client = Web3EthClient();
+  ref.onDispose(client.dispose);
+  return client;
+});
+
+/// Layanan anchor rantai paspor ke Sepolia.
+final chainAnchorServiceProvider = Provider<ChainAnchorService>(
+  (ref) => ChainAnchorService(
+    client: ref.watch(ethClientProvider),
+    wallet: ref.watch(walletRepositoryProvider),
+  ),
+);
+
+/// Penyimpanan riwayat anchor pengguna aktif (Hive `app_cache`).
+final anchorStoreProvider = Provider<AnchorStore>((ref) {
+  final auth = ref.watch(authRepositoryProvider);
+  return AnchorStore(HiveIdentityStore(), () => auth.currentUserId);
+});
+
+/// Riwayat anchor pengguna aktif, terbaru lebih dulu.
+final anchorsProvider = Provider<List<AnchorRecord>>(
+    (ref) => ref.watch(anchorStoreProvider).load());
+
+/// Koordinator anchor non-autoDispose; satu pengiriman pada satu waktu.
+final anchorCoordinatorProvider = StateNotifierProvider<
+    coordinator.AnchorCoordinator, coordinator.AnchorStatus>(
+  (ref) => coordinator.AnchorCoordinator(ref),
+);
+
+/// Status koordinasi anchor untuk UI.
+final anchorStatusProvider = Provider<coordinator.AnchorStatus>(
+  (ref) => ref.watch(anchorCoordinatorProvider),
+);
+
+/// Jenis bukti anchor untuk satu blok stamp.
+enum StampProofKind { confirmed, pending, none }
+
+/// Bukti anchor yang mencakup sebuah stamp.
+class StampProof {
+  const StampProof(this.kind, [this.record]);
+
+  final StampProofKind kind;
+  final AnchorRecord? record;
+}
+
+/// Cari anchor terbaru yang mencakup [block].
+///
+/// Anchor confirmed diprioritaskan; bila belum ada, anchor pending yang
+/// mencakup blok tersebut dipakai. Stamp yang dibuat setelah anchor terakhir
+/// tidak tercakup sehingga hasilnya [StampProofKind.none].
+final stampProofProvider = Provider.family<StampProof, Block>((ref, block) {
+  final anchors = ref.watch(anchorsProvider);
+  AnchorRecord? pending;
+  for (final record in anchors) {
+    if (record.headIndex < block.index) continue;
+    if (record.status == AnchorStatus.confirmed) {
+      return StampProof(StampProofKind.confirmed, record);
+    }
+    pending ??= record;
+  }
+  if (pending != null) return StampProof(StampProofKind.pending, pending);
+  return const StampProof(StampProofKind.none);
+});
+
+/// Saldo dompet jangkar dalam wei.
+///
+/// Kegagalan (RPC belum dikonfigurasi, jaringan, belum masuk) tampil sebagai
+/// [AsyncError], bukan exception sinkron saat provider dibaca.
+final walletBalanceProvider = FutureProvider<BigInt>((ref) async {
+  final address = await ref.watch(anchorAddressProvider.future);
+  return ref.watch(ethClientProvider).getBalanceWei(address);
+});
 
 // ---------- Rantai blok Paspor ----------
 
@@ -216,6 +306,7 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
   /// meng-invalidate [stampDistanceProvider] setelah sukses.
   Future<void> stamp(PlClub club) async {
     final demo = _ref.read(demoModeProvider);
+    final anchorCoordinator = _ref.read(anchorCoordinatorProvider.notifier);
     state = const AsyncLoading();
     final result = await AsyncValue.guard(() async {
       // Semua dependensi dibaca SEBELUM await: ref tidak boleh dipakai
@@ -264,6 +355,11 @@ class StampNotifier extends StateNotifier<AsyncValue<String?>> {
         await _ref
             .read(cardMinterProvider)
             .mintCard(source: 'stamp', ref: 'stamp:${club.key}');
+      }
+      try {
+        unawaited(anchorCoordinator.ensureAnchored());
+      } catch (_) {
+        // Anchor tidak boleh menggagalkan cap stamp.
       }
       return 'Stamp ${club.stadium} tercetak (catatan #${block.index})';
     });

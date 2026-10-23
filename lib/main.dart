@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -12,6 +14,7 @@ import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/football/providers/kickoff_reminder_provider.dart';
 import 'features/football/providers/result_notification_provider.dart';
+import 'features/gamification/providers/gamification_providers.dart';
 import 'features/sos_emergency/data/notification_service.dart';
 
 Future<void> main() async {
@@ -72,6 +75,12 @@ class MyApp extends ConsumerWidget {
     ref.watch(kickoffReminderSyncProvider);
     ref.watch(resultNotifierSyncProvider);
     ref.watch(pruneNotifiedProvider);
+    // Anchor otomatis setelah identitas siap (start aplikasi / sesudah login).
+    ref.listen(sessionProvider, (previous, next) {
+      if (next.valueOrNull == true) {
+        unawaited(ref.read(anchorCoordinatorProvider.notifier).ensureAnchored());
+      }
+    });
     return MaterialApp(
       title: 'Ultimate Fanzone',
       theme: AppTheme.light,

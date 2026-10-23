@@ -41,6 +41,7 @@ void main() {
       AuthRepository.favoriteTeamKey('user-a'): 'arsenal',
       'pundit_arsenal': 'teks',
       'pundit_chelsea_at': '2026-08-15T00:00:00Z',
+      'chain_anchors_user-a': '[{"txHash":"0xabc"}]',
       // Prefs perangkat, bukan data pengguna.
       'theme_mode': 'dark',
       'permission_rationale': '["location"]',
@@ -59,6 +60,7 @@ void main() {
       'last_sync_at',
       'pundit_arsenal',
       'pundit_chelsea_at',
+      'chain_anchors_user-a',
     ]) {
       expect(box.get(key), isNull, reason: '$key seharusnya terhapus');
     }
@@ -75,7 +77,7 @@ void main() {
   test('daftar kunci yang dipakai logout lengkap', () {
     // Kunci yang ada di repository tapi tidak ada di userDataKeys akan bocor.
     expect(AuthRepository.userDataKeys, isNotEmpty);
-    expect(AuthRepository.privateKeyKeys, contains('wallet_private_key'));
+    expect(AuthRepository.userKeyPrefixes, contains('chain_anchors_'));
   });
 
   test(

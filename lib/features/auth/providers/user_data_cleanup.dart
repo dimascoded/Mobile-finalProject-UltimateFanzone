@@ -81,7 +81,7 @@ Future<void> writeDataOwnerId(IdentityStore store, String userId) =>
 ///   `penalty_block_day`, `last_sync_at`);
 /// - semua kunci legacy di [legacyIdentityKeys];
 /// - semua kunci berawalan awalan di [AuthRepository.userKeyPrefixes]
-///   (`pundit_`).
+///   (`pundit_`, `chain_anchors_`).
 ///
 /// Yang SENGAJA tidak dihapus: [dataOwnerIdKey] (`last_user_id`),
 /// `biometric_enabled`, `theme_mode`, `permission_rationale`, kunci cache
@@ -129,19 +129,21 @@ void invalidateUserContentProviders(Ref ref) {
     ..invalidate(awayDayBudgetProvider)
     ..invalidate(predictionsProvider)
     ..invalidate(chainProvider)
-    // Alamat wallet ikut terbuang karena private key-nya dihapus saat logout.
+    // Alamat wallet dibuang supaya akun berikutnya membaca kunci scoped-nya.
     ..invalidate(walletAddressProvider);
 }
 
 /// Buang provider yang menyimpan identitas sesi dan preferensi tampilan.
 ///
 /// Dipanggil setelah login/logout/ganti akun supaya nama, foto, email, sesi,
-/// dan tim favorit dibaca ulang sesuai akun yang aktif.
+/// dan tim favorit dibaca ulang sesuai akun yang aktif. Provider dompet,
+/// saldo, dan anchor ikut dibuang agar akun B tidak pernah melihat state
+/// dompet/anchor akun A.
 ///
 /// Efek samping: meng-invalidate [sessionProvider], [userEmailProvider],
 /// [displayNameProvider], [effectiveDisplayNameProvider],
-/// [profilePhotoProvider], [favoriteKeyProvider], dan
-/// [awayDayBudgetProvider].
+/// [profilePhotoProvider], [favoriteKeyProvider], [awayDayBudgetProvider],
+/// [walletAddressProvider], [walletBalanceProvider], dan [anchorsProvider].
 void invalidateIdentityProviders(Ref ref) {
   ref
     ..invalidate(sessionProvider)
@@ -150,5 +152,11 @@ void invalidateIdentityProviders(Ref ref) {
     ..invalidate(effectiveDisplayNameProvider)
     ..invalidate(profilePhotoProvider)
     ..invalidate(favoriteKeyProvider)
-    ..invalidate(awayDayBudgetProvider);
+    ..invalidate(awayDayBudgetProvider)
+    ..invalidate(walletAddressProvider)
+    ..invalidate(anchorAddressProvider)
+    ..invalidate(walletBalanceProvider)
+    ..invalidate(anchorsProvider)
+    ..invalidate(anchorCoordinatorProvider)
+    ..invalidate(anchorStatusProvider);
 }
