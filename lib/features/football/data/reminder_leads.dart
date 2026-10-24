@@ -72,6 +72,20 @@ int leadFromInput(int value, String unit) {
   }
 }
 
+/// Konversi input hari/jam/menit langsung ke menit.
+///
+/// Nilai negatif diperlakukan sebagai 0. Jumlah total boleh melebihi satuan
+/// (mis. 90 menit) dan tetap dijumlahkan.
+int leadFromDhm(int days, int hours, int minutes) {
+  int d = days;
+  int h = hours;
+  int m = minutes;
+  if (d < 0) d = 0;
+  if (h < 0) h = 0;
+  if (m < 0) m = 0;
+  return d * 24 * 60 + h * 60 + m;
+}
+
 /// Hitung pengingat yang benar-benar bisa dijadwalkan untuk satu laga.
 ///
 /// [slot] adalah posisi di daftar hasil [normalizeLeads] (bukan posisi di

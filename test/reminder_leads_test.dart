@@ -62,6 +62,17 @@ void main() {
     });
   });
 
+  group('leadFromDhm', () {
+    test('(0,0,45)=45', () => expect(leadFromDhm(0, 0, 45), 45));
+    test('(1,0,0)=1440', () => expect(leadFromDhm(1, 0, 0), 1440));
+    test('(1,2,30)=1590', () => expect(leadFromDhm(1, 2, 30), 1590));
+    test('(0,0,90)=90', () => expect(leadFromDhm(0, 0, 90), 90));
+    test('negatives treated as 0', () {
+      expect(leadFromDhm(-1, -2, -3), 0);
+      expect(leadFromDhm(-1, 1, 30), 90);
+    });
+  });
+
   group('plannedReminders', () {
     final now = DateTime.utc(2026, 10, 16, 12);
 

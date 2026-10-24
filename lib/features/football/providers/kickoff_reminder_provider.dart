@@ -21,6 +21,13 @@ const kickoffReminderMinutes = AppConfig.kickoffReminderMinutes;
 /// 10 laga x 3 slot = 30, masih jauh di bawah batas itu.
 const maxKickoffReminders = 10;
 
+/// Jumlah laga terdekat di seluruh liga yang selalu mendapat pengingat
+/// kickoff, terlepas dari tim favorit.
+const maxGeneralKickoffReminders = 10;
+
+/// Batas aman jumlah notifikasi kickoff yang dijadwalkan sekaligus.
+const maxKickoffNotifications = 54;
+
 /// Signature jadwal yang terakhir diproses, supaya tidak menjadwal ulang
 /// event yang sama setiap kali provider dibangun ulang.
 ///
@@ -142,6 +149,58 @@ List<FootballMatch> reminderTargets(
   return pool.take(maxKickoffReminders).toList();
 }
 
+/// Laga yang perlu pengingat kickoff: laga terdekat di seluruh liga
+/// ([maxGeneralKickoffReminders]) digabung dengan laga terdekat tim favorit
+/// ([maxKickoffReminders]), tanpa duplikat dan terurut berdasarkan kickoff.
+///
+/// Fungsi murni (tanpa efek samping). Hanya laga berstatus `upcoming` yang
+/// dipertimbangkan. Tanpa tim favorit, hasilnya hanya laga terdekat di liga.
+/// Bila total notifikasi (laga x [leadCount]) melebihi
+/// [maxKickoffNotifications], laga non-favorit terjauh dibuang lebih dulu,
+/// lalu laga favorit terjauh bila masih perlu.
+List<FootballMatch> kickoffReminderTargets(
+  List<FootballMatch> matches,
+  PlClub? favorite, {
+  DateTime? now,
+  int leadCount = 1,
+}) {
+  final nowUtc = (now ?? DateTime.now()).toUtc();
+  final upcoming = matches
+      .where((m) => m.phaseAt(nowUtc) == MatchPhase.upcoming)
+      .toList()
+    ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
+
+  final selected = <int, FootballMatch>{};
+  for (final m in upcoming.take(maxGeneralKickoffReminders)) {
+    selected[m.id] = m;
+  }
+  if (favorite != null) {
+    final favoritePool = upcoming
+        .where((m) => m.involves(favorite))
+        .take(maxKickoffReminders);
+    for (final m in favoritePool) {
+      selected[m.id] = m;
+    }
+  }
+
+  final targets = selected.values.toList()
+    ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
+  final slots = leadCount <= 0 ? 1 : leadCount;
+  while (targets.length * slots > maxKickoffNotifications) {
+    var dropIndex = -1;
+    if (favorite != null) {
+      for (var i = targets.length - 1; i >= 0; i--) {
+        if (!targets[i].involves(favorite)) {
+          dropIndex = i;
+          break;
+        }
+      }
+    }
+    targets.removeAt(dropIndex == -1 ? targets.length - 1 : dropIndex);
+  }
+  return targets;
+}
+
 /// Signature jadwal yang terakhir diproses: lead time + daftar laga. Lead time
 /// ikut dihitung supaya penggantian lead time selalu memicu penjadwalan ulang.
 ///
@@ -180,7 +239,11 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
     }
 
     final leads = ref.read(kickoffLeadsProvider);
-    final targets = reminderTargets(data, ref.read(favoriteClubProvider));
+    final targets = kickoffReminderTargets(
+      data,
+      ref.read(favoriteClubProvider),
+      leadCount: leads.length,
+    );
     final sig = _signature(targets, leads);
     if (ref.read(_lastScheduledProvider) == sig) return;
     ref.read(_lastScheduledProvider.notifier).state = sig;
@@ -215,8 +278,11 @@ final kickoffReminderSyncProvider = Provider<void>((ref) {
   // scheduleReminders tidak menjadwalkan apa pun.
   ref.listen(kickoffLeadsProvider, (prev, next) {
     final data = ref.read(matchesProvider).valueOrNull?.data;
-    final targets = reminderTargets(
-        data ?? const <FootballMatch>[], ref.read(favoriteClubProvider));
+    final targets = kickoffReminderTargets(
+      data ?? const <FootballMatch>[],
+      ref.read(favoriteClubProvider),
+      leadCount: next.length,
+    );
     ref.read(_lastScheduledProvider.notifier).state = '';
     unawaited(cancelThenReschedule(targets));
   });
@@ -267,8 +333,11 @@ Future<int> scheduleRemindersForUpcoming(
   // C5: izin exact alarm diminta sekali saja (lihat
   // [ensureExactAlarmPermissionAsked]), bukan tiap kali aplikasi dibuka.
   await ensureExactAlarmPermissionAsked();
-  final targets =
-      reminderTargets(snapshot.data, ref.read(favoriteClubProvider));
+  final targets = kickoffReminderTargets(
+    snapshot.data,
+    ref.read(favoriteClubProvider),
+    leadCount: leads.length,
+  );
   return scheduleReminders(targets, leads: leads);
 }
 

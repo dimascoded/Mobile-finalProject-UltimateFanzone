@@ -71,18 +71,14 @@ class MatchCenterScreen extends ConsumerWidget {
       return;
     }
     final fav = ref.read(favoriteClubProvider);
-    if (fav == null) {
-      messenger.showSnackBar(const SnackBar(
-          content:
-              Text('Pilih tim favorit dulu agar pengingat bisa dijadwalkan.')));
-      return;
-    }
     final n = await scheduleRemindersForUpcoming(ref);
     final leads = ref.read(kickoffLeadsProvider);
     final labels = leads.map(formatLead).join(', ');
     final message = n > 0
         ? 'Pengingat terjadwal: $n notifikasi • $labels'
-        : 'Tidak ada laga ${fav.name} mendatang untuk dijadwalkan';
+        : fav == null
+            ? 'Tidak ada laga mendatang untuk dijadwalkan'
+            : 'Tidak ada laga ${fav.name} mendatang untuk dijadwalkan';
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 }

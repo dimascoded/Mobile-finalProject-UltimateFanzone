@@ -9,51 +9,74 @@ import '../data/reminder_leads.dart';
 import '../providers/football_providers.dart';
 import '../providers/kickoff_reminder_provider.dart';
 
-/// Pilihan cepat lead time pengingat (menit) beserta labelnya.
-const _presets = <(int, String)>[
-  (15, '15 menit'),
-  (30, '30 menit'),
-  (60, '1 jam'),
-  (180, '3 jam'),
-  (1440, '1 hari'),
-];
-
 // STRUKTUR UI — ReminderSettingsScreen
 // Ukuran: Scaffold > Center > ConstrainedBox(maxWidth 720) > ListView.
 // [1] Teks pengantar  — penjelasan singkat bahwa maksimal tiga pengingat
 // [2] Pengingatmu     — AppCard berisi InputChip untuk lead time aktif, atau
 //                        teks "Pengingat dimatikan" bila kosong
-// [3] Pilihan cepat   — AppCard berisi FilterChip preset 15 menit sampai
-//                        1 hari, terpilih bila sudah aktif
-// [4] Tindakan manual — tombol tambah sendiri (buka dialog) dan kembalikan
-//                        ke bawaan, catatan batasan, serta peringatan bila
-//                        klub favorit belum dipilih
-// [5] _AddReminderDialog — dialog jumlah dan satuan (menit/jam/hari) dengan
-//                        validasi nilai positif dan batas 7 hari
-// Tabel/kolom: tanpa tabel; daftar chip satu kolom terbungkus.
+// [3] Tambah pengingat — AppCard dengan tiga kolom Hari/Jam/Menit + preview
+//                        + tombol Tambah; penyimpanan lewat kickoffLeadsProvider
 // Sumber data: kickoffLeadsProvider, favoriteClubProvider.
-class ReminderSettingsScreen extends ConsumerWidget {
+class ReminderSettingsScreen extends ConsumerStatefulWidget {
   const ReminderSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReminderSettingsScreen> createState() =>
+      _ReminderSettingsScreenState();
+}
+
+class _ReminderSettingsScreenState
+    extends ConsumerState<ReminderSettingsScreen> {
+  final _daysController = TextEditingController();
+  final _hoursController = TextEditingController();
+  final _minutesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _daysController.dispose();
+    _hoursController.dispose();
+    _minutesController.dispose();
+    super.dispose();
+  }
+
+  int _parse(TextEditingController c) {
+    final text = c.text.trim();
+    if (text.isEmpty) return 0;
+    return int.tryParse(text) ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final leads = ref.watch(kickoffLeadsProvider);
     final favoriteClub = ref.watch(favoriteClubProvider);
     final theme = Theme.of(context);
 
-    void toggle(int minutes) {
-      final notifier = ref.read(kickoffLeadsProvider.notifier);
-      if (leads.contains(minutes)) {
-        notifier.remove(minutes);
-        return;
-      }
+    final days = _parse(_daysController);
+    final hours = _parse(_hoursController);
+    final minutes = _parse(_minutesController);
+    final total = leadFromDhm(days, hours, minutes);
+    final preview = total > 0 ? formatLead(total) : null;
+    final canAdd = total > 0;
+    final overLimit = total > maxLeadMinutes;
+    String? errorText;
+    if (overLimit) {
+      errorText = 'Maksimal 7 hari.';
+    }
+
+    void addReminder() {
+      if (!canAdd || overLimit) return;
       if (leads.length >= maxReminderSlots) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Maksimal 3 pengingat.')),
         );
         return;
       }
-      notifier.add(minutes);
+      if (leads.contains(total)) return;
+      ref.read(kickoffLeadsProvider.notifier).add(total);
+      _daysController.clear();
+      _hoursController.clear();
+      _minutesController.clear();
+      setState(() {});
     }
 
     return Scaffold(
@@ -65,7 +88,7 @@ class ReminderSettingsScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
               Text(
-                'Pilih kapan kamu diingatkan sebelum laga timmu mulai. '
+                'Pilih kapan kamu diingatkan sebelum laga mulai. '
                 'Maksimal 3 pengingat.',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -85,45 +108,98 @@ class ReminderSettingsScreen extends ConsumerWidget {
                         spacing: AppSpacing.sm,
                         runSpacing: AppSpacing.sm,
                         children: [
-                          for (final minutes in leads)
+                          for (final minutesLead in leads)
                             InputChip(
-                              label: Text(formatLead(minutes)),
+                              label: Text(formatLead(minutesLead)),
                               onDeleted: () => ref
                                   .read(kickoffLeadsProvider.notifier)
-                                  .remove(minutes),
+                                  .remove(minutesLead),
                             ),
                         ],
                       ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              const SectionHeader(title: 'Pilihan cepat'),
+              const SectionHeader(title: 'Tambah pengingat'),
               const SizedBox(height: AppSpacing.sm),
               AppCard(
-                child: Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final (minutes, label) in _presets)
-                      FilterChip(
-                        label: Text(label),
-                        selected: leads.contains(minutes),
-                        onSelected: (_) => toggle(minutes),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('reminder-days'),
+                            controller: _daysController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(1),
+                            ],
+                            decoration: const InputDecoration(labelText: 'Hari'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: TextField(
+                            key: const Key('reminder-hours'),
+                            controller: _hoursController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(3),
+                            ],
+                            decoration: const InputDecoration(labelText: 'Jam'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: TextField(
+                            key: const Key('reminder-minutes'),
+                            controller: _minutesController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(4),
+                            ],
+                            decoration: const InputDecoration(labelText: 'Menit'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (preview != null)
+                      Text(
+                        '= $preview',
+                        style: theme.textTheme.bodyMedium,
                       ),
+                    if (errorText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: Text(
+                          errorText,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton(
+                        key: const Key('reminder-add'),
+                        onPressed: canAdd && !overLimit ? addReminder : null,
+                        child: const Text('Tambah'),
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => const _AddReminderDialog(),
-                  ),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Tambah sendiri'),
-                ),
-              ),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
@@ -134,8 +210,8 @@ class ReminderSettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 32),
               Text(
-                'Hanya untuk laga tim favoritmu. Pengingat yang waktunya sudah '
-                'lewat dilewati.',
+                'Berlaku untuk laga terdekat di liga dan semua laga tim '
+                'favoritmu. Pengingat yang waktunya sudah lewat dilewati.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -143,7 +219,8 @@ class ReminderSettingsScreen extends ConsumerWidget {
               if (favoriteClub == null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Pilih tim favorit di Profil agar pengingat aktif.',
+                  'Pilih tim favorit di Profil agar semua laganya selalu '
+                  'diingatkan.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.primary,
                   ),
@@ -153,94 +230,6 @@ class ReminderSettingsScreen extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _AddReminderDialog extends ConsumerStatefulWidget {
-  const _AddReminderDialog();
-
-  @override
-  ConsumerState<_AddReminderDialog> createState() => _AddReminderDialogState();
-}
-
-class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
-  final _controller = TextEditingController();
-  String _unit = 'jam';
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    final value = int.tryParse(_controller.text);
-    if (value == null || value <= 0) {
-      setState(() => _error = 'Isi angka lebih dari 0.');
-      return;
-    }
-    final minutes = leadFromInput(value, _unit);
-    if (minutes <= 0 || minutes > maxLeadMinutes) {
-      setState(() => _error = 'Maksimal 7 hari.');
-      return;
-    }
-    ref.read(kickoffLeadsProvider.notifier).add(minutes);
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Tambah pengingat'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            key: const Key('reminder-value'),
-            controller: _controller,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(3),
-            ],
-            decoration: InputDecoration(
-              labelText: 'Jumlah',
-              counterText: '',
-              errorText: _error,
-            ),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            key: const Key('reminder-unit'),
-            initialValue: _unit,
-            decoration: const InputDecoration(labelText: 'Satuan'),
-            items: const [
-              DropdownMenuItem(value: 'menit', child: Text('menit')),
-              DropdownMenuItem(value: 'jam', child: Text('jam')),
-              DropdownMenuItem(value: 'hari', child: Text('hari')),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                _unit = value;
-                _error = null;
-              });
-            },
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
-        ),
-        FilledButton(
-          onPressed: _save,
-          child: const Text('Simpan'),
-        ),
-      ],
     );
   }
 }
