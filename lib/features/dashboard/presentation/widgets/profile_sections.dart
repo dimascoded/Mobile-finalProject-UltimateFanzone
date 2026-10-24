@@ -71,7 +71,7 @@ class ProfileStats extends ConsumerWidget {
             icon: const Icon(Icons.approval_outlined),
             value: '${stamps.length}',
             label: 'Stempel',
-            detail: 'PassportScreen',
+            detail: 'Passport',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(

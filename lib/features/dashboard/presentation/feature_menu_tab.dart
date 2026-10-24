@@ -6,6 +6,7 @@ import '../../../core/ui/pill_badge.dart';
 import '../../../core/ui/scrim_image.dart';
 import 'feature_cards.dart';
 import 'menu_groups.dart';
+import 'widgets/world_clock_section.dart';
 
 export 'feature_cards.dart';
 export 'menu_groups.dart';
@@ -66,6 +67,10 @@ class FeatureMenuTab extends StatelessWidget {
               children: [
                 SectionHeaderBanner(section: section, group: group),
                 const SizedBox(height: AppSpacing.lg),
+                if (section == FeatureSection.matches) ...[
+                  const WorldClockSection(),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
                 if (!isWide) ...[
                   FeaturedFeatureCard(item: group.items.first),
                   const SizedBox(height: AppSpacing.lg),

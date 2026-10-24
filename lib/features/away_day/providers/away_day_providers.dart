@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/hive_service.dart';
 import '../../../core/database/offline_sync_database.dart';
 import '../../../core/network/rates_provider.dart';
-import '../../../core/utils/time_utils.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
 import '../data/currency_convert.dart';
@@ -337,42 +336,6 @@ final awayDaySummaryProvider = Provider<AwayDaySummary>((ref) {
   final selected = ref.watch(awayDaySummaryCurrencyProvider);
   final rates = ref.watch(ratesProvider).valueOrNull?.rates;
   return summarizeExpenses(items, selected, rates);
-});
-
-// ---------- Jam dunia (rubrik: WIB / WITA / WIT / London) ----------
-
-/// Zona waktu yang dipakai label jam dunia di layar Away Day.
-///
-/// State lokal UI dengan `autoDispose`; nilai bawaan `'WIB'`.
-final awayDayClockZoneProvider =
-    StateProvider.autoDispose<String>((ref) => 'WIB');
-
-/// Kota Indonesia yang dipilih; memilih kota menetapkan zona waktunya.
-///
-/// State lokal UI dengan `autoDispose`; null berarti belum ada pilihan
-/// manual sehingga zona mengikuti [awayDayClockZoneProvider].
-final awayDayClockIndoCityProvider =
-    StateProvider.autoDispose<String?>((ref) => null);
-
-/// Semua klub Premier League berbasis di Inggris, jadi zona yang relevan adalah
-/// WIB, WITA, WIT, dan London (Europe/London, DST ikut dihitung oleh TimeUtils).
-///
-/// Provider stream `autoDispose`: memancarkan peta zona -> waktu lokal setiap
-/// detik, dan berhenti otomatis saat tidak ada layar yang menonton (hemat
-/// baterai). Perhitungan memakai satu titik waktu UTC yang sama untuk semua
-/// zona, jadi jam di empat kota selalu konsisten. Tanpa efek samping.
-final worldClockProvider =
-    StreamProvider.autoDispose<Map<String, DateTime>>((ref) async* {
-  while (true) {
-    final utc = TimeUtils.nowUtc();
-    yield {
-      'WIB': TimeUtils.wib(utc),
-      'WITA': TimeUtils.wita(utc),
-      'WIT': TimeUtils.wit(utc),
-      'London': TimeUtils.london(utc),
-    };
-    await Future<void>.delayed(const Duration(seconds: 1));
-  }
 });
 
 /// Kurs GBP per 1 Rupiah untuk ringkasan (null bila belum pernah ada cache).

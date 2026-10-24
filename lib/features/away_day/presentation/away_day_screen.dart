@@ -10,7 +10,6 @@ import '../../../core/widgets/empty_state.dart';
 import '../../football/presentation/club_crest.dart';
 import '../../football/providers/football_providers.dart';
 import '../data/away_day_repository.dart';
-import '../data/city_time.dart';
 import '../data/currency_convert.dart';
 import '../providers/away_day_providers.dart';
 
@@ -76,13 +75,12 @@ const _catIcon = {
 // Ukuran: Scaffold + ListView dalam ConstrainedBox(maxWidth 720).
 // [1] _Summary          — kartu total pengeluaran, pilih mata uang tampil,
 //                         catatan kurs/fallback, progres anggaran
-// [2] _WorldClock       — jam dunia: pilih zona WIB/WITA/WIT + kota Indonesia
-// [3] _Filters          — cari pengeluaran + chip kategori/tim favorit
-// [4] _Tile             — satu baris pengeluaran (Dismissible hapus)
-// [5] _AddForm          — sheet Catat/Ubah (mata uang, klub, konversi)
+// [2] _Filters          — cari pengeluaran + chip kategori/tim favorit
+// [3] _Tile             — satu baris pengeluaran (Dismissible hapus)
+// [4] _AddForm          — sheet Catat/Ubah (mata uang, klub, konversi)
 // Tabel/kolom: tanpa tabel; daftar kartu satu kolom.
 // Sumber data: awayDayTotalsProvider, awayDayBudgetProvider,
-//              awayDayFilteredProvider, worldClockProvider, ratesProvider.
+//              awayDayFilteredProvider, ratesProvider.
 class AwayDayScreen extends ConsumerWidget {
   const AwayDayScreen({super.key});
 
@@ -91,7 +89,6 @@ class AwayDayScreen extends ConsumerWidget {
     final totals = ref.watch(awayDayTotalsProvider);
     final budget = ref.watch(awayDayBudgetProvider);
     final items = ref.watch(awayDayFilteredProvider);
-    final clock = ref.watch(worldClockProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Away Day')),
@@ -108,8 +105,6 @@ class AwayDayScreen extends ConsumerWidget {
                 AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 96),
             children: [
               _Summary(totals: totals, budget: budget),
-              const SizedBox(height: AppSpacing.md),
-              _WorldClock(clock: clock),
               const SizedBox(height: AppSpacing.md),
               const _Filters(),
               const SizedBox(height: AppSpacing.md),
@@ -236,183 +231,6 @@ class _Summary extends ConsumerWidget {
               label: const Text('Ubah anggaran'),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _WorldClock extends ConsumerWidget {
-  const _WorldClock({required this.clock});
-
-  final AsyncValue<Map<String, DateTime>> clock;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedZone = ref.watch(awayDayClockZoneProvider);
-    final selectedIndoCity = ref.watch(awayDayClockIndoCityProvider);
-
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.public, size: 18),
-              const SizedBox(width: 8),
-              Text('Jam dunia', style: Theme.of(context).textTheme.labelLarge),
-            ],
-          ),
-          const SizedBox(height: 12),
-          clock.when(
-            loading: () =>
-                const SizedBox(height: 40, child: LinearProgressIndicator()),
-            error: (e, _) => Text('Gagal: $e'),
-            data: (times) {
-              final favorite = ref.watch(favoriteClubProvider);
-              final indonesiaTime = times[selectedZone] ?? times['WIB']!;
-              final londonTime = times['London']!;
-              final indoCity = indonesianCities.firstWhere(
-                (c) => c.name == selectedIndoCity,
-                orElse: () => indonesianCities.first,
-              );
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('clock-zone-$selectedZone'),
-                    initialValue: selectedZone,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      labelText: 'Zona waktu Indonesia',
-                      prefixIcon: Icon(Icons.schedule),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'WIB', child: Text('WIB')),
-                      DropdownMenuItem(value: 'WITA', child: Text('WITA')),
-                      DropdownMenuItem(value: 'WIT', child: Text('WIT')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        ref.read(awayDayClockZoneProvider.notifier).state =
-                            value;
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('clock-indo-$selectedIndoCity'),
-                    initialValue:
-                        selectedIndoCity ?? indonesianCities.first.name,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      labelText: 'Kota di Indonesia',
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                    items: [
-                      for (final c in indonesianCities)
-                        DropdownMenuItem(value: c.name, child: Text(c.name)),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      final picked =
-                          indonesianCities.firstWhere((c) => c.name == value);
-                      ref.read(awayDayClockIndoCityProvider.notifier).state =
-                          value;
-                      ref.read(awayDayClockZoneProvider.notifier).state =
-                          picked.zone;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ClockReadout(
-                          key: const ValueKey('clock-readout-zone'),
-                          label: selectedZone,
-                          time: indonesiaTime,
-                          detail: 'Waktu sipil Indonesia',
-                          showSeconds: true,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _ClockReadout(
-                          key: const ValueKey('clock-readout-london'),
-                          label: favorite?.city ?? 'London',
-                          time: londonTime,
-                          detail: favorite == null
-                              ? 'Pilih klub favorit untuk memakai nama kotanya'
-                              : 'Jam resmi Inggris (London)',
-                          showSeconds: true,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _ClockReadout(
-                    key: const ValueKey('clock-readout-indo-city'),
-                    label: indoCity.name,
-                    time: times[indoCity.zone] ?? times['WIB']!,
-                    detail: indoCity.zone,
-                    showSeconds: true,
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ClockReadout extends StatelessWidget {
-  const _ClockReadout({
-    super.key,
-    required this.label,
-    required this.time,
-    required this.detail,
-    this.showSeconds = false,
-  });
-
-  final String label;
-  final DateTime time;
-  final String detail;
-  final bool showSeconds;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
-            Text(
-              showSeconds ? TimeUtils.format(time) : TimeUtils.formatHm(time),
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(TimeUtils.formatDate(time), style: theme.textTheme.bodySmall),
-            Text(
-              detail,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall,
-            ),
-          ],
-        ),
       ),
     );
   }

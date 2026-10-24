@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,7 +51,6 @@ class _PassportScreenState extends ConsumerState<PassportScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.invalidate(walletBalanceProvider);
       unawaited(
         ref.read(anchorCoordinatorProvider.notifier).ensureAnchored(),
       );
@@ -88,15 +88,8 @@ class _PassportScreenState extends ConsumerState<PassportScreen> {
     final busy = ref.watch(stampProvider).isLoading;
     final distance = ref.watch(stampDistanceProvider);
     final anchorWallet = ref.watch(anchorAddressProvider);
-    final balance = ref.watch(walletBalanceProvider);
     final anchorStatus = ref.watch(anchorStatusProvider);
-    final anchors = ref.watch(anchorsProvider);
     final address = anchorWallet.valueOrNull;
-    final unanchored = _hasUnanchored(stamps, anchors);
-    final showRetry = anchorStatus == AnchorStatus.waitingFunds ||
-        anchorStatus == AnchorStatus.offline ||
-        anchorStatus == AnchorStatus.failed ||
-        (anchorStatus == AnchorStatus.idle && unanchored);
     if (club == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Paspor Suporter')),
@@ -213,14 +206,6 @@ class _PassportScreenState extends ConsumerState<PassportScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          _buildWalletCard(
-            context,
-            address: address,
-            balance: balance,
-            status: anchorStatus,
-            showRetry: showRetry,
-          ),
-          const SizedBox(height: AppSpacing.lg),
           AppCard(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
@@ -244,6 +229,12 @@ class _PassportScreenState extends ConsumerState<PassportScreen> {
                         onPressed: () => ref.invalidate(stampDistanceProvider),
                       ),
                   ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _buildRegistrationStatus(
+                  context,
+                  stamps: stamps,
+                  anchorStatus: anchorStatus,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 SizedBox(
@@ -398,131 +389,109 @@ class _PassportScreenState extends ConsumerState<PassportScreen> {
     );
   }
 
-  bool _hasUnanchored(List<Block> stamps, List<AnchorRecord> anchors) {
-    if (stamps.isEmpty) return false;
-    final highestHead = anchors.fold<int>(
-      0,
-      (highest, record) =>
-          record.headIndex > highest ? record.headIndex : highest,
-    );
-    return stamps.any((stamp) => stamp.index > highestHead);
-  }
-
-  Widget _buildWalletCard(
+  Widget _buildRegistrationStatus(
     BuildContext context, {
-    required String? address,
-    required AsyncValue<BigInt> balance,
-    required AnchorStatus status,
-    required bool showRetry,
+    required List<Block> stamps,
+    required AnchorStatus anchorStatus,
   }) {
-    final balanceText = balance.when(
-      data: _formatWeiAsEth,
-      loading: () => '-',
-      error: (_, __) => '-',
-    );
-    final statusText = switch (status) {
-      AnchorStatus.idle => null,
-      AnchorStatus.sending => 'Mengirim bukti ke Sepolia...',
-      AnchorStatus.waitingFunds =>
-        'Saldo ETH testnet kosong. Isi dari faucet lalu coba lagi.',
-      AnchorStatus.offline => 'Tidak ada jaringan. Akan dicoba lagi.',
-      AnchorStatus.notConfigured => 'RPC Sepolia belum dikonfigurasi.',
-      AnchorStatus.failed => 'Gagal menjangkarkan. Akan dicoba lagi.',
-    };
-    final hasAddress = address != null && address.trim().isNotEmpty;
+    if (stamps.isEmpty) return const SizedBox.shrink();
 
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final allConfirmed = stamps.every((block) {
+      final proof = ref.read(stampProofProvider(block));
+      return proof.kind == StampProofKind.confirmed;
+    });
+
+    if (allConfirmed) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Dompet jangkar (bersama)',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Salin alamat',
-                visualDensity: VisualDensity.compact,
-                onPressed:
-                    hasAddress ? () => _copyAddress(context, address) : null,
-                icon: const Icon(Icons.copy, size: 18),
-              ),
-            ],
-          ),
+          Icon(Icons.check_circle, size: 18, color: colorScheme.primary),
+          const SizedBox(width: AppSpacing.xs),
           Text(
-            hasAddress ? _shortAddress(address) : 'Alamat belum tersedia',
-            style: Theme.of(context).textTheme.bodyMedium,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Saldo',
-                  style: Theme.of(context).textTheme.bodySmall,
+            'Terdaftar di blockchain',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.primary,
                 ),
-              ),
-              Text(
-                balanceText,
-                style: Theme.of(context).textTheme.bodyMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              IconButton(
-                tooltip: 'Perbarui saldo',
-                visualDensity: VisualDensity.compact,
-                onPressed: () => ref.invalidate(walletBalanceProvider),
-                icon: const Icon(Icons.refresh, size: 18),
-              ),
-            ],
-          ),
-          if (statusText != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              statusText,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.xs,
-            children: [
-              TextButton.icon(
-                onPressed: () => _launchExternal(
-                  context,
-                  ref,
-                  Uri.parse(AppConfig.faucetUrl),
-                  errorMessage: 'Tidak bisa membuka faucet.',
-                ),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Faucet Sepolia'),
-              ),
-              if (showRetry)
-                OutlinedButton.icon(
-                  onPressed: status == AnchorStatus.sending
-                      ? null
-                      : () {
-                          ref.invalidate(walletBalanceProvider);
-                          unawaited(
-                            ref
-                                .read(anchorCoordinatorProvider.notifier)
-                                .ensureAnchored(force: true),
-                          );
-                        },
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Coba lagi'),
-                ),
-            ],
           ),
         ],
-      ),
+      );
+    }
+
+    final hasPendingProof = stamps.any((block) {
+      final proof = ref.read(stampProofProvider(block));
+      return proof.kind == StampProofKind.pending;
+    });
+    final isSending = anchorStatus == AnchorStatus.sending;
+
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Belum terdaftar',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (isSending || hasPendingProof) ...[
+              const SizedBox(width: AppSpacing.xs),
+              const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        if (anchorStatus != AnchorStatus.sending)
+          OutlinedButton.icon(
+            onPressed: () {
+              unawaited(
+                ref
+                    .read(anchorCoordinatorProvider.notifier)
+                    .ensureAnchored(force: true),
+              );
+            },
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Coba lagi'),
+          ),
+        if (kDebugMode)
+          Builder(
+            builder: (context) {
+              String? reason;
+              switch (anchorStatus) {
+                case AnchorStatus.waitingFunds:
+                  reason = 'Saldo dompet jangkar kosong';
+                  break;
+                case AnchorStatus.offline:
+                  reason = 'Tidak ada jaringan';
+                  break;
+                case AnchorStatus.notConfigured:
+                  reason = 'RPC Sepolia belum dikonfigurasi';
+                  break;
+                case AnchorStatus.failed:
+                  reason = 'Gagal menjangkarkan';
+                  break;
+                case AnchorStatus.idle:
+                case AnchorStatus.sending:
+                  break;
+              }
+              if (reason == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  reason,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
@@ -536,13 +505,6 @@ class _PassportScreenState extends ConsumerState<PassportScreen> {
         Uri.parse(AppConfig.explorerAddressUrl(address)),
       );
 
-  Future<void> _copyAddress(BuildContext context, String address) async {
-    await Clipboard.setData(ClipboardData(text: address));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Alamat disalin')),
-    );
-  }
 }
 
 class _StampProofChip extends ConsumerWidget {
@@ -729,22 +691,9 @@ void _showLaunchError(BuildContext context, String message) {
   );
 }
 
-String _shortAddress(String address) {
-  if (address.length <= 12) return address;
-  return '${address.substring(0, 6)}\u2026${address.substring(address.length - 4)}';
-}
-
 String _shortHash(String hash) {
   if (hash.length <= 20) return hash;
   return '${hash.substring(0, 10)}\u2026${hash.substring(hash.length - 8)}';
-}
-
-String _formatWeiAsEth(BigInt wei) {
-  final unit = BigInt.from(10).pow(18);
-  final whole = wei ~/ unit;
-  final fraction = (wei % unit).toString().padLeft(18, '0').substring(0, 6);
-  final trimmed = fraction.replaceFirst(RegExp(r'0+$'), '');
-  return trimmed.isEmpty ? '$whole ETH' : '$whole.$trimmed ETH';
 }
 
 String _verifyResultText(AnchorVerifyResult result) {

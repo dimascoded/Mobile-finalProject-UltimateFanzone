@@ -8,8 +8,8 @@ import 'package:hive/hive.dart';
 import 'package:ultimate_fanzone/core/database/hive_service.dart';
 import 'package:ultimate_fanzone/core/network/rates_provider.dart';
 import 'package:ultimate_fanzone/core/utils/time_utils.dart';
-import 'package:ultimate_fanzone/features/away_day/presentation/away_day_screen.dart';
-import 'package:ultimate_fanzone/features/away_day/providers/away_day_providers.dart';
+import 'package:ultimate_fanzone/features/dashboard/presentation/widgets/world_clock_section.dart';
+import 'package:ultimate_fanzone/features/dashboard/providers/world_clock_providers.dart';
 import 'package:ultimate_fanzone/features/football/data/football_repository.dart';
 import 'package:ultimate_fanzone/features/football/data/models.dart';
 import 'package:ultimate_fanzone/features/football/providers/football_providers.dart';
@@ -76,7 +76,13 @@ Future<void> _pump(
     ProviderScope(
       overrides:
           _overrides(favorite: favorite, indoCity: indoCity, zone: zone),
-      child: const MaterialApp(home: AwayDayScreen()),
+      child: const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: WorldClockSection(),
+          ),
+        ),
+      ),
     ),
   );
   await tester.pump();
@@ -96,7 +102,7 @@ void main() {
   late Directory dir;
 
   setUpAll(() async {
-    dir = Directory.systemTemp.createTempSync('away_day_world_clock');
+    dir = Directory.systemTemp.createTempSync('dashboard_world_clock');
     Hive.init(dir.path);
     HiveService.cache = await Hive.openBox<String>('cache');
   });
@@ -266,8 +272,6 @@ void main() {
     expect(readouts, findsNWidgets(3));
     expect(_hasText(tester, 'surya'), isFalse);
     expect(_hasText(tester, 'Selisih'), isFalse);
-    expect(find.text('Zona waktu Indonesia'), findsOneWidget);
-    expect(find.text('Kota di Indonesia'), findsOneWidget);
   });
 
   testWidgets('tanpa overflow pada lebar 360dp', (tester) async {
@@ -279,5 +283,46 @@ void main() {
     expect(_readout('zone'), findsOneWidget);
     expect(_readout('indo-city'), findsOneWidget);
     expect(_readout('london'), findsOneWidget);
+  });
+
+  testWidgets('tanpa overflow pada lebar 411dp', (tester) async {
+    tester.view.physicalSize = const Size(411, 640);
+    addTearDown(tester.view.reset);
+    await _pump(tester, favorite: _manCity, indoCity: 'Jayapura');
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tanpa overflow pada lebar 720dp', (tester) async {
+    tester.view.physicalSize = const Size(720, 640);
+    addTearDown(tester.view.reset);
+    await _pump(tester, favorite: _manCity, indoCity: 'Jayapura');
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tanpa overflow dengan text scale 1.3', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    addTearDown(tester.view.reset);
+    
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _overrides(favorite: _manCity, indoCity: 'Jayapura'),
+        child: const MaterialApp(
+          home: Scaffold(
+            body: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(1.3)),
+              child: SingleChildScrollView(
+                child: WorldClockSection(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(tester.takeException(), isNull);
   });
 }
